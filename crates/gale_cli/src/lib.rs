@@ -52,6 +52,14 @@ pub struct Cli {
     /// Only report errors
     #[arg(short, long)]
     quiet: bool,
+
+    /// Path to a custom ignore file (uses gitignore syntax)
+    #[arg(long, value_name = "FILE")]
+    ignore_path: Option<PathBuf>,
+
+    /// Disable all ignore file processing (gitignore, .galeignore, custom)
+    #[arg(long)]
+    no_ignore: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +78,13 @@ fn is_css_file(path: &Path) -> bool {
 // File discovery
 // ---------------------------------------------------------------------------
 
-fn discover_files(paths: &[String]) -> Vec<PathBuf> {
+struct DiscoverOptions<'a> {
+    no_ignore: bool,
+    ignore_path: Option<&'a Path>,
+    ignore_patterns: &'a [String],
+}
+
+fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> {
     let mut files: Vec<PathBuf> = Vec::new();
 
     for pattern in paths {
@@ -83,7 +97,56 @@ fn discover_files(paths: &[String]) -> Vec<PathBuf> {
             continue;
         }
 
-        let walker = WalkBuilder::new(path).hidden(false).build();
+        let mut builder = WalkBuilder::new(path);
+
+        // Show hidden CSS files (e.g. .hidden.css) but respect ignore files.
+        builder.hidden(false);
+
+        if opts.no_ignore {
+            // Disable all ignore-file processing.
+            builder.git_ignore(false);
+            builder.git_global(false);
+            builder.git_exclude(false);
+        } else {
+            // Respect .gitignore (enabled by default, but be explicit).
+            builder.git_ignore(true);
+
+            // Automatically respect .galeignore files found in traversed dirs.
+            builder.add_custom_ignore_filename(".galeignore");
+
+            // Load a user-supplied custom ignore file.
+            if let Some(ignore_file) = opts.ignore_path {
+                if ignore_file.exists() {
+                    if let Some(err) = builder.add_ignore(ignore_file) {
+                        eprintln!(
+                            "Warning: failed to load ignore file {}: {err}",
+                            ignore_file.display()
+                        );
+                    }
+                } else {
+                    eprintln!(
+                        "Warning: ignore file not found: {}",
+                        ignore_file.display()
+                    );
+                }
+            }
+
+            // Apply ignore_patterns from config as glob overrides.
+            if !opts.ignore_patterns.is_empty() {
+                let mut overrides = ignore::overrides::OverrideBuilder::new(path);
+                for pat in opts.ignore_patterns {
+                    // Negate the pattern so matching files are excluded.
+                    if let Err(err) = overrides.add(&format!("!{pat}")) {
+                        eprintln!("Warning: invalid ignore pattern '{pat}': {err}");
+                    }
+                }
+                if let Ok(built) = overrides.build() {
+                    builder.overrides(built);
+                }
+            }
+        }
+
+        let walker = builder.build();
 
         for entry in walker.flatten() {
             let entry_path = entry.path();
@@ -157,7 +220,12 @@ pub fn run() -> Result<()> {
         vec![result]
     } else {
         // Discover files.
-        let files = discover_files(&cli.files);
+        let discover_opts = DiscoverOptions {
+            no_ignore: cli.no_ignore,
+            ignore_path: cli.ignore_path.as_deref(),
+            ignore_patterns: &config.ignore_patterns,
+        };
+        let files = discover_files(&cli.files, &discover_opts);
         debug!("Discovered {} CSS file(s)", files.len());
 
         if files.is_empty() {

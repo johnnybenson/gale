@@ -1,7 +1,9 @@
+pub mod alpha_value_notation;
 pub mod annotation_no_unknown;
 pub mod at_rule_no_unknown;
 pub mod at_rule_no_vendor_prefix;
 pub mod block_no_empty;
+pub mod color_hex_case;
 pub mod color_hex_length;
 pub mod color_no_invalid_hex;
 pub mod comment_no_empty;
@@ -10,23 +12,28 @@ pub mod declaration_block_no_duplicate_custom_properties;
 pub mod declaration_block_no_duplicate_properties;
 pub mod declaration_block_no_redundant_longhand_properties;
 pub mod declaration_block_no_shorthand_property_overrides;
+pub mod declaration_empty_line_before;
+pub mod declaration_no_important;
 pub mod font_family_no_duplicate_names;
 pub mod font_family_no_missing_generic_family_keyword;
 pub mod function_calc_no_unspaced_operator;
 pub mod function_name_case;
+pub mod function_url_quotes;
+pub mod import_notation;
 pub mod keyframe_block_no_duplicate_selectors;
-pub mod media_feature_name_no_unknown;
-pub mod media_query_no_invalid;
 pub mod keyframe_declaration_no_important;
 pub mod length_zero_no_unit;
+pub mod media_feature_name_no_unknown;
+pub mod media_query_no_invalid;
 pub mod no_descending_specificity;
 pub mod no_duplicate_at_import_rules;
 pub mod no_duplicate_selectors;
 pub mod no_empty_source;
 pub mod no_invalid_double_slash_comments;
-pub mod no_invalid_position_declaration;
 pub mod no_invalid_position_at_import_rule;
+pub mod no_invalid_position_declaration;
 pub mod no_irregular_whitespace;
+pub mod no_unknown_animations;
 pub mod number_max_precision;
 pub mod property_no_unknown;
 pub mod property_no_vendor_prefix;
@@ -38,16 +45,19 @@ pub mod selector_type_no_unknown;
 pub mod shorthand_property_no_redundant_values;
 pub mod string_no_newline;
 pub mod unit_no_unknown;
+pub mod value_keyword_case;
 pub mod value_no_vendor_prefix;
 
 use crate::registry::RuleRegistry;
 
 /// Register all built-in rules in the given registry.
 pub fn register_all(registry: &mut RuleRegistry) {
+    registry.register(Box::new(alpha_value_notation::AlphaValueNotation));
     registry.register(Box::new(annotation_no_unknown::AnnotationNoUnknown));
     registry.register(Box::new(at_rule_no_unknown::AtRuleNoUnknown));
     registry.register(Box::new(at_rule_no_vendor_prefix::AtRuleNoVendorPrefix));
     registry.register(Box::new(block_no_empty::BlockNoEmpty));
+    registry.register(Box::new(color_hex_case::ColorHexCase));
     registry.register(Box::new(color_hex_length::ColorHexLength));
     registry.register(Box::new(color_no_invalid_hex::ColorNoInvalidHex));
     registry.register(Box::new(comment_no_empty::CommentNoEmpty));
@@ -55,9 +65,13 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(declaration_block_no_duplicate_custom_properties::DeclarationBlockNoDuplicateCustomProperties));
     registry.register(Box::new(declaration_block_no_duplicate_properties::DeclarationBlockNoDuplicateProperties));
     registry.register(Box::new(declaration_block_no_shorthand_property_overrides::DeclarationBlockNoShorthandPropertyOverrides));
+    registry.register(Box::new(declaration_empty_line_before::DeclarationEmptyLineBefore));
+    registry.register(Box::new(declaration_no_important::DeclarationNoImportant));
     registry.register(Box::new(font_family_no_duplicate_names::FontFamilyNoDuplicateNames));
     registry.register(Box::new(font_family_no_missing_generic_family_keyword::FontFamilyNoMissingGenericFamilyKeyword));
     registry.register(Box::new(function_calc_no_unspaced_operator::FunctionCalcNoUnspacedOperator));
+    registry.register(Box::new(function_url_quotes::FunctionUrlQuotes));
+    registry.register(Box::new(import_notation::ImportNotation));
     registry.register(Box::new(keyframe_block_no_duplicate_selectors::KeyframeBlockNoDuplicateSelectors));
     registry.register(Box::new(keyframe_declaration_no_important::KeyframeDeclarationNoImportant));
     registry.register(Box::new(media_feature_name_no_unknown::MediaFeatureNameNoUnknown));
@@ -70,6 +84,7 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(no_invalid_position_at_import_rule::NoInvalidPositionAtImportRule));
     registry.register(Box::new(no_invalid_position_declaration::NoInvalidPositionDeclaration));
     registry.register(Box::new(no_irregular_whitespace::NoIrregularWhitespace));
+    registry.register(Box::new(no_unknown_animations::NoUnknownAnimations));
     registry.register(Box::new(declaration_block_no_redundant_longhand_properties::DeclarationBlockNoRedundantLonghandProperties));
     registry.register(Box::new(function_name_case::FunctionNameCase));
     registry.register(Box::new(length_zero_no_unit::LengthZeroNoUnit));
@@ -84,5 +99,6 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(shorthand_property_no_redundant_values::ShorthandPropertyNoRedundantValues));
     registry.register(Box::new(string_no_newline::StringNoNewline));
     registry.register(Box::new(unit_no_unknown::UnitNoUnknown));
+    registry.register(Box::new(value_keyword_case::ValueKeywordCase));
     registry.register(Box::new(value_no_vendor_prefix::ValueNoVendorPrefix));
 }
