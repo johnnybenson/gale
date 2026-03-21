@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -21,8 +22,16 @@ use gale_linter::{LintRunner, RuleRegistry};
 #[command(name = "gale", about = "An extremely fast CSS linter, written in Rust")]
 pub struct Cli {
     /// Files or glob patterns to lint
-    #[arg(required = true)]
+    #[arg(required_unless_present = "stdin")]
     files: Vec<String>,
+
+    /// Read source from stdin instead of files
+    #[arg(long)]
+    stdin: bool,
+
+    /// Virtual filename for stdin input (used for syntax detection and diagnostics)
+    #[arg(long, default_value = "stdin.css")]
+    stdin_filename: String,
 
     /// Config file path
     #[arg(short, long)]
@@ -114,15 +123,6 @@ pub fn run() -> Result<()> {
         gale_config::resolve_config(&cwd)
     };
 
-    // Discover files.
-    let files = discover_files(&cli.files);
-    debug!("Discovered {} CSS file(s)", files.len());
-
-    if files.is_empty() {
-        eprintln!("No CSS files found.");
-        return Ok(());
-    }
-
     // Build rule registry and determine enabled rules.
     let registry = RuleRegistry::default();
     let enabled_rules: Vec<String> = if config.rules.is_empty() {
@@ -144,16 +144,38 @@ pub fn run() -> Result<()> {
 
     let runner = LintRunner::new(registry, enabled_rules);
 
-    // Lint each file in parallel.
-    let mut results: Vec<LintResult> = files
-        .par_iter()
-        .filter_map(|file| {
-            let source = std::fs::read_to_string(file).ok()?;
-            let file_path = file.display().to_string();
-            let syntax = detect_syntax(&file_path);
-            Some(runner.lint_source(&source, &file_path, syntax))
-        })
-        .collect();
+    // Lint: either from stdin or from discovered files.
+    let mut results: Vec<LintResult> = if cli.stdin {
+        let mut source = String::new();
+        std::io::stdin()
+            .read_to_string(&mut source)
+            .expect("Failed to read from stdin");
+
+        let file_path = &cli.stdin_filename;
+        let syntax = detect_syntax(file_path);
+        let result = runner.lint_source(&source, file_path, syntax);
+        vec![result]
+    } else {
+        // Discover files.
+        let files = discover_files(&cli.files);
+        debug!("Discovered {} CSS file(s)", files.len());
+
+        if files.is_empty() {
+            eprintln!("No CSS files found.");
+            return Ok(());
+        }
+
+        // Lint each file in parallel.
+        files
+            .par_iter()
+            .filter_map(|file| {
+                let source = std::fs::read_to_string(file).ok()?;
+                let file_path = file.display().to_string();
+                let syntax = detect_syntax(&file_path);
+                Some(runner.lint_source(&source, &file_path, syntax))
+            })
+            .collect()
+    };
 
     // Apply fixes when --fix is set.
     if cli.fix {
@@ -161,7 +183,14 @@ pub fn run() -> Result<()> {
         for result in &mut results {
             let (fixed_source, count) = apply_fixes(&result.source, &result.diagnostics);
             if count > 0 {
-                if let Err(err) = std::fs::write(&result.file_path, &fixed_source) {
+                if cli.stdin {
+                    // For stdin + fix, output the fixed source to stdout.
+                    print!("{fixed_source}");
+                    total_fixed += count;
+                    // Re-lint the fixed source to get remaining diagnostics.
+                    let syntax = detect_syntax(&result.file_path);
+                    *result = runner.lint_source(&fixed_source, &result.file_path, syntax);
+                } else if let Err(err) = std::fs::write(&result.file_path, &fixed_source) {
                     eprintln!("Error writing {}: {err}", result.file_path);
                 } else {
                     total_fixed += count;

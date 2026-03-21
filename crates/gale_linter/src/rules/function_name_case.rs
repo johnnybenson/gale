@@ -1,5 +1,5 @@
 use gale_css_parser::CssNode;
-use gale_diagnostics::{Diagnostic, Severity, Span};
+use gale_diagnostics::{Diagnostic, Edit, Fix, Severity, Span};
 
 use crate::rule::{Rule, RuleContext};
 
@@ -21,25 +21,53 @@ impl Rule for FunctionNameCase {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
         let mut diags = Vec::new();
         for decl in &rule.declarations {
+            let decl_start = decl.span.offset;
+            let decl_end = decl_start + decl.span.length;
+            let has_source = decl_end <= ctx.source.len() && decl_start < decl_end;
+
             for func_name in extract_function_names(&decl.value) {
                 if func_name != func_name.to_ascii_lowercase() {
-                    diags.push(
-                        Diagnostic::new(
-                            self.name(),
-                            format!(
-                                "Expected \"{func_name}\" to be \"{}\"",
-                                func_name.to_ascii_lowercase()
-                            ),
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(decl.span.offset, decl.span.length)),
-                    );
+                    let lowered = func_name.to_ascii_lowercase();
+
+                    // Try to find the function name in the source to build a fix
+                    let fix = if has_source {
+                        let search_area = &ctx.source[decl_start..decl_end];
+                        // Find the exact function name followed by '('
+                        let target = format!("{func_name}(");
+                        search_area.find(&target).map(|rel_offset| {
+                            let abs_offset = decl_start + rel_offset;
+                            Fix::new(
+                                format!("Lowercase function name to \"{lowered}\""),
+                                vec![Edit::new(
+                                    Span::new(abs_offset, func_name.len()),
+                                    &lowered,
+                                )],
+                            )
+                        })
+                    } else {
+                        None
+                    };
+
+                    let mut diag = Diagnostic::new(
+                        self.name(),
+                        format!(
+                            "Expected \"{func_name}\" to be \"{lowered}\"",
+                        ),
+                    )
+                    .severity(self.default_severity())
+                    .span(Span::new(decl.span.offset, decl.span.length));
+
+                    if let Some(f) = fix {
+                        diag = diag.fix(f);
+                    }
+
+                    diags.push(diag);
                 }
             }
         }
@@ -114,5 +142,28 @@ mod tests {
         let d = FunctionNameCase.check(&style_decl("Calc(100% - 20px)"), &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("calc"));
+    }
+
+    #[test]
+    fn emits_fix_for_uppercase_function() {
+        let source = "a { color: RGB(0, 0, 0); }";
+        let ctx = RuleContext { file_path: "t.css", source, syntax: Syntax::Css };
+        let node = CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![Declaration {
+                property: "color".to_string(),
+                value: "RGB(0, 0, 0)".to_string(),
+                span: ParserSpan::new(4, 20),
+                important: false,
+            }],
+            children: vec![],
+            span: ParserSpan::new(0, source.len()),
+        });
+        let d = FunctionNameCase.check(&node, &ctx);
+        assert_eq!(d.len(), 1);
+        assert!(d[0].fix.is_some());
+        let fix = d[0].fix.as_ref().unwrap();
+        assert_eq!(fix.edits.len(), 1);
+        assert_eq!(fix.edits[0].new_text, "rgb");
     }
 }

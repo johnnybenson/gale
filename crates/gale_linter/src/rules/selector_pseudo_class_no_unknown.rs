@@ -28,6 +28,14 @@ impl Rule for SelectorPseudoClassNoUnknown {
             if name.starts_with('-') {
                 continue; // vendor-prefixed
             }
+            // Legacy pseudo-elements that use single-colon syntax are not
+            // pseudo-classes and must not be reported as unknown.
+            if matches!(
+                name.as_str(),
+                "before" | "after" | "first-line" | "first-letter"
+            ) {
+                continue;
+            }
             if !is_known_pseudo_class(&name) {
                 diags.push(
                     Diagnostic::new(
@@ -131,5 +139,20 @@ mod tests {
     fn does_not_confuse_with_pseudo_elements() {
         // ::before should not be parsed as pseudo-class
         assert!(SelectorPseudoClassNoUnknown.check(&style_with_selector("a::before"), &ctx()).is_empty());
+    }
+
+    #[test]
+    fn allows_legacy_single_colon_pseudo_elements() {
+        for sel in [
+            "p:before",
+            "p:after",
+            "p:first-line",
+            "p:first-letter",
+        ] {
+            assert!(
+                SelectorPseudoClassNoUnknown.check(&style_with_selector(sel), &ctx()).is_empty(),
+                "should not flag legacy pseudo-element in selector \"{sel}\"",
+            );
+        }
     }
 }
