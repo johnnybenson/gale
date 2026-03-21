@@ -99,6 +99,13 @@ impl Rule for CustomPropertyNoMissingVarFunction {
                 continue;
             }
 
+            // Skip values containing SCSS/Less interpolation — the `--`
+            // may be part of an interpolated identifier, not a bare custom
+            // property reference.
+            if decl.value.contains("#{") || decl.value.contains("@{") {
+                continue;
+            }
+
             if has_bare_custom_property(&decl.value) {
                 diagnostics.push(
                     Diagnostic::new(

@@ -13,6 +13,7 @@ gale_formatter = { workspace = true }
 gale_diagnostics = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
+globset = { workspace = true }
 ignore = { workspace = true }
 rayon = { workspace = true }
 tracing = { workspace = true }

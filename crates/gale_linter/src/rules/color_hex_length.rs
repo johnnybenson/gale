@@ -3,7 +3,10 @@ use gale_diagnostics::{Diagnostic, Edit, Fix, Severity, Span};
 
 use crate::rule::{Rule, RuleContext};
 
-/// Reports hex colors that can be shortened (e.g. #ffffff → #fff, #ffffffaa → #fffa).
+/// Enforces hex color length.
+///
+/// With "short" (default): reports hex colors that can be shortened (e.g. #ffffff → #fff).
+/// With "long": reports short hex colors that can be expanded (e.g. #fff → #ffffff).
 ///
 /// Equivalent to Stylelint's `color-hex-length` rule.
 pub struct ColorHexLength;
@@ -14,7 +17,7 @@ impl Rule for ColorHexLength {
     }
 
     fn description(&self) -> &'static str {
-        "Disallow hex colors that can be shortened"
+        "Specify short or long notation for hex colors"
     }
 
     fn default_severity(&self) -> Severity {
@@ -25,6 +28,10 @@ impl Rule for ColorHexLength {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+
+        // Primary option: "short" (default) or "long".
+        let mode = ctx.primary_option_str().unwrap_or("short");
+
         let mut diags = Vec::new();
         for decl in &rule.declarations {
             // Search the source within the declaration span for hex colors.
@@ -37,25 +44,54 @@ impl Rule for ColorHexLength {
             };
 
             for (rel_offset, hex) in find_hex_colors_with_offset(search_area) {
-                if can_shorten(&hex) {
-                    let shortened = shorten(&hex);
-                    let abs_offset = if decl_end <= ctx.source.len() && decl_start < decl_end {
-                        decl_start + rel_offset
-                    } else {
-                        decl_start
-                    };
-                    diags.push(
-                        Diagnostic::new(
-                            self.name(),
-                            format!("Expected \"{hex}\" to be \"{shortened}\""),
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(abs_offset, hex.len()))
-                        .fix(Fix::new(
-                            format!("Shorten to \"{shortened}\""),
-                            vec![Edit::new(Span::new(abs_offset, hex.len()), &shortened)],
-                        )),
-                    );
+                let abs_offset = if decl_end <= ctx.source.len() && decl_start < decl_end {
+                    decl_start + rel_offset
+                } else {
+                    decl_start
+                };
+
+                match mode {
+                    "long" => {
+                        if can_expand(&hex) {
+                            let expanded = expand(&hex);
+                            diags.push(
+                                Diagnostic::new(
+                                    self.name(),
+                                    format!("Expected \"{hex}\" to be \"{expanded}\""),
+                                )
+                                .severity(self.default_severity())
+                                .span(Span::new(abs_offset, hex.len()))
+                                .fix(Fix::new(
+                                    format!("Expand to \"{expanded}\""),
+                                    vec![Edit::new(
+                                        Span::new(abs_offset, hex.len()),
+                                        &expanded,
+                                    )],
+                                )),
+                            );
+                        }
+                    }
+                    _ => {
+                        // "short" mode (default)
+                        if can_shorten(&hex) {
+                            let shortened = shorten(&hex);
+                            diags.push(
+                                Diagnostic::new(
+                                    self.name(),
+                                    format!("Expected \"{hex}\" to be \"{shortened}\""),
+                                )
+                                .severity(self.default_severity())
+                                .span(Span::new(abs_offset, hex.len()))
+                                .fix(Fix::new(
+                                    format!("Shorten to \"{shortened}\""),
+                                    vec![Edit::new(
+                                        Span::new(abs_offset, hex.len()),
+                                        &shortened,
+                                    )],
+                                )),
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -106,6 +142,27 @@ fn shorten(hex: &str) -> String {
     match digits.len() {
         6 => format!("#{}{}{}", digits[0], digits[2], digits[4]),
         8 => format!("#{}{}{}{}", digits[0], digits[2], digits[4], digits[6]),
+        _ => hex.to_string(),
+    }
+}
+
+/// Check if a 3-digit hex can be expanded to 6, or 4-digit to 8.
+fn can_expand(hex: &str) -> bool {
+    let digits = hex.len() - 1; // minus the '#'
+    matches!(digits, 3 | 4)
+}
+
+fn expand(hex: &str) -> String {
+    let digits: Vec<char> = hex[1..].chars().collect();
+    match digits.len() {
+        3 => format!(
+            "#{}{}{}{}{}{}",
+            digits[0], digits[0], digits[1], digits[1], digits[2], digits[2]
+        ),
+        4 => format!(
+            "#{}{}{}{}{}{}{}{}",
+            digits[0], digits[0], digits[1], digits[1], digits[2], digits[2], digits[3], digits[3]
+        ),
         _ => hex.to_string(),
     }
 }

@@ -24,9 +24,9 @@ impl Rule for PropertyNoUnknown {
             return vec![];
         };
 
-        // Check for `ignoreProperties` option.
-        let ignore_properties: Vec<String> = ctx
-            .options
+        // Check for `ignoreProperties` option (may be in secondary options object).
+        let secondary = ctx.secondary_options().or(ctx.options);
+        let ignore_properties: Vec<String> = secondary
             .and_then(|v| v.get("ignoreProperties"))
             .and_then(|v| v.as_array())
             .map(|arr| {
@@ -48,6 +48,14 @@ impl Rule for PropertyNoUnknown {
                 ctx.syntax,
                 gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass
             ) && prop.starts_with('$')
+            {
+                continue;
+            }
+            // Skip properties containing SCSS interpolation #{...}
+            if matches!(
+                ctx.syntax,
+                gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass
+            ) && prop.contains("#{")
             {
                 continue;
             }

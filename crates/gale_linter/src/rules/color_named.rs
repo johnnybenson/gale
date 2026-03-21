@@ -180,7 +180,8 @@ impl Rule for ColorNamed {
         };
 
         // Read the primary option: "never" (default) or "always-where-possible"
-        let option = ctx.options.and_then(|v| v.as_str()).unwrap_or("never");
+        // Options may be a plain string or array form ["never", { secondary }].
+        let option = ctx.primary_option_str().unwrap_or("never");
 
         // Only "never" mode is implemented (disallow named colors)
         if option != "never" {
@@ -189,7 +190,23 @@ impl Rule for ColorNamed {
 
         let mut diags = Vec::new();
         for decl in &rule.declarations {
-            let value = &decl.value;
+            // Use the original source text when available, because lightningcss
+            // may serialise hex colours to named-colour equivalents (e.g.
+            // `#f00` → `red`), which would cause false positives.
+            let decl_start = decl.span.offset;
+            let decl_end = decl_start + decl.span.length;
+            let value = if decl_end <= ctx.source.len() && decl_start < decl_end {
+                // Extract just the value portion from "property: value"
+                let full = &ctx.source[decl_start..decl_end];
+                // Find the colon that separates property from value
+                if let Some(colon_pos) = full.find(':') {
+                    full[colon_pos + 1..].trim_end_matches(';').trim()
+                } else {
+                    full
+                }
+            } else {
+                &decl.value
+            };
 
             // Strip out content inside var(), #{} interpolation, and SCSS $variables
             let cleaned = strip_ignored_parts(value);
@@ -197,10 +214,20 @@ impl Rule for ColorNamed {
 
             for &color in NAMED_COLORS {
                 if contains_color_word(&cleaned_lower, color) {
+                    // Try to locate the named color within the source text for
+                    // an accurate span, falling back to the declaration span.
+                    let color_span = if decl_end <= ctx.source.len() && decl_start < decl_end {
+                        let full = &ctx.source[decl_start..decl_end];
+                        find_color_word_offset(&full.to_ascii_lowercase(), color)
+                            .map(|rel| Span::new(decl_start + rel, color.len()))
+                            .unwrap_or_else(|| Span::new(decl.span.offset, decl.span.length))
+                    } else {
+                        Span::new(decl.span.offset, decl.span.length)
+                    };
                     diags.push(
                         Diagnostic::new(self.name(), format!("Unexpected named color \"{color}\""))
                             .severity(self.default_severity())
-                            .span(Span::new(decl.span.offset, decl.span.length)),
+                            .span(color_span),
                     );
                 }
             }
@@ -210,6 +237,7 @@ impl Rule for ColorNamed {
 }
 
 /// Strip parts of a value that should not be checked:
+/// - Quoted strings (`"..."` and `'...'`) — e.g. `govuk-colour("white")`
 /// - `var(...)` function calls (including nested parens)
 /// - `#{...}` SCSS interpolation
 /// - `$variable-name` SCSS variables
@@ -220,6 +248,23 @@ fn strip_ignored_parts(value: &str) -> String {
     let mut i = 0;
 
     while i < len {
+        // Skip quoted strings (single or double)
+        if chars[i] == '"' || chars[i] == '\'' {
+            let quote = chars[i];
+            i += 1;
+            while i < len && chars[i] != quote {
+                if chars[i] == '\\' {
+                    i += 1; // skip escaped char
+                }
+                i += 1;
+            }
+            if i < len {
+                i += 1; // skip closing quote
+            }
+            result.push(' ');
+            continue;
+        }
+
         // Skip SCSS interpolation #{...}
         if i + 1 < len && chars[i] == '#' && chars[i + 1] == '{' {
             let mut depth = 1;
@@ -278,6 +323,33 @@ fn strip_ignored_parts(value: &str) -> String {
     }
 
     result
+}
+
+/// Find the byte offset of a named color `word` as a whole word within `haystack`.
+/// Returns `None` if not found as a whole word.
+fn find_color_word_offset(haystack: &str, word: &str) -> Option<usize> {
+    let bytes = haystack.as_bytes();
+    let word_bytes = word.as_bytes();
+    let wlen = word_bytes.len();
+    if bytes.len() < wlen {
+        return None;
+    }
+    for i in 0..=(bytes.len() - wlen) {
+        if &bytes[i..i + wlen] == word_bytes {
+            let before_ok = i == 0
+                || !(bytes[i - 1].is_ascii_alphanumeric()
+                    || bytes[i - 1] == b'-'
+                    || bytes[i - 1] == b'_');
+            let after_ok = i + wlen == bytes.len()
+                || !(bytes[i + wlen].is_ascii_alphanumeric()
+                    || bytes[i + wlen] == b'-'
+                    || bytes[i + wlen] == b'_');
+            if before_ok && after_ok {
+                return Some(i);
+            }
+        }
+    }
+    None
 }
 
 /// Check if `haystack` contains `word` as a whole word (bounded by non-alphanumeric, non-hyphen chars).

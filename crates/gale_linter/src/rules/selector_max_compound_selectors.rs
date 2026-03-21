@@ -130,12 +130,55 @@ fn count_compound_selectors(selector: &str) -> usize {
 }
 
 /// Strip `//` line comments from a selector string (SCSS/Less).
+///
+/// Handles both full-line comments (`// comment`) and inline comments
+/// at the end of a line (e.g., `dt, // TODO: Deprecate`).
+/// Also strips lines that become empty after comment removal.
 fn strip_scss_line_comments(selector: &str) -> String {
     selector
         .lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
+        .map(|line| {
+            // Find `//` that is not inside a string or url()
+            if let Some(pos) = find_line_comment(line) {
+                &line[..pos]
+            } else {
+                line
+            }
+        })
+        .filter(|line| !line.trim().is_empty())
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// Find the byte position of a `//` line comment in a SCSS line,
+/// ignoring `//` inside strings or `url()`.
+fn find_line_comment(line: &str) -> Option<usize> {
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    while i < len {
+        match bytes[i] {
+            // Skip single- and double-quoted strings
+            b'\'' | b'"' => {
+                let quote = bytes[i];
+                i += 1;
+                while i < len && bytes[i] != quote {
+                    if bytes[i] == b'\\' {
+                        i += 1; // skip escaped char
+                    }
+                    i += 1;
+                }
+                i += 1; // skip closing quote
+            }
+            b'/' if i + 1 < len && bytes[i + 1] == b'/' => {
+                return Some(i);
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -192,6 +235,32 @@ mod tests {
     #[test]
     fn single_selector_ok() {
         let d = SelectorMaxCompoundSelectors.check(&style_with_selector(".foo"), &ctx());
+        assert!(d.is_empty());
+    }
+
+    fn scss_ctx() -> RuleContext<'static> {
+        RuleContext {
+            file_path: "t.scss",
+            source: "",
+            syntax: Syntax::Scss,
+            options: None,
+        }
+    }
+
+    #[test]
+    fn strips_inline_scss_comments() {
+        // "dt, // TODO: Deprecate\n.form-group-header" should be treated as
+        // "dt,\n.form-group-header" which is two selectors each with 1 compound.
+        let sel = "dt, // TODO: Deprecate\n.form-group-header";
+        let d = SelectorMaxCompoundSelectors.check(&style_with_selector(sel), &scss_ctx());
+        assert!(d.is_empty(), "Expected no diagnostics, got: {:?}", d);
+    }
+
+    #[test]
+    fn strips_full_line_scss_comments() {
+        // Full-line SCSS comments should be stripped entirely
+        let sel = "// This is a comment\n.foo .bar";
+        let d = SelectorMaxCompoundSelectors.check(&style_with_selector(sel), &scss_ctx());
         assert!(d.is_empty());
     }
 }

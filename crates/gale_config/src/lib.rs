@@ -173,6 +173,10 @@ where
 pub struct ConfigFile {
     pub rules: Option<HashMap<String, RuleConfigValue>>,
     pub ignore_patterns: Option<Vec<String>>,
+    /// Stylelint uses `ignoreFiles` for the same purpose as `ignorePatterns`.
+    /// Accept both field names — when both are present the lists are merged.
+    #[serde(default)]
+    pub ignore_files: Option<Vec<String>>,
     pub formatter: Option<String>,
     /// List of shared configs / presets to extend (e.g. `"gale:recommended"`).
     /// Accepts a single string or an array of strings.
@@ -180,6 +184,10 @@ pub struct ConfigFile {
     pub extends: Option<Vec<String>>,
     /// File-pattern-based overrides (like Stylelint's `overrides` field).
     pub overrides: Option<Vec<ConfigOverride>>,
+    /// Stylelint's `plugins` field — Gale does not support plugins, but we
+    /// accept the field so configs with plugins don't fail to parse.
+    #[serde(default)]
+    pub plugins: Option<serde_json::Value>,
 }
 
 /// A single override entry as it appears in the config file.
@@ -459,33 +467,48 @@ const RECOMMENDED_WARNING_RULES: &[&str] = &[
 /// These mirror the official `stylelint-config-recommended` package, filtered
 /// to only include rules that Gale has implemented.
 const STYLELINT_RECOMMENDED_RULES: &[&str] = &[
+    "annotation-no-unknown",
+    "at-rule-descriptor-no-unknown",
+    "at-rule-descriptor-value-no-unknown",
+    "at-rule-no-deprecated",
     "at-rule-no-unknown",
+    "at-rule-prelude-no-invalid",
     "block-no-empty",
-    "color-no-invalid-hex",
     "comment-no-empty",
     "custom-property-no-missing-var-function",
     "declaration-block-no-duplicate-custom-properties",
     "declaration-block-no-duplicate-properties",
     "declaration-block-no-shorthand-property-overrides",
+    "declaration-property-value-keyword-no-deprecated",
+    "declaration-property-value-no-unknown",
     "font-family-no-duplicate-names",
     "font-family-no-missing-generic-family-keyword",
     "function-calc-no-unspaced-operator",
+    "function-no-unknown",
     "keyframe-block-no-duplicate-selectors",
     "keyframe-declaration-no-important",
     "media-feature-name-no-unknown",
+    "media-feature-name-value-no-unknown",
+    "media-query-no-invalid",
+    "media-type-no-deprecated",
+    "named-grid-areas-no-invalid",
+    "nesting-selector-no-missing-scoping-root",
     "no-descending-specificity",
     "no-duplicate-at-import-rules",
     "no-duplicate-selectors",
     "no-empty-source",
     "no-invalid-double-slash-comments",
     "no-invalid-position-at-import-rule",
+    "no-invalid-position-declaration",
     "no-irregular-whitespace",
+    "property-no-deprecated",
     "property-no-unknown",
+    "selector-anb-no-unmatchable",
     "selector-pseudo-class-no-unknown",
     "selector-pseudo-element-no-unknown",
     "selector-type-no-unknown",
     "string-no-newline",
-    "unit-no-unknown",
+    "syntax-string-no-invalid",
 ];
 
 /// Additional rules that `stylelint-config-standard` adds on top of
@@ -494,19 +517,43 @@ const STYLELINT_RECOMMENDED_RULES: &[&str] = &[
 /// Filtered to only include rules that Gale has implemented.
 const STYLELINT_STANDARD_EXTRA_RULES: &[&str] = &[
     "alpha-value-notation",
+    "at-rule-empty-line-before",
+    "at-rule-no-vendor-prefix",
+    "block-no-redundant-nested-style-rules",
+    "color-function-alias-notation",
+    "color-function-notation",
     "color-hex-length",
     "comment-empty-line-before",
+    "comment-whitespace-inside",
+    "container-name-pattern",
+    "custom-media-pattern",
+    "custom-property-empty-line-before",
+    "custom-property-pattern",
     "declaration-block-no-redundant-longhand-properties",
+    "declaration-block-single-line-max-declarations",
     "declaration-empty-line-before",
+    "font-family-name-quotes",
     "function-name-case",
     "function-url-quotes",
+    "hue-degree-notation",
     "import-notation",
+    "keyframe-selector-notation",
+    "keyframes-name-pattern",
+    "layer-name-pattern",
     "length-zero-no-unit",
+    "lightness-notation",
+    "media-feature-name-no-vendor-prefix",
+    "media-feature-range-notation",
     "number-max-precision",
     "property-no-vendor-prefix",
     "rule-empty-line-before",
+    "selector-attribute-quotes",
     "selector-class-pattern",
+    "selector-id-pattern",
+    "selector-no-vendor-prefix",
+    "selector-not-notation",
     "selector-pseudo-element-colon-notation",
+    "selector-type-case",
     "shorthand-property-no-redundant-values",
     "value-keyword-case",
     "value-no-vendor-prefix",
@@ -818,6 +865,10 @@ const CONFIG_FILENAMES: &[&str] = &[
 ];
 
 /// Walk upward from `start_dir` looking for the first config file.
+///
+/// After checking all well-known config filenames, also checks for a
+/// `"stylelint"` field inside `package.json` (lowest priority, matching
+/// Stylelint's cosmiconfig-based resolution).
 pub fn find_config(start_dir: &Path) -> Option<PathBuf> {
     let mut dir = start_dir.to_path_buf();
     loop {
@@ -825,6 +876,17 @@ pub fn find_config(start_dir: &Path) -> Option<PathBuf> {
             let candidate = dir.join(name);
             if candidate.is_file() {
                 return Some(candidate);
+            }
+        }
+        // Lowest priority: check for a `"stylelint"` field in package.json.
+        let pkg_path = dir.join("package.json");
+        if pkg_path.is_file() {
+            if let Ok(content) = std::fs::read_to_string(&pkg_path) {
+                if let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content) {
+                    if pkg.get("stylelint").is_some() {
+                        return Some(pkg_path);
+                    }
+                }
             }
         }
         if !dir.pop() {
@@ -838,6 +900,10 @@ pub fn find_config(start_dir: &Path) -> Option<PathBuf> {
 // ---------------------------------------------------------------------------
 
 /// Load and parse a config file at the given path.
+///
+/// When `path` points to a `package.json`, the `"stylelint"` field is
+/// extracted and used as the config.  If the field is a string it is
+/// treated as `{ "extends": "<that-string>" }`.
 pub fn load_config(path: &Path) -> Result<GaleConfig, ConfigError> {
     let contents = std::fs::read_to_string(path)?;
     let file_name = path
@@ -846,8 +912,41 @@ pub fn load_config(path: &Path) -> Result<GaleConfig, ConfigError> {
         .unwrap_or_default();
 
     let base_dir = path.parent().unwrap_or(Path::new("."));
-    let raw = parse_config_file(file_name, &contents, Some(base_dir))?;
+
+    let raw = if file_name == "package.json" {
+        parse_package_json_stylelint(&contents)?
+    } else {
+        parse_config_file(file_name, &contents, Some(base_dir))?
+    };
     Ok(resolve_raw(raw, base_dir))
+}
+
+/// Extract and parse the `"stylelint"` field from the contents of a
+/// `package.json` file.
+///
+/// - If the field is an object it is deserialized as a [`ConfigFile`].
+/// - If the field is a string it is treated as `{ "extends": "<value>" }`.
+/// - If the field is missing an error is returned.
+fn parse_package_json_stylelint(contents: &str) -> Result<ConfigFile, ConfigError> {
+    let pkg: serde_json::Value = serde_json::from_str(contents)?;
+    match pkg.get("stylelint") {
+        Some(value) if value.is_object() => {
+            Ok(serde_json::from_value::<ConfigFile>(value.clone())?)
+        }
+        Some(value) if value.is_string() => {
+            let extends_str = value.as_str().unwrap().to_string();
+            Ok(ConfigFile {
+                extends: Some(vec![extends_str]),
+                ..Default::default()
+            })
+        }
+        Some(_) => Err(ConfigError::UnsupportedFormat(
+            "package.json \"stylelint\" field must be an object or a string".to_string(),
+        )),
+        None => Err(ConfigError::UnsupportedFormat(
+            "package.json has no \"stylelint\" field".to_string(),
+        )),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1022,6 +1121,9 @@ fn extract_default_export(source: &str) -> Option<String> {
 }
 
 /// Find the value assigned to a `const`/`let`/`var` variable in JS source.
+///
+/// Handles object literals (`{…}`), array literals (`[…]`), and scalar values
+/// (e.g. `null`, `true`, `false`, numbers, quoted strings).
 fn find_variable_value(source: &str, var_name: &str) -> Option<String> {
     for keyword in &["const ", "let ", "var "] {
         let pattern = format!("{}{}", keyword, var_name);
@@ -1037,6 +1139,14 @@ fn find_variable_value(source: &str, var_name: &str) -> Option<String> {
             }
             if after_eq.starts_with('{') {
                 return extract_balanced(after_eq, '{', '}');
+            }
+            // Scalar value: read up to `;` or end of line.
+            let end = after_eq
+                .find(|c: char| c == ';' || c == '\n')
+                .unwrap_or(after_eq.len());
+            let val = after_eq[..end].trim();
+            if !val.is_empty() {
+                return Some(val.to_string());
             }
         }
     }
@@ -1194,6 +1304,99 @@ fn strip_import_lines(source: &str) -> String {
     lines.join("\n")
 }
 
+/// Substitute scalar `const`/`let`/`var` variables in JS source.
+///
+/// Finds declarations like `const OFF = null;` and replaces every subsequent
+/// bare-identifier usage of `OFF` (in a value position) with `null`.  This
+/// allows the JS→JSON converter to handle files that use named constants for
+/// rule severities or other scalar values.
+fn substitute_scalar_vars(source: &str) -> String {
+    // Collect all scalar variable declarations: `const/let/var NAME = VALUE;`
+    let mut vars: Vec<(String, String)> = Vec::new();
+    for line in source.lines() {
+        let trimmed = line.trim();
+        for keyword in &["const ", "let ", "var "] {
+            if let Some(rest) = trimmed.strip_prefix(keyword) {
+                // `NAME = VALUE;` or `NAME = VALUE`
+                if let Some(eq_pos) = rest.find('=') {
+                    let name = rest[..eq_pos].trim();
+                    // Only simple identifiers (no destructuring).
+                    if name
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+                        && !name.is_empty()
+                    {
+                        let val = rest[eq_pos + 1..].trim();
+                        let val = val.strip_suffix(';').unwrap_or(val).trim();
+                        // Only scalar values: null, true, false, numbers, quoted strings.
+                        // Skip objects/arrays (handled elsewhere) and complex expressions.
+                        let is_scalar = val == "null"
+                            || val == "true"
+                            || val == "false"
+                            || val == "undefined"
+                            || val.parse::<f64>().is_ok()
+                            || (val.starts_with('\'') && val.ends_with('\''))
+                            || (val.starts_with('"') && val.ends_with('"'));
+                        if is_scalar {
+                            vars.push((name.to_string(), val.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if vars.is_empty() {
+        return source.to_string();
+    }
+
+    // Replace bare identifier usages with their values.
+    // We do a simple word-boundary replacement: replace occurrences that are
+    // not preceded or followed by an alphanumeric or underscore character.
+    let mut result = source.to_string();
+    for (name, value) in &vars {
+        let mut new_result = String::with_capacity(result.len());
+        let name_len = name.len();
+        let mut i = 0;
+        let bytes = result.as_bytes();
+
+        while i < bytes.len() {
+            if i + name_len <= bytes.len() && &result[i..i + name_len] == name.as_str() {
+                // Check word boundary before
+                let before_ok = i == 0
+                    || !(bytes[i - 1] as char).is_alphanumeric()
+                        && bytes[i - 1] != b'_'
+                        && bytes[i - 1] != b'$';
+                // Check word boundary after
+                let after_ok = i + name_len >= bytes.len()
+                    || !(bytes[i + name_len] as char).is_alphanumeric()
+                        && bytes[i + name_len] != b'_'
+                        && bytes[i + name_len] != b'$';
+
+                // Don't replace in declaration context (const NAME =)
+                let in_decl = {
+                    let prefix = &result[..i];
+                    let trimmed = prefix.trim_end();
+                    trimmed.ends_with("const")
+                        || trimmed.ends_with("let")
+                        || trimmed.ends_with("var")
+                };
+
+                if before_ok && after_ok && !in_decl {
+                    new_result.push_str(value);
+                    i += name_len;
+                    continue;
+                }
+            }
+            new_result.push(bytes[i] as char);
+            i += 1;
+        }
+        result = new_result;
+    }
+
+    result
+}
+
 /// Parse a JavaScript config file that uses `module.exports = { ... }`,
 /// `exports = { ... }`, or `export default { ... }` with a static object literal.
 ///
@@ -1207,6 +1410,10 @@ fn parse_js_config(source: &str, file_dir: Option<&Path>) -> Result<ConfigFile, 
     let source = resolve_js_imports(source, file_dir);
     // Strip remaining import/require lines that would confuse the JSON converter.
     let source = strip_import_lines(&source);
+    // Substitute scalar const/let/var variables (e.g. `const OFF = null;`)
+    // so that bare identifiers in the exported object get replaced with their
+    // literal values before the JS→JSON conversion.
+    let source = substitute_scalar_vars(&source);
 
     // Find the start of the exported object literal.
     let markers = ["module.exports", "exports", "export default"];
@@ -1417,8 +1624,16 @@ fn js_object_to_json(js: &str) -> String {
     // Step 0b: Remove method calls on arrays/values (e.g. `.map( require.resolve )`).
     let s = remove_method_calls(&s);
 
+    // Step 0c: Replace RegExp literals with their string pattern representation
+    // (e.g. `/^[a-z]+$/i` → `"^[a-z]+$"`). Must run before quote conversion.
+    let s = replace_regexp_literals(&s);
+
     // Step 1: Replace single-quoted strings with double-quoted strings.
     let s = convert_single_to_double_quotes(&s);
+
+    // Step 1b: Concatenate adjacent string literals joined by `+`
+    // (e.g. `"foo" + "bar"` → `"foobar"`). Must run after quote conversion.
+    let s = concat_adjacent_strings(&s);
 
     // Step 2: Quote unquoted keys.
     let s = quote_unquoted_keys(&s);
@@ -1427,7 +1642,243 @@ fn js_object_to_json(js: &str) -> String {
     let s = remove_trailing_commas(&s);
 
     // Step 4: Remove spread entries.
-    remove_spread_entries(&s)
+    let s = remove_spread_entries(&s);
+
+    // Step 5: Replace bare identifier values with null.
+    // After all other transformations, any remaining bare identifiers in value
+    // positions (e.g. `"customSyntax": postcssScss`) are unresolved variable
+    // references.  Replace them with `null` so the JSON is valid.
+    replace_bare_identifier_values(&s)
+}
+
+/// Replace JavaScript RegExp literals with their pattern as a JSON string.
+///
+/// For example, `/^[a-z]+$/i` becomes `"^[a-z]+$"` (flags are dropped since
+/// Stylelint regex options are always strings).
+///
+/// We distinguish RegExp `/` from division by checking the preceding non-
+/// whitespace character: a regex can only appear after `:`, `[`, `,`, `(`, `=`,
+/// `!`, `|`, `&`, `?`, `;`, `{`, or at the start of input — i.e. positions
+/// where a value (not an operator) is expected.
+fn replace_regexp_literals(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
+    let mut result = String::with_capacity(len);
+    let mut i = 0;
+
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut in_template = false;
+    let mut escape_next = false;
+
+    while i < len {
+        let c = chars[i];
+
+        if escape_next {
+            result.push(c);
+            escape_next = false;
+            i += 1;
+            continue;
+        }
+
+        if c == '\\' && (in_single || in_double || in_template) {
+            result.push(c);
+            escape_next = true;
+            i += 1;
+            continue;
+        }
+
+        // String state tracking
+        if !in_double && !in_template && c == '\'' {
+            in_single = !in_single;
+            result.push(c);
+            i += 1;
+            continue;
+        }
+        if !in_single && !in_template && c == '"' {
+            in_double = !in_double;
+            result.push(c);
+            i += 1;
+            continue;
+        }
+        if !in_single && !in_double && c == '`' {
+            in_template = !in_template;
+            result.push(c);
+            i += 1;
+            continue;
+        }
+        if in_single || in_double || in_template {
+            result.push(c);
+            i += 1;
+            continue;
+        }
+
+        // Check for line comments (//) and block comments (/*) — not regex.
+        if c == '/' && i + 1 < len && (chars[i + 1] == '/' || chars[i + 1] == '*') {
+            result.push(c);
+            i += 1;
+            continue;
+        }
+
+        // Detect potential regex literal.
+        if c == '/' {
+            // Look back at the last non-whitespace character in result.
+            let prev = result.chars().rev().find(|ch| !ch.is_ascii_whitespace());
+            let is_regex_context = match prev {
+                None => true, // start of input
+                Some(ch) => matches!(
+                    ch,
+                    ':' | '[' | ',' | '(' | '=' | '!' | '|' | '&' | '?'
+                        | ';' | '{' | '+' | '-' | '~' | '^' | '%' | '<'
+                        | '>'
+                ),
+            };
+
+            if is_regex_context {
+                // Parse the regex literal: collect chars until unescaped `/`.
+                let mut pattern = String::new();
+                i += 1; // skip opening `/`
+                let mut regex_escape = false;
+                let mut in_char_class = false;
+                let mut valid = true;
+
+                while i < len {
+                    let rc = chars[i];
+                    if regex_escape {
+                        pattern.push(rc);
+                        regex_escape = false;
+                        i += 1;
+                        continue;
+                    }
+                    if rc == '\\' {
+                        pattern.push(rc);
+                        regex_escape = true;
+                        i += 1;
+                        continue;
+                    }
+                    if rc == '[' {
+                        in_char_class = true;
+                        pattern.push(rc);
+                        i += 1;
+                        continue;
+                    }
+                    if rc == ']' && in_char_class {
+                        in_char_class = false;
+                        pattern.push(rc);
+                        i += 1;
+                        continue;
+                    }
+                    if rc == '/' && !in_char_class {
+                        i += 1; // skip closing `/`
+                        break;
+                    }
+                    if rc == '\n' {
+                        // Newline inside regex => not actually a regex.
+                        valid = false;
+                        break;
+                    }
+                    pattern.push(rc);
+                    i += 1;
+                }
+
+                if !valid || pattern.is_empty() {
+                    // Not a valid regex; emit the `/` and continue.
+                    result.push('/');
+                    // Reset i to after the opening `/` — we already advanced.
+                    // But `pattern` consumed chars, so we need to backtrack.
+                    // Simplest: just push the pattern back and the `/`.
+                    result.push_str(&pattern);
+                    continue;
+                }
+
+                // Skip optional flags (g, i, m, s, u, y, d, v)
+                while i < len && chars[i].is_ascii_alphabetic() {
+                    i += 1;
+                }
+
+                // Emit the pattern as a double-quoted JSON string.
+                // Escape any double-quotes and backslashes for JSON.
+                result.push('"');
+                for pc in pattern.chars() {
+                    if pc == '"' {
+                        result.push('\\');
+                    }
+                    result.push(pc);
+                }
+                result.push('"');
+                continue;
+            }
+        }
+
+        result.push(c);
+        i += 1;
+    }
+
+    result
+}
+
+/// Concatenate adjacent string literals joined by `+`.
+///
+/// After quote conversion, strings are double-quoted.  This function finds
+/// patterns like `"foo" + "bar"` and merges them into `"foobar"`.
+fn concat_adjacent_strings(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
+    let mut result = String::with_capacity(len);
+    let mut i = 0;
+
+    while i < len {
+        let c = chars[i];
+
+        // When we see a closing `"`, check if a `+` follows with another string.
+        if c == '"' {
+            // Collect the entire string (including opening quote).
+            result.push('"');
+            i += 1;
+            // Scan to closing quote
+            while i < len {
+                let sc = chars[i];
+                if sc == '\\' && i + 1 < len {
+                    result.push(sc);
+                    result.push(chars[i + 1]);
+                    i += 2;
+                    continue;
+                }
+                if sc == '"' {
+                    // Before pushing closing quote, check for `+ "..."`
+                    let mut j = i + 1;
+                    // Skip whitespace
+                    while j < len && chars[j].is_ascii_whitespace() {
+                        j += 1;
+                    }
+                    if j < len && chars[j] == '+' {
+                        j += 1;
+                        while j < len && chars[j].is_ascii_whitespace() {
+                            j += 1;
+                        }
+                        if j < len && chars[j] == '"' {
+                            // Skip the closing `"`, `+`, whitespace, and opening `"`
+                            // of the next string — effectively merging them.
+                            i = j + 1;
+                            continue; // continue scanning the merged string
+                        }
+                    }
+                    // No concatenation — emit closing quote.
+                    result.push('"');
+                    i += 1;
+                    break;
+                }
+                result.push(sc);
+                i += 1;
+            }
+            continue;
+        }
+
+        result.push(c);
+        i += 1;
+    }
+
+    result
 }
 
 /// Replace arrow function expressions with `null`.
@@ -2094,6 +2545,92 @@ fn remove_spread_entries(s: &str) -> String {
     result
 }
 
+/// Replace bare identifier values with `null` in a JSON-like string.
+///
+/// After all other JS→JSON transformations, any remaining bare identifiers in
+/// value positions (e.g. `"customSyntax": postcssScss`) are unresolved variable
+/// references.  This function replaces them with `null` so that `serde_json`
+/// can parse the result.
+///
+/// Only replaces identifiers that appear after `:` (value position) or as array
+/// elements (after `[` or `,`).  Does not touch keys (already quoted), strings,
+/// or JSON literals (`true`, `false`, `null`).
+fn replace_bare_identifier_values(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    let mut in_string = false;
+    let mut escape_next = false;
+
+    while i < len {
+        let c = chars[i];
+
+        if escape_next {
+            result.push(c);
+            escape_next = false;
+            i += 1;
+            continue;
+        }
+
+        if c == '\\' && in_string {
+            result.push(c);
+            escape_next = true;
+            i += 1;
+            continue;
+        }
+
+        if c == '"' {
+            in_string = !in_string;
+            result.push(c);
+            i += 1;
+            continue;
+        }
+
+        if in_string {
+            result.push(c);
+            i += 1;
+            continue;
+        }
+
+        // Check for a bare identifier in a value position.
+        // Value positions come after `:`, after `[`, or after `,`.
+        if (c.is_alphabetic() || c == '_' || c == '$')
+            && !is_preceded_by_quote(&result)
+        {
+            // Read the full identifier.
+            let start = i;
+            while i < len
+                && (chars[i].is_alphanumeric() || chars[i] == '_' || chars[i] == '$' || chars[i] == '.')
+            {
+                i += 1;
+            }
+            let ident = &s[start..i];
+            // Preserve JSON literals.
+            match ident {
+                "true" | "false" | "null" => result.push_str(ident),
+                _ => result.push_str("null"),
+            }
+            continue;
+        }
+
+        result.push(c);
+        i += 1;
+    }
+
+    result
+}
+
+/// Check if the last non-whitespace character in `s` indicates we're in a
+/// value position (after `:`, `[`, or `,`).
+fn is_preceded_by_quote(s: &str) -> bool {
+    // Returns true if the last non-whitespace char is `"`, indicating this
+    // identifier is likely a key or part of a string context.
+    // Returns false if it's `:`, `[`, `,`, or other value-context chars.
+    let trimmed = s.trim_end();
+    trimmed.ends_with('"')
+}
+
 fn parse_config_file(
     file_name: &str,
     contents: &str,
@@ -2128,6 +2665,11 @@ fn load_config_file(path: &Path) -> Result<ConfigFile, ConfigError> {
         .and_then(|n| n.to_str())
         .unwrap_or_default();
     let file_dir = path.parent();
+
+    // Handle package.json specially: extract the "stylelint" field.
+    if file_name == "package.json" {
+        return parse_package_json_stylelint(&contents);
+    }
 
     // For files without a recognised extension (e.g. bare `.stylelintrc`),
     // or JSON files, try JSON first then YAML as a fallback.
@@ -2328,11 +2870,15 @@ fn collect_rules_from_extends(
 
             if let Some(config) = config {
                 let sub_base = if preset_name.starts_with("./") || preset_name.starts_with("../") {
-                    base_dir
-                        .join(preset_name)
-                        .parent()
-                        .unwrap_or(base_dir)
-                        .to_path_buf()
+                    // If the path is a directory (resolved via index.js), use
+                    // the directory itself as the base so that relative extends
+                    // inside it resolve correctly.
+                    let joined = base_dir.join(preset_name);
+                    if joined.is_dir() {
+                        joined
+                    } else {
+                        joined.parent().unwrap_or(base_dir).to_path_buf()
+                    }
                 } else {
                     // For npm packages, use the package root directory as the
                     // base for resolving relative extends within the package.
@@ -2393,11 +2939,12 @@ fn collect_rules_from_extends(
                     }
                     overrides.extend(config_overrides);
                 }
-            } else if let Some(preset_rules) = resolve_preset(preset_name) {
-                // npm/file not found — use built-in preset as fallback.
-                rules.extend(preset_rules);
             } else {
-                eprintln!("warning: could not resolve config '{preset_name}', skipping");
+                // npm/file not found — warn and skip (treat as empty config).
+                // Do NOT fall back to built-in presets: approximate presets may
+                // enable rules the real config would disable, causing thousands
+                // of false positives.
+                eprintln!("warning: could not resolve extends '{preset_name}', skipping");
             }
         }
     }
@@ -2434,7 +2981,11 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
         }
     }
 
-    let ignore_patterns = raw.ignore_patterns.unwrap_or_default();
+    // Merge both `ignorePatterns` and `ignoreFiles` (Stylelint's field name).
+    let mut ignore_patterns = raw.ignore_patterns.unwrap_or_default();
+    if let Some(ignore_files) = raw.ignore_files {
+        ignore_patterns.extend(ignore_files);
+    }
 
     let formatter = raw
         .formatter
@@ -2503,15 +3054,19 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
 // High-level convenience
 // ---------------------------------------------------------------------------
 
-/// Find a config file starting from `start_dir`, load it, or return defaults.
-pub fn resolve_config(start_dir: &Path) -> GaleConfig {
-    match find_config(start_dir) {
-        Some(path) => load_config(&path).unwrap_or_else(|err| {
-            eprintln!("Warning: failed to load config {}: {err}", path.display());
-            GaleConfig::default()
-        }),
-        None => GaleConfig::default(),
-    }
+/// Find a config file starting from `start_dir`, load it, or return `None` if
+/// no config file is found anywhere in the directory hierarchy.
+///
+/// When a config file is found but fails to load, a warning is printed and a
+/// default (empty-rules) config is returned — this is still `Some` because the
+/// user *has* a config file and we should respect its (empty) rule set rather
+/// than falling back to "enable every rule".
+pub fn resolve_config(start_dir: &Path) -> Option<GaleConfig> {
+    let path = find_config(start_dir)?;
+    Some(load_config(&path).unwrap_or_else(|err| {
+        eprintln!("Warning: failed to load config {}: {err}", path.display());
+        GaleConfig::default()
+    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -2702,6 +3257,31 @@ formatter: text
         let cfg = resolve_raw(raw, Path::new("."));
         // The rule should be removed entirely.
         assert!(!cfg.rules.contains_key("block-no-empty"));
+    }
+
+    #[test]
+    fn user_can_disable_preset_rule_with_null() {
+        // Gutenberg uses `'no-descending-specificity': null` to disable the rule.
+        // PatternFly uses `"no-descending-specificity": null` similarly.
+        // When a rule value is null, the rule should be completely disabled
+        // even if an extended preset enables it.
+        let json = r#"{
+            "extends": "gale:recommended",
+            "rules": {
+                "no-descending-specificity": null
+            }
+        }"#;
+        let raw: ConfigFile = serde_json::from_str(json).unwrap();
+        let cfg = resolve_raw(raw, Path::new("."));
+        // no-descending-specificity is in gale:recommended but null should disable it.
+        assert!(
+            !cfg.rules.contains_key("no-descending-specificity"),
+            "null rule value should completely disable the rule, \
+             but no-descending-specificity is still in the resolved rules"
+        );
+        // Other recommended rules should still be present.
+        assert!(cfg.rules.contains_key("block-no-empty"));
+        assert!(cfg.rules.contains_key("color-no-invalid-hex"));
     }
 
     #[test]
@@ -3394,6 +3974,62 @@ export default {
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
+    #[test]
+    fn js_config_regexp_literals() {
+        let js = r#"
+module.exports = {
+    rules: {
+        'selector-class-pattern': [/^[a-z]([a-z0-9-_!])*$/, {
+            resolveNestedSelectors: true
+        }],
+        'selector-id-pattern': /^[a-z]([a-z0-9-])*$/i,
+    }
+}
+"#;
+        let raw = parse_js_config(js, None).unwrap();
+        let rules = raw.rules.unwrap();
+        match rules.get("selector-class-pattern").unwrap() {
+            RuleConfigValue::Array(arr) => {
+                assert_eq!(arr.len(), 2);
+                assert_eq!(arr[0], serde_json::json!("^[a-z]([a-z0-9-_!])*$"));
+            }
+            other => panic!("Expected array, got {:?}", other),
+        }
+        match rules.get("selector-id-pattern").unwrap() {
+            RuleConfigValue::Severity(s) => {
+                assert_eq!(s, "^[a-z]([a-z0-9-])*$");
+            }
+            other => panic!("Expected string, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn js_config_string_concatenation() {
+        let js = r#"
+module.exports = {
+    rules: {
+        'selector-class-pattern': ['pattern', {
+            message: 'Class names may only contain [a-z0-9-_!] characters and ' +
+                'must start with [a-z]'
+        }]
+    }
+}
+"#;
+        let raw = parse_js_config(js, None).unwrap();
+        let rules = raw.rules.unwrap();
+        match rules.get("selector-class-pattern").unwrap() {
+            RuleConfigValue::Array(arr) => {
+                assert_eq!(arr.len(), 2);
+                let opts = arr[1].as_object().unwrap();
+                assert_eq!(
+                    opts.get("message").unwrap().as_str().unwrap(),
+                    "Class names may only contain [a-z0-9-_!] characters and must start with [a-z]"
+                );
+            }
+            other => panic!("Expected array, got {:?}", other),
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Override tests
     // -----------------------------------------------------------------------
@@ -3688,5 +4324,110 @@ overrides:
         let scss_rules = cfg.rules_for_file("main.scss");
         assert!(!scss_rules.contains_key("no-duplicate-selectors"));
         assert!(!scss_rules.contains_key("comment-no-empty"));
+    }
+
+    // -----------------------------------------------------------------------
+    // package.json "stylelint" field
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn find_config_discovers_package_json_stylelint_field() {
+        let tmp = tempfile::tempdir().unwrap();
+        let pkg = tmp.path().join("package.json");
+        std::fs::write(
+            &pkg,
+            r#"{
+                "name": "my-project",
+                "stylelint": {
+                    "rules": { "block-no-empty": true }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let found = find_config(tmp.path());
+        assert_eq!(found, Some(pkg));
+    }
+
+    #[test]
+    fn find_config_prefers_stylelintrc_over_package_json() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Both .stylelintrc.json and package.json with stylelint field exist.
+        std::fs::write(
+            tmp.path().join(".stylelintrc.json"),
+            r#"{ "rules": { "color-no-invalid-hex": true } }"#,
+        )
+        .unwrap();
+        std::fs::write(
+            tmp.path().join("package.json"),
+            r#"{ "name": "x", "stylelint": { "rules": { "block-no-empty": true } } }"#,
+        )
+        .unwrap();
+
+        let found = find_config(tmp.path()).unwrap();
+        assert_eq!(found.file_name().unwrap(), ".stylelintrc.json");
+    }
+
+    #[test]
+    fn find_config_ignores_package_json_without_stylelint_field() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("package.json"),
+            r#"{ "name": "no-lint-config" }"#,
+        )
+        .unwrap();
+
+        assert_eq!(find_config(tmp.path()), None);
+    }
+
+    #[test]
+    fn load_config_from_package_json_object() {
+        let tmp = tempfile::tempdir().unwrap();
+        let pkg = tmp.path().join("package.json");
+        std::fs::write(
+            &pkg,
+            r#"{
+                "name": "my-project",
+                "stylelint": {
+                    "rules": {
+                        "block-no-empty": true,
+                        "color-no-invalid-hex": "warning"
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+
+        let cfg = load_config(&pkg).unwrap();
+        assert_eq!(cfg.rules.len(), 2);
+        assert!(cfg.rules.contains_key("block-no-empty"));
+        assert!(cfg.rules.contains_key("color-no-invalid-hex"));
+    }
+
+    #[test]
+    fn load_config_from_package_json_string_extends() {
+        let tmp = tempfile::tempdir().unwrap();
+        let pkg = tmp.path().join("package.json");
+        std::fs::write(
+            &pkg,
+            r#"{
+                "name": "my-project",
+                "stylelint": "stylelint-config-standard"
+            }"#,
+        )
+        .unwrap();
+
+        // load_config will try to resolve extends, which will fail for
+        // "stylelint-config-standard" without node_modules.  Instead,
+        // test parse_package_json_stylelint directly.
+        let contents = std::fs::read_to_string(&pkg).unwrap();
+        let raw = parse_package_json_stylelint(&contents).unwrap();
+        assert_eq!(raw.extends, Some(vec!["stylelint-config-standard".to_string()]));
+    }
+
+    #[test]
+    fn parse_package_json_stylelint_missing_field() {
+        let contents = r#"{ "name": "no-lint" }"#;
+        assert!(parse_package_json_stylelint(contents).is_err());
     }
 }

@@ -23,6 +23,10 @@ impl Rule for SelectorPseudoClassNoUnknown {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+        // Stylelint skips selectors with SCSS/Less interpolation.
+        if rule.selector.contains("#{") || rule.selector.contains("@{") {
+            return vec![];
+        }
         let mut diags = Vec::new();
         for name in extract_pseudo_classes(&rule.selector) {
             if name.starts_with('-') {

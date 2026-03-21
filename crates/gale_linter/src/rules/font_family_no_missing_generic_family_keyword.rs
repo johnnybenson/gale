@@ -71,6 +71,19 @@ impl Rule for FontFamilyNoMissingGenericFamilyKeyword {
                 continue;
             }
 
+            // Skip non-standard-syntax values: SCSS function calls (the
+            // entire value is a single function invocation like
+            // `font-family('sans')` or `type.font('mono')`).
+            if value.ends_with(')') && !value.contains(',') {
+                // If the value looks like a single function call, skip it.
+                if let Some(paren_pos) = value.find('(') {
+                    let func_name = &value[..paren_pos];
+                    if func_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
+                        continue;
+                    }
+                }
+            }
+
             // Split by comma and check the last entry.
             let last_family = match value.rsplit(',').next() {
                 Some(f) => f.trim(),

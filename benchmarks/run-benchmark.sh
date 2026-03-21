@@ -11,6 +11,21 @@ BOOTSTRAP_FILE="$FIXTURES_DIR/bootstrap.css"
 # Generate fixtures if needed
 bash "$SCRIPT_DIR/generate-benchmark.sh"
 
+# Create a minimal .stylelintrc.json in fixtures so Stylelint has config
+if [ ! -f "$FIXTURES_DIR/.stylelintrc.json" ]; then
+    echo '{ "extends": "stylelint-config-recommended" }' > "$FIXTURES_DIR/.stylelintrc.json"
+fi
+
+# Set up a local Stylelint installation in a temp directory
+STYLELINT_DIR="$SCRIPT_DIR/.stylelint-local"
+STYLELINT_BIN="$STYLELINT_DIR/node_modules/.bin/stylelint"
+
+if [ ! -x "$STYLELINT_BIN" ]; then
+    echo "Installing local Stylelint..."
+    mkdir -p "$STYLELINT_DIR"
+    (cd "$STYLELINT_DIR" && bun init -y 2>/dev/null && bun add stylelint stylelint-config-recommended)
+fi
+
 echo ""
 echo "============================================"
 echo "  GALE vs STYLELINT BENCHMARK"
@@ -39,15 +54,15 @@ if ! command -v hyperfine &>/dev/null; then
     time "$GALE_BIN" "$BENCHMARK_FILE" --quiet 2>/dev/null || true
     echo ""
 
-    if command -v stylelint &>/dev/null; then
+    if [ -x "$STYLELINT_BIN" ]; then
         echo "--- Stylelint (bootstrap.css) ---"
-        time stylelint "$BOOTSTRAP_FILE" --quiet 2>/dev/null || true
+        time "$STYLELINT_BIN" "$BOOTSTRAP_FILE" --quiet 2>/dev/null || true
         echo ""
 
         echo "--- Stylelint (bootstrap-20x.css) ---"
-        time stylelint "$BENCHMARK_FILE" --quiet 2>/dev/null || true
+        time "$STYLELINT_BIN" "$BENCHMARK_FILE" --quiet 2>/dev/null || true
     else
-        echo "stylelint not found. Install it: bun add -g stylelint stylelint-config-standard"
+        echo "stylelint not found. Local installation failed."
     fi
     exit 0
 fi
@@ -56,32 +71,24 @@ fi
 echo "--- bootstrap.css ($(wc -l < "$BOOTSTRAP_FILE" | tr -d ' ') lines) ---"
 echo ""
 
-CMDS=("$GALE_BIN $BOOTSTRAP_FILE --quiet")
-NAMES=("gale")
+HYPERFINE_ARGS=(--warmup 3 --min-runs 10)
+HYPERFINE_ARGS+=(-n "Gale" "$GALE_BIN $BOOTSTRAP_FILE --quiet")
 
-if command -v stylelint &>/dev/null; then
-    CMDS+=("stylelint $BOOTSTRAP_FILE --quiet")
-    NAMES+=("stylelint")
+if [ -x "$STYLELINT_BIN" ]; then
+    HYPERFINE_ARGS+=(-n "Stylelint" "$STYLELINT_BIN $BOOTSTRAP_FILE --quiet")
 fi
 
-hyperfine --warmup 3 --min-runs 10 \
-    "${CMDS[@]}" \
-    --command-name "${NAMES[@]}" \
-    2>&1 || true
+hyperfine "${HYPERFINE_ARGS[@]}" 2>&1 || true
 
 echo ""
 echo "--- bootstrap-20x.css ($(wc -l < "$BENCHMARK_FILE" | tr -d ' ') lines) ---"
 echo ""
 
-CMDS_20X=("$GALE_BIN $BENCHMARK_FILE --quiet")
-NAMES_20X=("gale")
+HYPERFINE_ARGS_20X=(--warmup 3 --min-runs 10)
+HYPERFINE_ARGS_20X+=(-n "Gale" "$GALE_BIN $BENCHMARK_FILE --quiet")
 
-if command -v stylelint &>/dev/null; then
-    CMDS_20X+=("stylelint $BENCHMARK_FILE --quiet")
-    NAMES_20X+=("stylelint")
+if [ -x "$STYLELINT_BIN" ]; then
+    HYPERFINE_ARGS_20X+=(-n "Stylelint" "$STYLELINT_BIN $BENCHMARK_FILE --quiet")
 fi
 
-hyperfine --warmup 3 --min-runs 10 \
-    "${CMDS_20X[@]}" \
-    --command-name "${NAMES_20X[@]}" \
-    2>&1 || true
+hyperfine "${HYPERFINE_ARGS_20X[@]}" 2>&1 || true

@@ -193,8 +193,14 @@ fn handle_directive(
 ///      "" → [None]  (all rules)
 fn parse_rule_names(text: &str) -> Vec<Option<String>> {
     let t = text.trim();
-    // Also strip leading ` -- ` separators sometimes used in comments
-    let t = t.trim_start_matches("--").trim();
+    // Strip description after ` -- ` separator (Stylelint convention).
+    // E.g. "rule-name -- reason" → "rule-name"
+    let t = if let Some(pos) = t.find(" -- ") {
+        t[..pos].trim()
+    } else {
+        // Also strip leading ` -- ` separators sometimes used in comments
+        t.trim_start_matches("--").trim()
+    };
     if t.is_empty() {
         return vec![None]; // disable all rules
     }
@@ -289,6 +295,10 @@ pub struct LintRunner {
     enabled_rules: Vec<String>,
     /// Per-rule options from the config (keyed by rule name).
     rule_options: HashMap<String, serde_json::Value>,
+    /// Per-rule severity overrides from the config (keyed by rule name).
+    /// When a rule is listed here its diagnostics will use this severity
+    /// instead of the rule's `default_severity()`.
+    rule_severities: HashMap<String, Severity>,
 }
 
 impl LintRunner {
@@ -298,6 +308,7 @@ impl LintRunner {
             registry,
             enabled_rules,
             rule_options: HashMap::new(),
+            rule_severities: HashMap::new(),
         }
     }
 
@@ -311,6 +322,22 @@ impl LintRunner {
             registry,
             enabled_rules,
             rule_options,
+            rule_severities: HashMap::new(),
+        }
+    }
+
+    /// Create a new runner with per-rule options and severity overrides.
+    pub fn with_options_and_severities(
+        registry: RuleRegistry,
+        enabled_rules: Vec<String>,
+        rule_options: HashMap<String, serde_json::Value>,
+        rule_severities: HashMap<String, Severity>,
+    ) -> Self {
+        Self {
+            registry,
+            enabled_rules,
+            rule_options,
+            rule_severities,
         }
     }
 
@@ -389,11 +416,15 @@ impl LintRunner {
             eprintln!("[perf] walk: {:.3}s", t2.elapsed().as_secs_f64());
         }
 
-        // Set file_path on all diagnostics.
+        // Set file_path and apply severity overrides on all diagnostics.
         let t3 = Instant::now();
         for diag in &mut diagnostics {
             if diag.file_path.is_empty() {
                 diag.file_path = file_path.to_string();
+            }
+            // Apply config-specified severity overrides.
+            if let Some(&sev) = self.rule_severities.get(&diag.rule_name) {
+                diag.severity = sev;
             }
         }
         if debug {
@@ -432,6 +463,7 @@ impl LintRunner {
         syntax: Syntax,
         enabled_rules: &[String],
         rule_options: &HashMap<String, serde_json::Value>,
+        rule_severities: &HashMap<String, Severity>,
     ) -> LintResult {
         let debug = perf_enabled();
 
@@ -504,6 +536,14 @@ impl LintRunner {
         for diag in &mut diagnostics {
             if diag.file_path.is_empty() {
                 diag.file_path = file_path.to_string();
+            }
+            // Apply config-specified severity overrides (check override-specific
+            // map first, then fall back to the runner's default map).
+            if let Some(&sev) = rule_severities
+                .get(&diag.rule_name)
+                .or_else(|| self.rule_severities.get(&diag.rule_name))
+            {
+                diag.severity = sev;
             }
         }
 
@@ -710,6 +750,7 @@ mod tests {
             "test.sass",
             Syntax::Sass,
             &["block-no-empty".to_string()],
+            &HashMap::new(),
             &HashMap::new(),
         );
 

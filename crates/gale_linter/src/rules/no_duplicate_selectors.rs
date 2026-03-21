@@ -1,7 +1,7 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use gale_css_parser::CssNode;
-use gale_diagnostics::{Diagnostic, Severity, Span};
+use gale_diagnostics::{Diagnostic, Severity, SourceLineIndex, Span};
 
 use crate::rule::{Rule, RuleContext};
 
@@ -23,11 +23,12 @@ impl Rule for NoDuplicateSelectors {
         Severity::Warning
     }
 
-    fn check_root(&self, nodes: &[CssNode], _context: &RuleContext) -> Vec<Diagnostic> {
-        let mut seen: HashSet<String> = HashSet::new();
+    fn check_root(&self, nodes: &[CssNode], context: &RuleContext) -> Vec<Diagnostic> {
+        let line_index = SourceLineIndex::build(context.source);
+        let mut seen: HashMap<String, usize> = HashMap::new();
         let mut diagnostics = Vec::new();
 
-        collect_selectors(nodes, &mut seen, &mut diagnostics, self);
+        collect_selectors(nodes, &mut seen, &mut diagnostics, self, &line_index);
 
         diagnostics
     }
@@ -35,36 +36,51 @@ impl Rule for NoDuplicateSelectors {
 
 fn collect_selectors(
     nodes: &[CssNode],
-    seen: &mut HashSet<String>,
+    seen: &mut HashMap<String, usize>,
     diagnostics: &mut Vec<Diagnostic>,
     rule: &NoDuplicateSelectors,
+    line_index: &SourceLineIndex,
 ) {
     for node in nodes {
         match node {
             CssNode::Style(style_rule) => {
-                let selector = normalize_selector(style_rule.selector.trim());
-                if seen.contains(&selector) {
+                // Stylelint skips selectors with SCSS/Less interpolation
+                // (non-standard syntax).
+                let raw = style_rule.selector.trim();
+                if raw.contains("#{") || raw.contains("@{") {
+                    continue;
+                }
+                let selector = normalize_selector(raw);
+                if let Some(&first_line) = seen.get(&selector) {
                     diagnostics.push(
                         Diagnostic::new(
                             rule.name(),
                             format!(
-                                "Unexpected duplicate selector \"{}\"",
-                                style_rule.selector.trim()
+                                "Unexpected duplicate selector \"{}\", first used at line {}",
+                                style_rule.selector.trim(),
+                                first_line,
                             ),
                         )
                         .severity(rule.default_severity())
                         .span(Span::new(style_rule.span.offset, style_rule.span.length)),
                     );
                 } else {
-                    seen.insert(selector);
+                    let (line, _) = line_index.offset_to_location(style_rule.span.offset);
+                    seen.insert(selector, line);
                 }
             }
             CssNode::AtRule(at_rule) => {
                 // Use a separate scope for at-rule children so that selectors
                 // inside different at-rules (e.g. @media) don't clash with
                 // top-level selectors.
-                let mut scoped_seen = HashSet::new();
-                collect_selectors(&at_rule.children, &mut scoped_seen, diagnostics, rule);
+                let mut scoped_seen = HashMap::new();
+                collect_selectors(
+                    &at_rule.children,
+                    &mut scoped_seen,
+                    diagnostics,
+                    rule,
+                    line_index,
+                );
             }
             _ => {}
         }
@@ -117,8 +133,9 @@ mod tests {
     }
 
     #[test]
-    fn reports_duplicate_selectors() {
+    fn reports_duplicate_selectors_with_line_reference() {
         let rule = NoDuplicateSelectors;
+        let source = ".foo { color: red; }\n.bar { color: blue; }\n.foo { display: block; }";
         let nodes = vec![
             CssNode::Style(StyleRule {
                 selector: ".foo".to_string(),
@@ -129,34 +146,43 @@ mod tests {
                     important: false,
                 }],
                 children: vec![],
-                span: ParserSpan::new(0, 18),
+                span: ParserSpan::new(0, 20),
             }),
             CssNode::Style(StyleRule {
                 selector: ".bar".to_string(),
                 declarations: vec![Declaration {
                     property: "color".to_string(),
                     value: "blue".to_string(),
-                    span: ParserSpan::new(25, 11),
+                    span: ParserSpan::new(27, 11),
                     important: false,
                 }],
                 children: vec![],
-                span: ParserSpan::new(19, 19),
+                span: ParserSpan::new(21, 21),
             }),
             CssNode::Style(StyleRule {
                 selector: ".foo".to_string(),
                 declarations: vec![Declaration {
                     property: "display".to_string(),
                     value: "block".to_string(),
-                    span: ParserSpan::new(45, 14),
+                    span: ParserSpan::new(49, 14),
                     important: false,
                 }],
                 children: vec![],
-                span: ParserSpan::new(39, 22),
+                span: ParserSpan::new(43, 24),
             }),
         ];
-        let diags = rule.check_root(&nodes, &make_context());
+        let ctx = RuleContext {
+            file_path: "test.css",
+            source,
+            syntax: Syntax::Css,
+            options: None,
+        };
+        let diags = rule.check_root(&nodes, &ctx);
         assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].message, "Unexpected duplicate selector \".foo\"");
+        assert_eq!(
+            diags[0].message,
+            "Unexpected duplicate selector \".foo\", first used at line 1"
+        );
     }
 
     #[test]

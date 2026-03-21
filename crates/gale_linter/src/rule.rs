@@ -13,6 +13,43 @@ pub struct RuleContext<'a> {
     pub options: Option<&'a serde_json::Value>,
 }
 
+impl<'a> RuleContext<'a> {
+    /// Extract the **primary option** from Stylelint-format options.
+    ///
+    /// Options may arrive in several shapes depending on how the config was
+    /// written and resolved:
+    ///
+    /// - A plain value (string, number, bool): `"always"`, `4`, `true`
+    /// - An array `[primary, secondary]`: `["always", { "except": [...] }]`
+    ///
+    /// This method normalises all forms and returns the primary option value.
+    pub fn primary_option(&self) -> Option<&'a serde_json::Value> {
+        let value = self.options?;
+        match value {
+            serde_json::Value::Array(arr) => arr.first(),
+            other => Some(other),
+        }
+    }
+
+    /// Extract the primary option as a `&str`, handling both plain strings
+    /// and array-format options `["value", { ... }]`.
+    pub fn primary_option_str(&self) -> Option<&'a str> {
+        self.primary_option().and_then(|v| v.as_str())
+    }
+
+    /// Extract the **secondary options object** from Stylelint-format options.
+    ///
+    /// Only present when options are in array form `[primary, secondary]` and
+    /// the secondary element is an object.
+    pub fn secondary_options(&self) -> Option<&'a serde_json::Value> {
+        let value = self.options?;
+        match value {
+            serde_json::Value::Array(arr) => arr.get(1),
+            _ => None,
+        }
+    }
+}
+
 /// A single lint rule that can inspect CSS AST nodes and emit diagnostics.
 pub trait Rule: Send + Sync {
     /// Unique rule name, e.g. "block-no-empty".

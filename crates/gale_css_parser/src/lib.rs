@@ -593,11 +593,33 @@ fn convert_style_rule(
         declarations.push(d);
     }
 
-    // Nested rules: extract only nested style rules as direct children.
+    // Nested rules: extract nested style rules as children, and also pull
+    // declarations out of NestedDeclarations nodes (lightningcss puts
+    // declarations that follow nested rules into NestedDeclarations).
     let mut children = Vec::new();
     for rule in &style.rules.0 {
-        if let LcssRule::Style(nested_style) = rule {
-            children.push(convert_style_rule(nested_style, source, idx));
+        match rule {
+            LcssRule::Style(nested_style) => {
+                children.push(convert_style_rule(nested_style, source, idx));
+            }
+            LcssRule::Nesting(nesting) => {
+                children.push(convert_style_rule(&nesting.style, source, idx));
+            }
+            LcssRule::NestedDeclarations(nested_decls) => {
+                for decl in &nested_decls.declarations.declarations {
+                    let (d, next) =
+                        convert_property(decl, false, source, search_from, search_end);
+                    search_from = next;
+                    declarations.push(d);
+                }
+                for decl in &nested_decls.declarations.important_declarations {
+                    let (d, next) =
+                        convert_property(decl, true, source, search_from, search_end);
+                    search_from = next;
+                    declarations.push(d);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -616,7 +638,21 @@ fn convert_property(
     search_from: usize,
     search_end: usize,
 ) -> (Declaration, usize) {
-    let property_name = prop.property_id().name().to_owned();
+    let prop_id = prop.property_id();
+    let base_name = prop_id.name();
+    // Reconstruct the full property name including vendor prefix.
+    let prefix = prop_id.prefix();
+    let property_name = if prefix.contains(lightningcss::vendor_prefix::VendorPrefix::WebKit) {
+        format!("-webkit-{base_name}")
+    } else if prefix.contains(lightningcss::vendor_prefix::VendorPrefix::Moz) {
+        format!("-moz-{base_name}")
+    } else if prefix.contains(lightningcss::vendor_prefix::VendorPrefix::Ms) {
+        format!("-ms-{base_name}")
+    } else if prefix.contains(lightningcss::vendor_prefix::VendorPrefix::O) {
+        format!("-o-{base_name}")
+    } else {
+        base_name.to_owned()
+    };
     let value = prop.value_to_css_string(po()).unwrap_or_default();
 
     // Find the declaration in the source text for accurate byte offsets.
@@ -1470,6 +1506,41 @@ mod tests {
                 );
             } else {
                 panic!("expected Style node");
+            }
+        } else {
+            panic!("expected AtRule");
+        }
+    }
+
+    #[test]
+    fn test_layer_with_nested_media_has_declarations() {
+        // Declarations that follow a nested @media rule inside @layer should
+        // be extracted via NestedDeclarations and not lost.
+        let css = r#"@layer utils {
+	.foo {
+		@media not ( prefers-reduced-motion ) {
+			transition: outline 0.1s ease-out;
+		}
+		outline-width: 0;
+		outline-style: solid;
+	}
+}"#;
+        let result = parse(css, Syntax::Css).expect("should parse");
+        assert_eq!(result.nodes.len(), 1);
+        if let CssNode::AtRule(ref at_rule) = result.nodes[0] {
+            assert_eq!(at_rule.name, "layer");
+            assert!(!at_rule.children.is_empty(), "layer should have children");
+            if let CssNode::Style(ref style) = at_rule.children[0] {
+                assert!(
+                    !style.declarations.is_empty(),
+                    "style rule should have declarations from NestedDeclarations, got {}",
+                    style.declarations.len(),
+                );
+                let props: Vec<&str> = style.declarations.iter().map(|d| d.property.as_str()).collect();
+                assert!(props.contains(&"outline-width"), "should contain outline-width, got {:?}", props);
+                assert!(props.contains(&"outline-style"), "should contain outline-style, got {:?}", props);
+            } else {
+                panic!("expected Style node in layer children");
             }
         } else {
             panic!("expected AtRule");

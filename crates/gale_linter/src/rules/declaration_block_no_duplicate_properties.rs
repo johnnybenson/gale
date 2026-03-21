@@ -48,7 +48,10 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
             .iter()
             .any(|s| s == "consecutive-duplicates-with-different-values");
 
-        let mut seen = HashSet::new();
+        // Track seen properties as (prefix, unprefixed_name) to correctly
+        // handle vendor-prefixed properties. `-webkit-transform` and `transform`
+        // are NOT duplicates; `-webkit-transform` and `-webkit-transform` ARE.
+        let mut seen: HashSet<(String, String)> = HashSet::new();
         // Track last property name+value for consecutive duplicate checks
         let mut last_prop: Option<(String, String)> = None;
         let mut diagnostics = Vec::new();
@@ -57,10 +60,18 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
             let name = decl.property.to_ascii_lowercase();
             let value = decl.value.to_ascii_lowercase();
 
-            if !seen.insert(name.clone()) {
+            let (prefix, unprefixed) = split_vendor_prefix_from_prop(&name);
+            let key = (prefix.to_string(), unprefixed.to_string());
+
+            if !seen.insert(key) {
                 let is_consecutive = last_prop
                     .as_ref()
                     .map(|(prev_name, _)| prev_name == &name)
+                    .unwrap_or(false);
+
+                let has_different_value = last_prop
+                    .as_ref()
+                    .map(|(_, prev_val)| prev_val != &value)
                     .unwrap_or(false);
 
                 let should_ignore = if is_consecutive {
@@ -68,16 +79,15 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                         // Any consecutive duplicate is ignored.
                         true
                     } else if ignore_consecutive_diff_values {
-                        let prev_value = last_prop.as_ref().map(|(_, v)| v.as_str()).unwrap_or("");
-                        prev_value != value
+                        has_different_value
                     } else if ignore_consecutive_diff_syntaxes {
                         let prev_value = last_prop.as_ref().map(|(_, v)| v.as_str()).unwrap_or("");
                         has_different_syntax(prev_value, &value)
                     } else {
-                        // Default: always allow consecutive duplicates where one
-                        // value has a vendor prefix (common fallback pattern).
-                        let prev_value = last_prop.as_ref().map(|(_, v)| v.as_str()).unwrap_or("");
-                        has_vendor_prefix_fallback(prev_value, &value)
+                        // Default: always allow consecutive duplicates with
+                        // different values (common fallback pattern, matching
+                        // Stylelint's default behavior).
+                        has_different_value
                     }
                 } else {
                     false
@@ -102,12 +112,17 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
     }
 }
 
-/// Check if two values have different CSS "syntaxes" (one uses a vendor
-/// prefix or a fundamentally different value form).
-/// Check if two consecutive values represent a vendor-prefix fallback pattern.
-/// E.g., `text-align: inherit` followed by `text-align: -webkit-match-parent`.
-fn has_vendor_prefix_fallback(a: &str, b: &str) -> bool {
-    has_vendor_prefix(a) || has_vendor_prefix(b)
+/// Split a property name into its vendor prefix and unprefixed name.
+/// E.g., `-webkit-transform` -> (`-webkit-`, `transform`)
+///       `color` -> (``, `color`)
+fn split_vendor_prefix_from_prop(prop: &str) -> (&str, &str) {
+    static PREFIXES: &[&str] = &["-webkit-", "-moz-", "-ms-", "-o-"];
+    for prefix in PREFIXES {
+        if prop.starts_with(prefix) {
+            return (&prop[..prefix.len()], &prop[prefix.len()..]);
+        }
+    }
+    ("", prop)
 }
 
 fn has_different_syntax(a: &str, b: &str) -> bool {
@@ -234,13 +249,154 @@ mod tests {
                 },
                 Declaration {
                     property: "color".to_string(),
-                    value: "blue".to_string(),
+                    value: "red".to_string(),
                     span: ParserSpan::new(15, 11),
                     important: false,
                 },
             ],
             children: vec![],
             span: ParserSpan::new(0, 30),
+        });
+        let diags = rule.check(&node, &make_context());
+        assert_eq!(diags.len(), 1);
+    }
+
+    #[test]
+    fn allows_vendor_prefixed_property_with_unprefixed() {
+        // -webkit-user-select + user-select is a vendor fallback, not a duplicate
+        let rule = DeclarationBlockNoDuplicateProperties;
+        let node = CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![
+                Declaration {
+                    property: "-webkit-user-select".to_string(),
+                    value: "none".to_string(),
+                    span: ParserSpan::new(4, 24),
+                    important: false,
+                },
+                Declaration {
+                    property: "user-select".to_string(),
+                    value: "none".to_string(),
+                    span: ParserSpan::new(30, 17),
+                    important: false,
+                },
+            ],
+            children: vec![],
+            span: ParserSpan::new(0, 50),
+        });
+        let diags = rule.check(&node, &make_context());
+        assert!(diags.is_empty(), "vendor prefix + unprefixed should not be flagged");
+    }
+
+    #[test]
+    fn allows_different_vendor_prefixes() {
+        // -webkit-transform + -moz-transform are different vendor prefixes, not duplicates
+        let rule = DeclarationBlockNoDuplicateProperties;
+        let node = CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![
+                Declaration {
+                    property: "-webkit-transform".to_string(),
+                    value: "scale(2)".to_string(),
+                    span: ParserSpan::new(4, 25),
+                    important: false,
+                },
+                Declaration {
+                    property: "-moz-transform".to_string(),
+                    value: "scale(2)".to_string(),
+                    span: ParserSpan::new(30, 22),
+                    important: false,
+                },
+            ],
+            children: vec![],
+            span: ParserSpan::new(0, 55),
+        });
+        let diags = rule.check(&node, &make_context());
+        assert!(diags.is_empty(), "different vendor prefixes should not be flagged");
+    }
+
+    #[test]
+    fn flags_same_vendor_prefix_duplicate() {
+        // -webkit-transform + -webkit-transform IS a duplicate
+        let rule = DeclarationBlockNoDuplicateProperties;
+        let node = CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![
+                Declaration {
+                    property: "-webkit-transform".to_string(),
+                    value: "scale(2)".to_string(),
+                    span: ParserSpan::new(4, 25),
+                    important: false,
+                },
+                Declaration {
+                    property: "-webkit-transform".to_string(),
+                    value: "scale(2)".to_string(),
+                    span: ParserSpan::new(30, 25),
+                    important: false,
+                },
+            ],
+            children: vec![],
+            span: ParserSpan::new(0, 58),
+        });
+        let diags = rule.check(&node, &make_context());
+        assert_eq!(diags.len(), 1);
+    }
+
+    #[test]
+    fn allows_consecutive_duplicates_with_different_values() {
+        // display: -webkit-flex; display: flex; is a common fallback pattern
+        let rule = DeclarationBlockNoDuplicateProperties;
+        let node = CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![
+                Declaration {
+                    property: "display".to_string(),
+                    value: "-webkit-flex".to_string(),
+                    span: ParserSpan::new(4, 22),
+                    important: false,
+                },
+                Declaration {
+                    property: "display".to_string(),
+                    value: "flex".to_string(),
+                    span: ParserSpan::new(28, 13),
+                    important: false,
+                },
+            ],
+            children: vec![],
+            span: ParserSpan::new(0, 44),
+        });
+        let diags = rule.check(&node, &make_context());
+        assert!(diags.is_empty(), "consecutive duplicates with different values should be allowed");
+    }
+
+    #[test]
+    fn flags_non_consecutive_duplicates_with_different_values() {
+        // color: red; display: block; color: blue; — non-consecutive, should flag
+        let rule = DeclarationBlockNoDuplicateProperties;
+        let node = CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![
+                Declaration {
+                    property: "color".to_string(),
+                    value: "red".to_string(),
+                    span: ParserSpan::new(4, 10),
+                    important: false,
+                },
+                Declaration {
+                    property: "display".to_string(),
+                    value: "block".to_string(),
+                    span: ParserSpan::new(15, 14),
+                    important: false,
+                },
+                Declaration {
+                    property: "color".to_string(),
+                    value: "blue".to_string(),
+                    span: ParserSpan::new(30, 11),
+                    important: false,
+                },
+            ],
+            children: vec![],
+            span: ParserSpan::new(0, 45),
         });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);

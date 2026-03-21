@@ -28,7 +28,7 @@ RESULTS_FILE="$SCRIPT_DIR/results.md"
 GALE_BIN="$PROJECT_DIR/target/release/gale"
 
 WARMUP=3
-MIN_RUNS=5
+MIN_RUNS=10
 
 # Test repositories: name|repo|branch|glob_pattern|search_dir
 REPOS=(
@@ -210,9 +210,9 @@ run_benchmark_for_repo() {
     --min-runs "$MIN_RUNS" \
     --export-json "$hyperfine_json" \
     --command-name "stylelint" \
-    "cd $clone_dir && $stylelint_bin '$glob_pattern' --quiet 2>/dev/null; true" \
+    "cd $clone_dir && $stylelint_bin '$glob_pattern' >/dev/null 2>>$SCRIPT_DIR/.benchmark-stderr.log || true" \
     --command-name "gale" \
-    "cd $clone_dir && $GALE_BIN '$glob_pattern' --quiet 2>/dev/null; true"
+    "cd $clone_dir && $GALE_BIN '$glob_pattern' >/dev/null 2>>$SCRIPT_DIR/.benchmark-stderr.log || true"
 
   # Parse results from JSON
   local stylelint_mean gale_mean speedup
@@ -415,6 +415,7 @@ EOF
 cleanup_temp() {
   rm -f "$SCRIPT_DIR/.benchmark-results.txt"
   rm -f "$SCRIPT_DIR/.parity-results.txt"
+  rm -f "$SCRIPT_DIR/.benchmark-stderr.log"
   rm -f "$SCRIPT_DIR"/.hyperfine-*.json
 }
 

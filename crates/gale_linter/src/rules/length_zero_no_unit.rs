@@ -38,6 +38,18 @@ impl Rule for LengthZeroNoUnit {
                 continue;
             }
 
+            // Skip values containing SCSS module function calls (e.g.
+            // `custom-property.get-var('offset', 0rem)`).  The `0unit`
+            // inside a SCSS function argument may be intentional and
+            // Stylelint's PostCSS SCSS parser does not evaluate these.
+            if decl.value.contains("#{") || decl.value.contains("@{") {
+                continue;
+            }
+            // Detect SCSS module function calls: `namespace.function(`
+            if has_scss_module_function(&decl.value) {
+                continue;
+            }
+
             let decl_start = decl.span.offset;
             let decl_end = decl_start + decl.span.length;
             let search_area = if decl_end <= ctx.source.len() && decl_start < decl_end {
@@ -52,16 +64,17 @@ impl Rule for LengthZeroNoUnit {
                 } else {
                     decl_start
                 };
+                // Stylelint points to the unit part (after the zero), not the
+                // zero itself.  The zero is 1 byte, so the unit starts at +1.
+                let unit_offset = abs_offset + 1;
+                let unit_len = zero_unit_len - 1;
                 diags.push(
                     Diagnostic::new(
                         self.name(),
-                        format!(
-                            "Unexpected unit on zero length \"{}\"",
-                            &search_area[rel_offset..rel_offset + zero_unit_len]
-                        ),
+                        "Unexpected unit".to_string(),
                     )
                     .severity(self.default_severity())
-                    .span(Span::new(abs_offset, zero_unit_len))
+                    .span(Span::new(unit_offset, unit_len))
                     .fix(Fix::new(
                         "Remove unit",
                         vec![Edit::new(Span::new(abs_offset, zero_unit_len), "0")],
@@ -71,6 +84,22 @@ impl Rule for LengthZeroNoUnit {
         }
         diags
     }
+}
+
+/// Check if a value contains a SCSS module-style function call like
+/// `namespace.function-name(...)` where the dot indicates a SCSS module call.
+fn has_scss_module_function(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    for i in 0..bytes.len().saturating_sub(1) {
+        if bytes[i] == b'.'
+            && i > 0
+            && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'-' || bytes[i - 1] == b'_')
+            && (bytes[i + 1].is_ascii_alphabetic() || bytes[i + 1] == b'-' || bytes[i + 1] == b'_')
+        {
+            return true;
+        }
+    }
+    false
 }
 
 /// Find all `0<unit>` patterns and return (byte_offset, total_length_including_zero).

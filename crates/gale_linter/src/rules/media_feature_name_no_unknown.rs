@@ -22,12 +22,31 @@ impl Rule for MediaFeatureNameNoUnknown {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::AtRule(at) = node else {
             return vec![];
         };
         if at.name != "media" {
             return vec![];
+        }
+
+        // In SCSS/Sass, skip @media rules whose params contain interpolation
+        // (e.g. `@media #{govuk-from-breakpoint(desktop)}`), as the actual
+        // media features are computed at compile time and cannot be validated.
+        if matches!(
+            ctx.syntax,
+            gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass
+        ) {
+            // Check the original source for interpolation in the at-rule params
+            let at_end = (at.span.offset + at.span.length).min(ctx.source.len());
+            let at_source = if at.span.offset < at_end {
+                &ctx.source[at.span.offset..at_end]
+            } else {
+                ""
+            };
+            if at_source.contains("#{") || at.params.contains("#{") {
+                return vec![];
+            }
         }
 
         let mut diags = Vec::new();

@@ -25,6 +25,16 @@ impl Rule for FunctionUrlQuotes {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+
+        // Read the primary option: "always" (default) or "never"
+        let option = ctx
+            .options
+            .and_then(|v| {
+                // Options can be a bare string or the first element of an array
+                v.as_str().or_else(|| v.as_array().and_then(|a| a.first()).and_then(|v| v.as_str()))
+            })
+            .unwrap_or("always");
+
         let mut diags = Vec::new();
         for decl in &rule.declarations {
             let decl_start = decl.span.offset;
@@ -35,29 +45,96 @@ impl Rule for FunctionUrlQuotes {
                 &decl.value
             };
 
-            for (rel_offset, url_content) in find_unquoted_urls(search_area) {
-                let abs_offset = if decl_end <= ctx.source.len() && decl_start < decl_end {
-                    decl_start + rel_offset
-                } else {
-                    decl_start
-                };
-                let quoted = format!("\"{}\"", url_content);
-                diags.push(
-                    Diagnostic::new(
-                        self.name(),
-                        format!("Expected quotes around url() value \"{url_content}\""),
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(abs_offset, url_content.len()))
-                    .fix(Fix::new(
-                        "Wrap URL in double quotes",
-                        vec![Edit::new(Span::new(abs_offset, url_content.len()), &quoted)],
-                    )),
-                );
+            if option == "never" {
+                // "never" mode: flag quoted URLs
+                for (rel_offset, url_content, quote_len) in find_quoted_urls(search_area) {
+                    let abs_offset = if decl_end <= ctx.source.len() && decl_start < decl_end {
+                        decl_start + rel_offset
+                    } else {
+                        decl_start
+                    };
+                    // total length = quote + content + quote
+                    let total_len = url_content.len() + 2 * quote_len;
+                    diags.push(
+                        Diagnostic::new(
+                            self.name(),
+                            format!(
+                                "Unexpected quotes around \"url\" function argument"
+                            ),
+                        )
+                        .severity(self.default_severity())
+                        .span(Span::new(abs_offset, total_len))
+                        .fix(Fix::new(
+                            "Remove quotes from URL",
+                            vec![Edit::new(
+                                Span::new(abs_offset, total_len),
+                                &url_content,
+                            )],
+                        )),
+                    );
+                }
+            } else {
+                // "always" mode: flag unquoted URLs
+                for (rel_offset, url_content) in find_unquoted_urls(search_area) {
+                    let abs_offset = if decl_end <= ctx.source.len() && decl_start < decl_end {
+                        decl_start + rel_offset
+                    } else {
+                        decl_start
+                    };
+                    let quoted = format!("\"{}\"", url_content);
+                    diags.push(
+                        Diagnostic::new(
+                            self.name(),
+                            format!("Expected quotes around url() value \"{url_content}\""),
+                        )
+                        .severity(self.default_severity())
+                        .span(Span::new(abs_offset, url_content.len()))
+                        .fix(Fix::new(
+                            "Wrap URL in double quotes",
+                            vec![Edit::new(
+                                Span::new(abs_offset, url_content.len()),
+                                &quoted,
+                            )],
+                        )),
+                    );
+                }
             }
         }
         diags
     }
+}
+
+/// Find quoted URL contents inside `url(...)` calls.
+/// Returns (byte_offset_of_quote, inner_content_string, quote_char_len).
+fn find_quoted_urls(value: &str) -> Vec<(usize, String, usize)> {
+    let mut results = Vec::new();
+    let lower = value.to_ascii_lowercase();
+    let mut search_from = 0;
+    while let Some(pos) = lower[search_from..].find("url(") {
+        let abs_pos = search_from + pos;
+        let content_start = abs_pos + 4; // skip "url("
+        if content_start < value.len() {
+            let rest = &value[content_start..];
+            let first_non_ws = rest.bytes().position(|b| b != b' ' && b != b'\t');
+            if let Some(fns) = first_non_ws {
+                let first_char = rest.as_bytes()[fns];
+                if first_char == b'"' || first_char == b'\'' {
+                    // Find the closing quote
+                    let inner_start = fns + 1;
+                    if let Some(close_quote) = rest[inner_start..].find(first_char as char) {
+                        let inner = &rest[inner_start..inner_start + close_quote];
+                        if !inner.is_empty() {
+                            // Offset points to the opening quote
+                            let quote_abs = content_start + fns;
+                            results.push((quote_abs, inner.to_string(), 1));
+                        }
+                    }
+                }
+            }
+        }
+        search_from = content_start;
+    }
+    results
 }
 
 /// Find unquoted URL contents inside `url(...)` calls.

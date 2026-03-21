@@ -154,10 +154,13 @@ fn extract_units(value: &str) -> Vec<String> {
                         i += 1;
                     }
                 }
-                // If the next char is `-`, `_`, or alphanumeric, this is part
-                // of an identifier (e.g. a CSS custom ident), not a unit.
+                // If the next char is `-`, `_`, alphanumeric, or `(`, this is part
+                // of an identifier or function name (e.g. `scale3d(`), not a unit.
                 if i < len
-                    && (chars[i] == '-' || chars[i] == '_' || chars[i].is_ascii_alphanumeric())
+                    && (chars[i] == '-'
+                        || chars[i] == '_'
+                        || chars[i] == '('
+                        || chars[i].is_ascii_alphanumeric())
                 {
                     // Skip rest of identifier
                     while i < len
@@ -237,5 +240,32 @@ mod tests {
         let units = extract_units("calc(100% - 20px)");
         assert!(units.contains(&"%".to_string()));
         assert!(units.contains(&"px".to_string()));
+    }
+
+    #[test]
+    fn does_not_extract_unit_from_function_names() {
+        // scale3d, rotate3d, translate3d — the `3` followed by `d(` is a
+        // function name, not a number with a unit.
+        let units = extract_units("scale3d(1, 1, 1)");
+        assert!(
+            units.is_empty(),
+            "Expected no units from scale3d, got: {:?}",
+            units
+        );
+        let units = extract_units("rotate3d(0, 0, 1, 45deg)");
+        assert!(
+            units.contains(&"deg".to_string()),
+            "Expected deg unit from rotate3d args"
+        );
+        assert!(
+            !units.iter().any(|u| u == "d"),
+            "Should not extract 'd' as unit from rotate3d"
+        );
+    }
+
+    #[test]
+    fn does_not_report_scale3d_as_unknown_unit() {
+        let d = UnitNoUnknown.check(&style_with_value("scale3d(1.1, 1.1, 1.1)"), &ctx());
+        assert!(d.is_empty(), "Expected no diagnostics, got: {:?}", d);
     }
 }

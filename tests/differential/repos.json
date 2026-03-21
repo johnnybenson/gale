@@ -40,5 +40,26 @@
     "branch": "main",
     "paths": ["packages"],
     "notes": "IBM design system. Very strict config with many plugins."
+  },
+  {
+    "name": "freecodecamp",
+    "repo": "freeCodeCamp/freeCodeCamp",
+    "branch": "main",
+    "paths": ["."],
+    "notes": "Most starred repo on GitHub (439k stars). Minimal config with 14 rules, no extends. .stylelintrc.json at root."
+  },
+  {
+    "name": "patternfly",
+    "repo": "patternfly/patternfly",
+    "branch": "main",
+    "paths": ["src"],
+    "notes": "Red Hat design system. 63% SCSS, very strict config. .stylelintrc at root."
+  },
+  {
+    "name": "govuk-frontend",
+    "repo": "alphagov/govuk-frontend",
+    "branch": "main",
+    "paths": ["packages"],
+    "notes": "UK Government design system. stylelint.config.js at root."
   }
 ]

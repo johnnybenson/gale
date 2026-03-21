@@ -9,6 +9,25 @@ use crate::rule::{Rule, RuleContext};
 /// Equivalent to Stylelint's `shorthand-property-no-redundant-values` rule.
 pub struct ShorthandPropertyNoRedundantValues;
 
+/// Returns `true` if the value is "standard CSS syntax" — i.e., it does not
+/// contain SCSS/Less constructs that would make comparison unreliable.
+fn is_standard_syntax_value(value: &str) -> bool {
+    if value.contains('$') || value.contains("#{") || value.contains("@{") {
+        return false;
+    }
+    // SCSS module function call: `namespace.function(`
+    let bytes = value.as_bytes();
+    for i in 1..bytes.len().saturating_sub(1) {
+        if bytes[i] == b'.'
+            && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'-' || bytes[i - 1] == b'_')
+            && (bytes[i + 1].is_ascii_alphabetic() || bytes[i + 1] == b'-' || bytes[i + 1] == b'_')
+        {
+            return false;
+        }
+    }
+    true
+}
+
 const SHORTHAND_PROPERTIES: &[&str] = &[
     "margin",
     "padding",
@@ -43,6 +62,12 @@ impl Rule for ShorthandPropertyNoRedundantValues {
         for decl in &rule.declarations {
             let prop = decl.property.to_ascii_lowercase();
             if !SHORTHAND_PROPERTIES.contains(&prop.as_str()) {
+                continue;
+            }
+            // Skip non-standard-syntax values (SCSS variables, interpolation,
+            // module function calls).  Stylelint's isStandardSyntaxValue
+            // rejects these.
+            if !is_standard_syntax_value(&decl.value) {
                 continue;
             }
             let parts: Vec<&str> = decl.value.split_whitespace().collect();

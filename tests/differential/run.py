@@ -281,12 +281,17 @@ def normalize_results(
             rule = w.get("rule")
             if filter_rules and rule not in filter_rules:
                 continue
+            # Stylelint appends " (rule-name)" to every message; strip it so
+            # comparisons focus on the actual message content.
+            text = w.get("text", "")
+            if rule and text.endswith(f" ({rule})"):
+                text = text[: -(len(rule) + 3)]
             warnings.append({
                 "line": w.get("line"),
                 "column": w.get("column"),
                 "rule": rule,
                 "severity": w.get("severity"),
-                "text": w.get("text"),
+                "text": text,
             })
 
         warnings.sort(key=lambda w: (w["line"] or 0, w["column"] or 0, w["rule"] or ""))
@@ -499,7 +504,7 @@ def process_repo(
     # Normalize & compare
     # Filter Stylelint results to only rules Gale supports (ignore plugin rules)
     s_norm = normalize_results(stylelint_results, clone_dir, filter_rules=GALE_RULES)
-    g_norm = normalize_results(gale_results, clone_dir)
+    g_norm = normalize_results(gale_results, clone_dir, filter_rules=GALE_RULES)
     report = compare_results(s_norm, g_norm)
 
     # Save raw results

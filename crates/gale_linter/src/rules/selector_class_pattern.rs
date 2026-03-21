@@ -33,9 +33,9 @@ impl Rule for SelectorClassPattern {
         };
 
         // Read the user-supplied regex pattern from options, or use the default kebab-case pattern.
+        // Options may be a plain string "^pattern$" or an array ["^pattern$", { secondary }].
         let pattern_str = ctx
-            .options
-            .and_then(|v| v.as_str())
+            .primary_option_str()
             .unwrap_or(DEFAULT_PATTERN);
 
         let re = match Regex::new(pattern_str) {
@@ -44,30 +44,140 @@ impl Rule for SelectorClassPattern {
         };
 
         let mut diags = Vec::new();
-        for class in extract_class_names(&rule.selector) {
-            // Skip class names containing SCSS interpolation #{...}
-            if matches!(
-                ctx.syntax,
-                gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass
-            ) && class.contains("#{")
-            {
-                continue;
+
+        // In Stylelint (with postcss-scss), when a selector contains SCSS
+        // interpolation `#{...}`, the entire selector is skipped because the
+        // resolved class name is unknown at lint time.  Match this behaviour
+        // by skipping all class checks when the selector contains interpolation.
+        if matches!(
+            ctx.syntax,
+            gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass
+        ) && rule.selector.contains("#{")
+        {
+            return diags;
+        }
+
+        // Stylelint checks each individual selector in a comma-separated
+        // list and reports per-class violations with the position of the
+        // class within the source.  We split by comma, extract classes from
+        // each part, and compute byte offsets for accurate reporting.
+        let selector_start = rule.span.offset;
+        let parts = split_selector_list(&rule.selector);
+        let mut cursor: usize = 0; // byte position within the selector string
+
+        for (idx, part) in parts.iter().enumerate() {
+            if idx > 0 {
+                // Skip past the comma separator in the selector string.
+                cursor += 1; // the comma
             }
-            if !re.is_match(&class) {
-                diags.push(
-                    Diagnostic::new(
-                        self.name(),
-                        format!(
-                            "Expected class selector \".{class}\" to match pattern \"{pattern_str}\""
-                        ),
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(rule.span.offset, rule.span.length)),
-                );
+            // Skip whitespace between comma and start of this part.
+            let sel_bytes = rule.selector.as_bytes();
+            while cursor < sel_bytes.len()
+                && matches!(sel_bytes[cursor], b' ' | b'\t' | b'\n' | b'\r')
+            {
+                cursor += 1;
+            }
+            let part_start = cursor;
+            let trimmed_part = part.trim();
+            // Advance cursor past this part.
+            cursor = part_start + trimmed_part.len();
+
+            for (class, class_byte_offset) in extract_class_names_with_offsets(trimmed_part) {
+                if !re.is_match(&class) {
+                    let offset = selector_start + part_start + class_byte_offset;
+                    diags.push(
+                        Diagnostic::new(
+                            self.name(),
+                            format!(
+                                "Expected \".{class}\" to match pattern \"{pattern_str}\""
+                            ),
+                        )
+                        .severity(self.default_severity())
+                        .span(Span::new(offset, class.len() + 1)), // +1 for the dot
+                    );
+                }
             }
         }
         diags
     }
+}
+
+/// Split a selector list by commas, respecting parentheses and brackets.
+fn split_selector_list(selector: &str) -> Vec<&str> {
+    let mut parts = Vec::new();
+    let mut depth = 0usize;
+    let mut start = 0;
+    let bytes = selector.as_bytes();
+
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'(' | b'[' => depth += 1,
+            b')' | b']' => depth = depth.saturating_sub(1),
+            b',' if depth == 0 => {
+                parts.push(&selector[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    parts.push(&selector[start..]);
+    parts
+}
+
+/// Extract class names from a selector along with their byte offsets
+/// (offset of the `.` character) within the selector string.
+fn extract_class_names_with_offsets(selector: &str) -> Vec<(String, usize)> {
+    let mut classes = Vec::new();
+    let chars: Vec<char> = selector.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+    let mut byte_pos: usize = 0;
+
+    while i < len {
+        let char_byte_len = chars[i].len_utf8();
+        if chars[i] == '.' {
+            let dot_byte_pos = byte_pos;
+            i += 1;
+            byte_pos += char_byte_len;
+            let start = i;
+            while i < len {
+                if chars[i].is_ascii_alphanumeric()
+                    || chars[i] == '-'
+                    || chars[i] == '_'
+                    || !chars[i].is_ascii()
+                {
+                    byte_pos += chars[i].len_utf8();
+                    i += 1;
+                } else if chars[i] == '#' && i + 1 < len && chars[i + 1] == '{' {
+                    byte_pos += chars[i].len_utf8();
+                    i += 1;
+                    byte_pos += chars[i].len_utf8();
+                    i += 1;
+                    let mut depth = 1;
+                    while i < len && depth > 0 {
+                        if chars[i] == '{' {
+                            depth += 1;
+                        } else if chars[i] == '}' {
+                            depth -= 1;
+                        }
+                        byte_pos += chars[i].len_utf8();
+                        i += 1;
+                    }
+                } else {
+                    break;
+                }
+            }
+            if i > start {
+                let name: String = chars[start..i].iter().collect();
+                classes.push((name, dot_byte_pos));
+            }
+        } else {
+            byte_pos += char_byte_len;
+            i += 1;
+        }
+    }
+
+    classes
 }
 
 fn extract_class_names(selector: &str) -> Vec<String> {

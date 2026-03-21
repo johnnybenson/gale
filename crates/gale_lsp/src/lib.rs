@@ -46,9 +46,10 @@ impl GaleLspServer {
     }
 
     /// Build `LintRunner` from the resolved config.
-    fn build_runner(config: &GaleConfig) -> LintRunner {
+    fn build_runner(config: &GaleConfig, has_config_file: bool) -> LintRunner {
         let registry = RuleRegistry::default();
-        let enabled_rules: Vec<String> = if config.rules.is_empty() {
+        let enabled_rules: Vec<String> = if config.rules.is_empty() && !has_config_file {
+            // No config file found — enable all rules as a sensible default.
             registry
                 .all()
                 .iter()
@@ -151,20 +152,26 @@ impl GaleLspServer {
 impl LanguageServer for GaleLspServer {
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
         // Resolve config from workspace root if available.
-        let config = if let Some(root_uri) = params.root_uri {
+        let (config, has_config_file) = if let Some(root_uri) = params.root_uri {
             if let Ok(root_path) = root_uri.to_file_path() {
                 debug!("LSP workspace root: {}", root_path.display());
-                gale_config::resolve_config(&root_path)
+                match gale_config::resolve_config(&root_path) {
+                    Some(cfg) => (cfg, true),
+                    None => (GaleConfig::default(), false),
+                }
             } else {
-                GaleConfig::default()
+                (GaleConfig::default(), false)
             }
         } else {
             let cwd = std::env::current_dir().unwrap_or_default();
-            gale_config::resolve_config(&cwd)
+            match gale_config::resolve_config(&cwd) {
+                Some(cfg) => (cfg, true),
+                None => (GaleConfig::default(), false),
+            }
         };
 
         // Build the lint runner once.
-        let runner = Self::build_runner(&config);
+        let runner = Self::build_runner(&config, has_config_file);
         *self.runner.write().unwrap_or_else(|e| e.into_inner()) = Some(runner);
 
         Ok(InitializeResult {

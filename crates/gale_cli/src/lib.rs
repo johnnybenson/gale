@@ -113,14 +113,92 @@ struct DiscoverOptions<'a> {
     ignore_patterns: &'a [String],
 }
 
+/// Build an `ignore::gitignore::Gitignore` matcher from `.stylelintignore`,
+/// `.galeignore`, and an optional user-supplied ignore file in the cwd.
+///
+/// This is used to filter explicitly-passed files, matching Stylelint's
+/// behaviour of always respecting `.stylelintignore` even for explicit paths.
+fn build_explicit_ignore_matcher(
+    user_ignore: Option<&Path>,
+) -> Option<ignore::gitignore::Gitignore> {
+    let cwd = std::env::current_dir().ok()?;
+    let mut builder = ignore::gitignore::GitignoreBuilder::new(&cwd);
+
+    // Load .stylelintignore from cwd (if it exists).
+    let stylelintignore = cwd.join(".stylelintignore");
+    if stylelintignore.is_file() {
+        builder.add(&stylelintignore);
+    }
+
+    // Load .galeignore from cwd (if it exists).
+    let galeignore = cwd.join(".galeignore");
+    if galeignore.is_file() {
+        builder.add(&galeignore);
+    }
+
+    // Load user-supplied ignore file.
+    if let Some(path) = user_ignore {
+        if path.is_file() {
+            builder.add(path);
+        }
+    }
+
+    builder.build().ok()
+}
+
 fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> {
     let mut files: Vec<PathBuf> = Vec::new();
+
+    // Build a gitignore matcher for .stylelintignore / .galeignore so we can
+    // filter explicitly-passed files the same way Stylelint does.
+    let explicit_ignore = if opts.no_ignore {
+        None
+    } else {
+        build_explicit_ignore_matcher(opts.ignore_path)
+    };
+
+    // Build glob matchers from config ignore patterns (ignoreFiles / ignorePatterns).
+    // These are applied to both explicit files and walked directories, matching
+    // Stylelint's behaviour where `ignoreFiles` always excludes matching paths.
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let config_ignore_matchers: Vec<globset::GlobMatcher> = opts
+        .ignore_patterns
+        .iter()
+        .filter_map(|pat| {
+            // Stylelint ignoreFiles patterns are relative to config location (usually
+            // project root). Strip leading "./" for matching and treat as globs.
+            let clean = pat.strip_prefix("./").unwrap_or(pat);
+            globset::Glob::new(clean)
+                .ok()
+                .map(|g| g.compile_matcher())
+        })
+        .collect();
 
     for pattern in paths {
         let path = Path::new(pattern);
 
         if path.is_file() {
             if is_css_file(path) {
+                // Respect .stylelintignore / .galeignore even for explicit files
+                // (matching Stylelint's behaviour).
+                if let Some(ref gi) = explicit_ignore {
+                    // matched_path_or_any_parents checks the path and all its
+                    // ancestor components, so `packages/theme/src/prebuilt/x.css`
+                    // will match a pattern `packages/theme/src/prebuilt`.
+                    if gi.matched_path_or_any_parents(path, false).is_ignore() {
+                        continue;
+                    }
+                }
+
+                // Check config ignore patterns (ignoreFiles / ignorePatterns).
+                if !config_ignore_matchers.is_empty() {
+                    let abs = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+                    let rel = abs.strip_prefix(&cwd).unwrap_or(&abs);
+                    if config_ignore_matchers.iter().any(|m| m.is_match(rel)) {
+                        continue;
+                    }
+                }
+
                 files.push(path.to_path_buf());
             }
             continue;
@@ -245,21 +323,31 @@ pub fn run() -> Result<()> {
     }
 
     // Resolve configuration.
-    let config = if let Some(ref cfg_path) = cli.config {
+    //
+    // `has_config_file` tracks whether the user has *any* config file (even if
+    // it resolves to zero rules).  When true we respect whatever the config
+    // says — including "no rules".  The "enable all rules" fallback only kicks
+    // in when there is genuinely no config file anywhere.
+    let (config, has_config_file) = if let Some(ref cfg_path) = cli.config {
         debug!("Using config file: {}", cfg_path.display());
-        gale_config::load_config(cfg_path).unwrap_or_else(|err| {
+        let cfg = gale_config::load_config(cfg_path).unwrap_or_else(|err| {
             eprintln!("Warning: failed to load config: {err}");
             GaleConfig::default()
-        })
+        });
+        (cfg, true)
     } else {
         let cwd = std::env::current_dir().unwrap_or_default();
-        gale_config::resolve_config(&cwd)
+        match gale_config::resolve_config(&cwd) {
+            Some(cfg) => (cfg, true),
+            None => (GaleConfig::default(), false),
+        }
     };
 
     // Build rule registry and determine enabled rules.
     let registry = RuleRegistry::default();
-    let enabled_rules: Vec<String> = if config.rules.is_empty() {
-        // If no rules configured, enable all registered rules.
+    let enabled_rules: Vec<String> = if config.rules.is_empty() && !has_config_file {
+        // No config file found at all — enable all registered rules as a
+        // sensible default so `gale .` works out-of-the-box.
         registry
             .all()
             .iter()
@@ -301,6 +389,7 @@ pub fn run() -> Result<()> {
         let output = serde_json::json!({
             "file": file_str,
             "rules": rules_json,
+            "ignorePatterns": config.ignore_patterns,
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
         return Ok(());
@@ -327,7 +416,29 @@ pub fn run() -> Result<()> {
         })
         .collect();
 
-    let runner = LintRunner::with_options(registry, enabled_rules.clone(), rule_options);
+    // Extract per-rule severity overrides from the config.
+    let rule_severities: std::collections::HashMap<String, gale_diagnostics::Severity> = config
+        .rules
+        .iter()
+        .filter_map(|(name, cfg)| {
+            cfg.severity.as_ref().and_then(|s| match s {
+                gale_config::Severity::Error => {
+                    Some((name.clone(), gale_diagnostics::Severity::Error))
+                }
+                gale_config::Severity::Warning => {
+                    Some((name.clone(), gale_diagnostics::Severity::Warning))
+                }
+                gale_config::Severity::Off => None,
+            })
+        })
+        .collect();
+
+    let runner = LintRunner::with_options_and_severities(
+        registry,
+        enabled_rules.clone(),
+        rule_options,
+        rule_severities,
+    );
     let has_overrides = config.has_overrides();
 
     /// Lint a single file, computing the effective rules from overrides if needed.
@@ -362,12 +473,31 @@ pub fn run() -> Result<()> {
                             .map(|opts| (name.clone(), opts.clone()))
                     })
                     .collect();
+            // Collect per-rule severity overrides from the effective rules
+            let override_severities: std::collections::HashMap<
+                String,
+                gale_diagnostics::Severity,
+            > = effective_rules
+                .iter()
+                .filter_map(|(name, cfg)| {
+                    cfg.severity.as_ref().and_then(|s| match s {
+                        gale_config::Severity::Error => {
+                            Some((name.clone(), gale_diagnostics::Severity::Error))
+                        }
+                        gale_config::Severity::Warning => {
+                            Some((name.clone(), gale_diagnostics::Severity::Warning))
+                        }
+                        gale_config::Severity::Off => None,
+                    })
+                })
+                .collect();
             runner.lint_source_with_rules(
                 source,
                 file_path,
                 syntax,
                 &file_enabled,
                 &override_options,
+                &override_severities,
             )
         } else {
             runner.lint_source(source, file_path, syntax)

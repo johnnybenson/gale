@@ -45,8 +45,11 @@ fn check_comment_nodes(
     diags: &mut Vec<Diagnostic>,
 ) {
     // Read options for ignore/except configuration.
-    let ignore_after_comment = ctx
-        .options
+    // Options may be an object { ignore: [...] } or Stylelint array form
+    // ["always", { ignore: [...] }] where secondary options are at index 1.
+    let secondary = ctx.secondary_options().or(ctx.options);
+
+    let ignore_after_comment = secondary
         .and_then(|v| v.get("ignore"))
         .and_then(|v| v.as_array())
         .map(|arr| {
@@ -55,8 +58,7 @@ fn check_comment_nodes(
         })
         .unwrap_or(false);
 
-    let ignore_stylelint_commands = ctx
-        .options
+    let ignore_stylelint_commands = secondary
         .and_then(|v| v.get("ignore"))
         .and_then(|v| v.as_array())
         .map(|arr| {
