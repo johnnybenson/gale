@@ -53,6 +53,13 @@ impl Rule for OrderPropertiesOrder {
                 continue;
             }
 
+            // Skip vendor-prefixed properties — they are typically placed
+            // adjacent to their unprefixed equivalent and should not trigger
+            // ordering violations (matches stylelint-order behavior).
+            if prop.starts_with('-') {
+                continue;
+            }
+
             let prop_lower = prop.to_ascii_lowercase();
 
             if let Some(&expected_idx) = order_map.get(prop_lower.as_str()) {
