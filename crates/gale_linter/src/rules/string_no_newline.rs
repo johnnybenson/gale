@@ -1,4 +1,4 @@
-use gale_css_parser::CssNode;
+use gale_css_parser::{CssNode, Syntax};
 use gale_diagnostics::{Diagnostic, Severity, Span};
 
 use crate::rule::{Rule, RuleContext};
@@ -36,11 +36,81 @@ impl Rule for StringNoNewline {
         diagnostics
     }
 
-    // Note: A source-level scan (check_root) was considered to catch
-    // literal newlines in strings that the parser cannot handle, but it
-    // produces false positives on SCSS files because `//` comments
-    // contain apostrophes (e.g. "we're") that look like string
-    // delimiters. This is a known parser limitation.
+    fn check_root(&self, _nodes: &[CssNode], ctx: &RuleContext) -> Vec<Diagnostic> {
+        // Source-level scan to catch newlines in strings that the parser
+        // may not preserve (e.g., lightningcss discards malformed strings).
+        scan_source_for_string_newlines(ctx.source, ctx.syntax, self)
+    }
+}
+
+/// Scan raw source text for strings containing literal newlines.
+/// Handles `//` line comments (SCSS) and `/* */` block comments to avoid FPs.
+fn scan_source_for_string_newlines(
+    source: &str,
+    syntax: Syntax,
+    rule: &StringNoNewline,
+) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    let bytes = source.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+
+    while i < len {
+        // Skip // line comments in SCSS/Less
+        if matches!(syntax, Syntax::Scss | Syntax::Less | Syntax::Sass)
+            && i + 1 < len
+            && bytes[i] == b'/'
+            && bytes[i + 1] == b'/'
+        {
+            // Skip to end of line
+            while i < len && bytes[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Skip /* */ block comments
+        if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+            i += 2;
+            while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                i += 1;
+            }
+            i += 2;
+            continue;
+        }
+
+        // Found a string delimiter
+        if bytes[i] == b'"' || bytes[i] == b'\'' {
+            let quote = bytes[i];
+            let string_start = i;
+            i += 1;
+            while i < len {
+                if bytes[i] == b'\\' {
+                    // Skip escaped character
+                    i += 2;
+                    continue;
+                }
+                if bytes[i] == b'\n' || bytes[i] == b'\r' {
+                    diagnostics.push(
+                        Diagnostic::new(rule.name(), "Unexpected newline in string")
+                            .severity(rule.default_severity())
+                            .span(Span::new(string_start, i - string_start)),
+                    );
+                    // Skip past the newline and break out of string
+                    break;
+                }
+                if bytes[i] == quote {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    diagnostics
 }
 
 fn check_value_for_newlines(
