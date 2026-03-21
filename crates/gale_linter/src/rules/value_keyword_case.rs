@@ -3,71 +3,695 @@ use gale_diagnostics::{Diagnostic, Edit, Fix, Severity, Span};
 
 use crate::rule::{Rule, RuleContext};
 
-/// Enforce lowercase for CSS keyword values (e.g. `Inherit` → `inherit`).
+/// Enforce consistent case for keyword values.
 ///
-/// Equivalent to Stylelint's `value-keyword-case` rule with "lower" option.
+/// Equivalent to Stylelint's `value-keyword-case` rule.
+/// Supports `"lower"` (default) and `"upper"` primary options.
+///
+/// Secondary options:
+/// - `ignoreKeywords`: array of keyword strings or regex patterns to ignore
+/// - `ignoreProperties`: array of property strings or regex patterns to ignore
+/// - `ignoreFunctions`: array of function strings or regex patterns to ignore
+/// - `camelCaseSvgKeywords`: bool -- when true, allow SVG camelCase keywords like `currentColor`
 pub struct ValueKeywordCase;
 
-/// Known CSS keyword values that should be lowercase.
-const KEYWORDS: &[&str] = &[
+// ---------------------------------------------------------------------------
+// Data tables
+// ---------------------------------------------------------------------------
+
+/// CSS system colors -- case-insensitive per spec, skip these entirely.
+const SYSTEM_COLORS: &[&str] = &[
+    "ActiveBorder",
+    "ActiveCaption",
+    "ActiveText",
+    "AppWorkspace",
+    "Background",
+    "ButtonBorder",
+    "ButtonFace",
+    "ButtonHighlight",
+    "ButtonShadow",
+    "ButtonText",
+    "Canvas",
+    "CanvasText",
+    "CaptionText",
+    "Field",
+    "FieldText",
+    "GrayText",
+    "Highlight",
+    "HighlightText",
+    "InactiveBorder",
+    "InactiveCaption",
+    "InactiveCaptionText",
+    "InfoBackground",
+    "InfoText",
+    "LinkText",
+    "Mark",
+    "MarkText",
+    "Menu",
+    "MenuText",
+    "Scrollbar",
+    "ThreeDDarkShadow",
+    "ThreeDFace",
+    "ThreeDHighlight",
+    "ThreeDLightShadow",
+    "ThreeDShadow",
+    "VisitedText",
+    "Window",
+    "WindowFrame",
+    "WindowText",
+    // Mozilla-specific system colors (used with -moz- prefix)
+    "NativeHyperlinkText",
+];
+
+fn is_system_color(s: &str) -> bool {
+    SYSTEM_COLORS.iter().any(|c| c.eq_ignore_ascii_case(s))
+}
+
+/// SVG keywords that have camelCase canonical forms.
+const SVG_CAMEL_CASE_KEYWORDS: &[&str] = &[
+    "currentColor",
+    "optimizeSpeed",
+    "optimizeLegibility",
+    "optimizeQuality",
+    "crispEdges",
+    "geometricPrecision",
+    "visiblePainted",
+    "visibleFill",
+    "visibleStroke",
+    "sRGB",
+    "linearRGB",
+];
+
+fn is_svg_camel_case_keyword(s: &str) -> bool {
+    SVG_CAMEL_CASE_KEYWORDS
+        .iter()
+        .any(|k| k.eq_ignore_ascii_case(s))
+}
+
+/// Properties whose values are entirely custom identifiers.
+const CUSTOM_IDENT_PROPERTIES: &[&str] = &[
+    "animation-name",
+    "counter-increment",
+    "counter-reset",
+    "counter-set",
+    "grid-row",
+    "grid-column",
+    "grid-area",
+    "grid-row-start",
+    "grid-row-end",
+    "grid-column-start",
+    "grid-column-end",
+    "list-style-type",
+    "will-change",
+];
+
+fn is_custom_ident_property(prop: &str) -> bool {
+    let lower = prop.to_ascii_lowercase();
+    let stripped = strip_vendor_prefix(&lower);
+    CUSTOM_IDENT_PROPERTIES.iter().any(|p| *p == stripped)
+}
+
+/// Properties where some positions are keywords and some are custom idents.
+const MIXED_IDENT_PROPERTIES: &[&str] = &["animation", "font", "font-family", "list-style"];
+
+fn is_mixed_ident_property(prop: &str) -> bool {
+    let lower = prop.to_ascii_lowercase();
+    let stripped = strip_vendor_prefix(&lower);
+    MIXED_IDENT_PROPERTIES.iter().any(|p| *p == stripped)
+}
+
+/// Generic font family names (these ARE keywords in font-family/font).
+const GENERIC_FONT_FAMILIES: &[&str] = &[
+    "serif",
+    "sans-serif",
+    "monospace",
+    "cursive",
+    "fantasy",
+    "system-ui",
+    "ui-serif",
+    "ui-sans-serif",
+    "ui-monospace",
+    "ui-rounded",
+    "emoji",
+    "math",
+    "fangsong",
+];
+
+fn is_generic_font_family(s: &str) -> bool {
+    let lower = s.to_ascii_lowercase();
+    GENERIC_FONT_FAMILIES.iter().any(|f| *f == lower)
+}
+
+/// Global CSS keywords.
+const GLOBAL_KEYWORDS: &[&str] = &["inherit", "initial", "unset", "revert", "revert-layer"];
+
+fn is_global_keyword(s: &str) -> bool {
+    let lower = s.to_ascii_lowercase();
+    GLOBAL_KEYWORDS.iter().any(|k| *k == lower)
+}
+
+/// Known CSS list-style-type keywords (includes predefined counter styles).
+const LIST_STYLE_TYPE_KEYWORDS: &[&str] = &[
+    "none",
+    "disc",
+    "circle",
+    "square",
+    "decimal",
+    "decimal-leading-zero",
+    "lower-roman",
+    "upper-roman",
+    "lower-greek",
+    "lower-latin",
+    "upper-latin",
+    "lower-alpha",
+    "upper-alpha",
+    "armenian",
+    "georgian",
+    "cjk-ideographic",
+    "hiragana",
+    "katakana",
+    "hiragana-iroha",
+    "katakana-iroha",
+    // CSS Counter Styles Level 3 predefined counter styles
+    "arabic-indic",
+    "bengali",
+    "cambodian",
+    "cjk-decimal",
+    "cjk-earthly-branch",
+    "cjk-heavenly-stem",
+    "devanagari",
+    "ethiopic-numeric",
+    "gujarati",
+    "gurmukhi",
+    "hebrew",
+    "japanese-formal",
+    "japanese-informal",
+    "kannada",
+    "khmer",
+    "korean-hangul-formal",
+    "korean-hanja-formal",
+    "korean-hanja-informal",
+    "lao",
+    "malayalam",
+    "mongolian",
+    "myanmar",
+    "oriya",
+    "persian",
+    "simp-chinese-formal",
+    "simp-chinese-informal",
+    "tamil",
+    "telugu",
+    "thai",
+    "tibetan",
+    "trad-chinese-formal",
+    "trad-chinese-informal",
+    "disclosure-closed",
+    "disclosure-open",
+    "ethiopic-halehame-ti-er",
+    "ethiopic-halehame-ti-et",
+    "ethiopic-halehame",
+    "hangul",
+    "hangul-consonant",
+    "somali",
     "inherit",
     "initial",
     "unset",
     "revert",
     "revert-layer",
-    "none",
-    "auto",
-    "block",
-    "inline",
-    "inline-block",
-    "flex",
-    "inline-flex",
-    "grid",
-    "inline-grid",
-    "table",
-    "hidden",
-    "visible",
-    "absolute",
-    "relative",
-    "fixed",
-    "sticky",
-    "static",
-    "bold",
-    "bolder",
-    "lighter",
-    "normal",
-    "italic",
-    "oblique",
-    "uppercase",
-    "lowercase",
-    "capitalize",
-    "underline",
-    "overline",
-    "line-through",
-    "nowrap",
-    "wrap",
-    "collapse",
-    "separate",
-    "transparent",
-    "currentcolor",
-    "pointer",
-    "default",
-    "solid",
-    "dashed",
-    "dotted",
-    "double",
-    "center",
-    "left",
-    "right",
-    "top",
-    "bottom",
-    "baseline",
-    "stretch",
-    "cover",
-    "contain",
-    "scroll",
-    "smooth",
 ];
+
+fn is_list_style_type_keyword(s: &str) -> bool {
+    let lower = s.to_ascii_lowercase();
+    LIST_STYLE_TYPE_KEYWORDS.iter().any(|k| *k == lower)
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn strip_vendor_prefix(s: &str) -> &str {
+    if s.starts_with("-webkit-")
+        || s.starts_with("-moz-")
+        || s.starts_with("-ms-")
+        || s.starts_with("-o-")
+    {
+        if let Some(pos) = s[1..].find('-') {
+            return &s[pos + 2..];
+        }
+    }
+    s
+}
+
+fn matches_pattern(value: &str, pattern: &str) -> bool {
+    if pattern.starts_with('/') && pattern.ends_with('/') {
+        let re_str = &pattern[1..pattern.len() - 1];
+        if let Ok(re) = regex::Regex::new(re_str) {
+            re.is_match(value)
+        } else {
+            false
+        }
+    } else {
+        value == pattern
+    }
+}
+
+fn matches_pattern_case_insensitive(value: &str, pattern: &str) -> bool {
+    if pattern.starts_with('/') && pattern.ends_with('/') {
+        matches_pattern(value, pattern)
+    } else {
+        value.eq_ignore_ascii_case(pattern)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Value tokenizer
+// ---------------------------------------------------------------------------
+
+#[derive(Debug)]
+struct ValueToken {
+    text: String,
+    offset: usize,
+    kind: TokenKind,
+}
+
+#[derive(Debug, PartialEq)]
+enum TokenKind {
+    Ident,
+    Function,
+    String,
+    UrlContent,
+    Important,
+    Other,
+}
+
+/// Tokenize a CSS value string, tracking function nesting.
+fn tokenize_value(value: &str) -> Vec<ValueToken> {
+    let bytes = value.as_bytes();
+    let len = bytes.len();
+    let mut tokens = Vec::new();
+    let mut i = 0;
+    let mut func_stack: Vec<String> = Vec::new();
+
+    while i < len {
+        let b = bytes[i];
+
+        // Whitespace
+        if b.is_ascii_whitespace() {
+            i += 1;
+            continue;
+        }
+
+        // Punctuation that isn't meaningful
+        if b == b',' || b == b'/' && !(i + 1 < len && (bytes[i + 1] == b'*' || bytes[i + 1] == b'/'))
+            || b == b'+'
+            || b == b'*'
+            || b == b'='
+        {
+            i += 1;
+            continue;
+        }
+
+        // Opening paren without preceding ident
+        if b == b'(' {
+            func_stack.push(String::new());
+            i += 1;
+            continue;
+        }
+
+        // Closing paren
+        if b == b')' {
+            func_stack.pop();
+            i += 1;
+            continue;
+        }
+
+        // Square brackets (grid line names) -- skip contents
+        if b == b'[' {
+            while i < len && bytes[i] != b']' {
+                i += 1;
+            }
+            if i < len {
+                i += 1;
+            }
+            continue;
+        }
+
+        // String literal
+        if b == b'"' || b == b'\'' {
+            let quote = b;
+            let start = i;
+            i += 1;
+            while i < len && bytes[i] != quote {
+                if bytes[i] == b'\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            if i < len {
+                i += 1;
+            }
+            tokens.push(ValueToken {
+                text: value[start..i].to_string(),
+                offset: start,
+                kind: TokenKind::String,
+            });
+            continue;
+        }
+
+        // CSS comment /* ... */
+        if b == b'/' && i + 1 < len && bytes[i + 1] == b'*' {
+            i += 2;
+            while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                i += 1;
+            }
+            if i + 1 < len {
+                i += 2;
+            }
+            continue;
+        }
+
+        // SCSS/Less single-line comment
+        if b == b'/' && i + 1 < len && bytes[i + 1] == b'/' {
+            while i < len && bytes[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Hash (color or ID, or SCSS interpolation)
+        if b == b'#' {
+            i += 1;
+            if i < len && bytes[i] == b'{' {
+                let mut depth = 1;
+                i += 1;
+                while i < len && depth > 0 {
+                    if bytes[i] == b'{' {
+                        depth += 1;
+                    } else if bytes[i] == b'}' {
+                        depth -= 1;
+                    }
+                    i += 1;
+                }
+                continue;
+            }
+            while i < len && bytes[i].is_ascii_alphanumeric() {
+                i += 1;
+            }
+            continue;
+        }
+
+        // `!` -- `!important` keyword
+        if b == b'!' {
+            i += 1;
+            while i < len && bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+            let start = i;
+            while i < len && bytes[i].is_ascii_alphanumeric() {
+                i += 1;
+            }
+            if i > start {
+                tokens.push(ValueToken {
+                    text: value[start..i].to_string(),
+                    offset: start,
+                    kind: TokenKind::Important,
+                });
+            }
+            continue;
+        }
+
+        // Number (possibly with unit)
+        if b.is_ascii_digit() || (b == b'.' && i + 1 < len && bytes[i + 1].is_ascii_digit()) {
+            while i < len
+                && (bytes[i].is_ascii_digit()
+                    || bytes[i] == b'.'
+                    || bytes[i] == b'e'
+                    || bytes[i] == b'E'
+                    || bytes[i] == b'+'
+                    || bytes[i] == b'-'
+                    || bytes[i] == b'%')
+            {
+                i += 1;
+            }
+            // Skip unit
+            while i < len && bytes[i].is_ascii_alphabetic() {
+                i += 1;
+            }
+            continue;
+        }
+
+        // SCSS variable $...
+        if b == b'$' {
+            i += 1;
+            while i < len
+                && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
+            {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Less variable @...
+        if b == b'@' {
+            i += 1;
+            while i < len
+                && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
+            {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Semicolons, colons
+        if b == b';' || b == b':' {
+            i += 1;
+            continue;
+        }
+
+        // Identifier or function name
+        if b.is_ascii_alphabetic() || b == b'-' || b == b'_' {
+            let start = i;
+            while i < len
+                && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
+            {
+                i += 1;
+            }
+            let text = &value[start..i];
+
+            // Function call
+            if i < len && bytes[i] == b'(' {
+                let func_lower = text.to_ascii_lowercase();
+                func_stack.push(func_lower.clone());
+                i += 1;
+
+                // For url(), skip content entirely
+                if func_lower == "url" {
+                    let content_start = i;
+                    let mut depth = 1;
+                    while i < len && depth > 0 {
+                        if bytes[i] == b'(' {
+                            depth += 1;
+                        } else if bytes[i] == b')' {
+                            depth -= 1;
+                        }
+                        if depth > 0 {
+                            i += 1;
+                        }
+                    }
+                    tokens.push(ValueToken {
+                        text: value[content_start..i].to_string(),
+                        offset: content_start,
+                        kind: TokenKind::UrlContent,
+                    });
+                    if i < len {
+                        i += 1;
+                    }
+                    func_stack.pop();
+                    continue;
+                }
+
+                tokens.push(ValueToken {
+                    text: text.to_string(),
+                    offset: start,
+                    kind: TokenKind::Function,
+                });
+                continue;
+            }
+
+            // Regular identifier -- suppress if inside var()/attr()/counter()/counters()
+            let in_suppressed_fn = func_stack
+                .iter()
+                .any(|f| f == "var" || f == "attr" || f == "counter" || f == "counters");
+
+            tokens.push(ValueToken {
+                text: text.to_string(),
+                offset: start,
+                kind: if in_suppressed_fn {
+                    TokenKind::Other
+                } else {
+                    TokenKind::Ident
+                },
+            });
+            continue;
+        }
+
+        i += 1;
+    }
+
+    tokens
+}
+
+// ---------------------------------------------------------------------------
+// Property-context filtering
+// ---------------------------------------------------------------------------
+
+fn should_check_keyword(token_text: &str, property: &str, _tokens: &[ValueToken], _idx: usize) -> bool {
+    let prop_lower = property.to_ascii_lowercase();
+    let prop_stripped = strip_vendor_prefix(&prop_lower);
+
+    // System colors -- skip
+    if is_system_color(token_text) {
+        return false;
+    }
+
+    // Vendor-prefixed system colors (e.g. -moz-NativeHyperlinkText)
+    let lower_text = token_text.to_ascii_lowercase();
+    if lower_text.starts_with("-moz-")
+        || lower_text.starts_with("-webkit-")
+        || lower_text.starts_with("-ms-")
+        || lower_text.starts_with("-o-")
+    {
+        let stripped_val = strip_vendor_prefix(&lower_text);
+        if is_system_color(stripped_val) {
+            return false;
+        }
+    }
+
+    // Custom ident properties
+    if is_custom_ident_property(prop_stripped) {
+        if is_global_keyword(token_text) {
+            return true;
+        }
+        if (prop_stripped.starts_with("grid-") || prop_stripped == "grid-area")
+            && (lower_text == "span" || lower_text == "auto")
+        {
+            return true;
+        }
+        if prop_stripped == "list-style-type" {
+            return is_list_style_type_keyword(token_text);
+        }
+        return false;
+    }
+
+    // Mixed ident properties
+    if is_mixed_ident_property(prop_stripped) {
+        return should_check_in_mixed_property(token_text, prop_stripped);
+    }
+
+    true
+}
+
+fn should_check_in_mixed_property(token_text: &str, prop: &str) -> bool {
+    if is_global_keyword(token_text) {
+        return true;
+    }
+    let lower = token_text.to_ascii_lowercase();
+    match prop {
+        "font-family" => is_generic_font_family(token_text),
+        "font" => {
+            let font_kws = [
+                "normal", "italic", "oblique", "small-caps", "bold", "bolder", "lighter",
+                "ultra-condensed", "extra-condensed", "condensed", "semi-condensed",
+                "semi-expanded", "expanded", "extra-expanded", "ultra-expanded",
+                "caption", "icon", "menu", "message-box", "small-caption", "status-bar",
+            ];
+            font_kws.iter().any(|k| *k == lower) || is_generic_font_family(token_text)
+        }
+        "animation" => {
+            let anim_kws = [
+                "none", "ease", "ease-in", "ease-out", "ease-in-out", "linear",
+                "step-start", "step-end", "infinite", "normal", "reverse", "alternate",
+                "alternate-reverse", "forwards", "backwards", "both", "running", "paused",
+            ];
+            anim_kws.iter().any(|k| *k == lower)
+        }
+        "list-style" => {
+            let pos_kws = ["inside", "outside"];
+            pos_kws.iter().any(|k| *k == lower) || is_list_style_type_keyword(token_text)
+        }
+        _ => true,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ignoreFunctions support
+// ---------------------------------------------------------------------------
+
+fn is_in_ignored_function(value: &str, token_offset: usize, ignore_fns: &[String]) -> bool {
+    let bytes = value.as_bytes();
+    let mut i = 0;
+    let mut func_stack: Vec<(String, usize)> = Vec::new();
+
+    while i < value.len() {
+        let b = bytes[i];
+
+        if b == b'"' || b == b'\'' {
+            let quote = b;
+            i += 1;
+            while i < value.len() && bytes[i] != quote {
+                if bytes[i] == b'\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            if i < value.len() {
+                i += 1;
+            }
+            continue;
+        }
+
+        if b.is_ascii_alphabetic() || b == b'-' || b == b'_' {
+            let start = i;
+            while i < value.len()
+                && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
+            {
+                i += 1;
+            }
+            if i < value.len() && bytes[i] == b'(' {
+                let name = value[start..i].to_string();
+                i += 1;
+                func_stack.push((name, i));
+                continue;
+            }
+            if start == token_offset {
+                return func_stack
+                    .iter()
+                    .any(|(name, _)| ignore_fns.iter().any(|pat| matches_pattern(name, pat)));
+            }
+            continue;
+        }
+
+        if b == b'(' {
+            func_stack.push((String::new(), i + 1));
+            i += 1;
+            continue;
+        }
+
+        if b == b')' {
+            func_stack.pop();
+            i += 1;
+            continue;
+        }
+
+        i += 1;
+    }
+
+    false
+}
+
+// ---------------------------------------------------------------------------
+// Rule implementation
+// ---------------------------------------------------------------------------
 
 impl Rule for ValueKeywordCase {
     fn name(&self) -> &'static str {
@@ -75,7 +699,7 @@ impl Rule for ValueKeywordCase {
     }
 
     fn description(&self) -> &'static str {
-        "Enforce lowercase for keyword values"
+        "Specify lowercase or uppercase for keyword values"
     }
 
     fn default_severity(&self) -> Severity {
@@ -86,33 +710,183 @@ impl Rule for ValueKeywordCase {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+
+        let expect_upper = ctx.primary_option_str().is_some_and(|s| s == "upper");
+
+        let secondary = ctx.secondary_options();
+
+        let ignore_keywords: Vec<String> = secondary
+            .and_then(|v| v.get("ignoreKeywords"))
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|i| i.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+
+        let ignore_properties: Vec<String> = secondary
+            .and_then(|v| v.get("ignoreProperties"))
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|i| i.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+
+        let ignore_functions: Vec<String> = secondary
+            .and_then(|v| v.get("ignoreFunctions"))
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|i| i.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+
+        let camel_case_svg = secondary
+            .and_then(|v| v.get("camelCaseSvgKeywords"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let is_scss = matches!(
+            ctx.syntax,
+            gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass
+        );
+
         let mut diags = Vec::new();
+
         for decl in &rule.declarations {
+            let prop = &decl.property;
+
             let decl_start = decl.span.offset;
             let decl_end = decl_start + decl.span.length;
-            let search_area = if decl_end <= ctx.source.len() && decl_start < decl_end {
+            let has_source = decl_end <= ctx.source.len() && decl_start < decl_end;
+
+            let source_slice = if has_source {
                 &ctx.source[decl_start..decl_end]
             } else {
-                &decl.value
+                ""
             };
 
-            for kw in KEYWORDS {
-                for m in find_keyword_wrong_case(search_area, kw) {
-                    let abs_offset = if decl_end <= ctx.source.len() && decl_start < decl_end {
-                        decl_start + m.0
-                    } else {
-                        decl_start
-                    };
+            // Extract original property name from source for ignoreProperties matching
+            let original_prop = if has_source {
+                source_slice
+                    .find(':')
+                    .map(|c| source_slice[..c].trim())
+                    .unwrap_or(prop)
+            } else {
+                prop
+            };
+
+            // Check ignoreProperties
+            if !ignore_properties.is_empty() {
+                let prop_matches = ignore_properties.iter().any(|pat| {
+                    matches_pattern(prop, pat)
+                        || matches_pattern(original_prop, pat)
+                        || matches_pattern_case_insensitive(prop, pat)
+                });
+                if prop_matches {
+                    continue;
+                }
+            }
+
+            // Skip SCSS interpolation in values
+            if is_scss && decl.value.contains("#{") {
+                continue;
+            }
+
+            // Find where the value starts in the source slice (after "property:")
+            let value_offset_in_source = if has_source {
+                source_slice.find(':').map(|c| c + 1).unwrap_or(0)
+            } else {
+                0
+            };
+
+            // IMPORTANT: Extract value from ORIGINAL source, not decl.value.
+            // lightningcss normalizes keyword values to lowercase in its printer,
+            // which would make case checking impossible.
+            let (value_to_tokenize, value_abs_start) = if has_source {
+                let raw = &source_slice[value_offset_in_source..];
+                let trimmed_end =
+                    raw.trim_end_matches(|c: char| c == ';' || c == '}' || c.is_ascii_whitespace());
+                let leading_ws = trimmed_end.len() - trimmed_end.trim_start().len();
+                let trimmed = trimmed_end.trim_start();
+                (trimmed, decl_start + value_offset_in_source + leading_ws)
+            } else {
+                (decl.value.as_str(), decl_start)
+            };
+
+            let tokens = tokenize_value(value_to_tokenize);
+
+            for (idx, token) in tokens.iter().enumerate() {
+                if token.kind != TokenKind::Ident && token.kind != TokenKind::Important {
+                    continue;
+                }
+
+                let text = &token.text;
+                let abs_offset = value_abs_start + token.offset;
+
+                // SVG camelCase keywords
+                if is_svg_camel_case_keyword(text) {
+                    if camel_case_svg && !expect_upper {
+                        // "lower" + camelCaseSvgKeywords: expected = camelCase canonical
+                        let canonical = SVG_CAMEL_CASE_KEYWORDS
+                            .iter()
+                            .find(|k| k.eq_ignore_ascii_case(text))
+                            .unwrap();
+                        if *text != **canonical {
+                            diags.push(
+                                Diagnostic::new(
+                                    self.name(),
+                                    format!("Expected \"{}\" to be \"{}\"", text, canonical),
+                                )
+                                .severity(self.default_severity())
+                                .span(Span::new(abs_offset, text.len()))
+                                .fix(Fix::new(
+                                    format!("Convert to \"{}\"", canonical),
+                                    vec![Edit::new(
+                                        Span::new(abs_offset, text.len()),
+                                        *canonical,
+                                    )],
+                                )),
+                            );
+                        }
+                        continue;
+                    }
+                    // "upper" mode or camelCaseSvgKeywords:false -- treat like normal keyword
+                }
+
+                // Property-context filtering
+                if token.kind == TokenKind::Ident
+                    && !should_check_keyword(text, prop, &tokens, idx)
+                {
+                    continue;
+                }
+
+                // ignoreKeywords
+                if !ignore_keywords.is_empty()
+                    && ignore_keywords
+                        .iter()
+                        .any(|pat| matches_pattern(text, pat))
+                {
+                    continue;
+                }
+
+                // ignoreFunctions
+                if !ignore_functions.is_empty()
+                    && is_in_ignored_function(value_to_tokenize, token.offset, &ignore_functions)
+                {
+                    continue;
+                }
+
+                // Check case
+                let expected = if expect_upper {
+                    text.to_ascii_uppercase()
+                } else {
+                    text.to_ascii_lowercase()
+                };
+
+                if *text != expected {
                     diags.push(
                         Diagnostic::new(
                             self.name(),
-                            format!("Expected \"{}\" to be \"{}\"", m.1, kw),
+                            format!("Expected \"{}\" to be \"{}\"", text, expected),
                         )
                         .severity(self.default_severity())
-                        .span(Span::new(abs_offset, m.1.len()))
+                        .span(Span::new(abs_offset, text.len()))
                         .fix(Fix::new(
-                            format!("Convert to lowercase \"{kw}\""),
-                            vec![Edit::new(Span::new(abs_offset, m.1.len()), *kw)],
+                            format!("Convert to \"{}\"", expected),
+                            vec![Edit::new(Span::new(abs_offset, text.len()), &expected)],
                         )),
                     );
                 }
@@ -122,35 +896,9 @@ impl Rule for ValueKeywordCase {
     }
 }
 
-/// Find occurrences of a keyword with wrong case (case-insensitive match but not all lowercase).
-/// Returns (relative_offset, matched_text).
-fn find_keyword_wrong_case<'a>(haystack: &'a str, keyword: &str) -> Vec<(usize, &'a str)> {
-    let mut results = Vec::new();
-    let lower_haystack = haystack.to_ascii_lowercase();
-    let mut start = 0;
-    while let Some(pos) = lower_haystack[start..].find(keyword) {
-        let abs_pos = start + pos;
-        let end = abs_pos + keyword.len();
-        // Check word boundaries: the match must not be part of a longer identifier.
-        let before_ok = abs_pos == 0
-            || !haystack.as_bytes()[abs_pos - 1].is_ascii_alphanumeric()
-                && haystack.as_bytes()[abs_pos - 1] != b'-'
-                && haystack.as_bytes()[abs_pos - 1] != b'_';
-        let after_ok = end >= haystack.len()
-            || !haystack.as_bytes()[end].is_ascii_alphanumeric()
-                && haystack.as_bytes()[end] != b'-'
-                && haystack.as_bytes()[end] != b'_';
-        if before_ok && after_ok {
-            let matched = &haystack[abs_pos..end];
-            // Only report if the matched text differs from the expected lowercase form.
-            if matched != keyword {
-                results.push((abs_pos, matched));
-            }
-        }
-        start = abs_pos + 1;
-    }
-    results
-}
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -200,5 +948,47 @@ mod tests {
         let d = ValueKeywordCase.check(&style_with_decl("color", "Inherit"), &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("\"Inherit\""));
+    }
+
+    #[test]
+    fn skips_url_content() {
+        let d = ValueKeywordCase.check(&style_with_decl("background-url", "url(BLOCK)"), &ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn skips_string_content() {
+        let d = ValueKeywordCase.check(&style_with_decl("content", "\"BLOCK\""), &ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn skips_system_colors() {
+        let d = ValueKeywordCase.check(&style_with_decl("color", "InactiveCaptionText"), &ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn skips_animation_name() {
+        let d = ValueKeywordCase.check(
+            &style_with_decl("animation-name", "ANIMATION-NAME"),
+            &ctx(),
+        );
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn reports_font_family_generic() {
+        let d = ValueKeywordCase.check(&style_with_decl("font-family", "MONOSPACE"), &ctx());
+        assert_eq!(d.len(), 1);
+    }
+
+    #[test]
+    fn skips_font_family_custom() {
+        let d = ValueKeywordCase.check(
+            &style_with_decl("font-family", "Gill Sans Extrabold"),
+            &ctx(),
+        );
+        assert!(d.is_empty());
     }
 }
