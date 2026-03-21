@@ -182,11 +182,11 @@ pub fn run() -> Result<()> {
         .sum();
 
     // Check --max-warnings threshold.
-    if let Some(max) = cli.max_warnings {
-        if total_warnings > max {
-            eprintln!("Found {total_warnings} warning(s) (max allowed: {max})");
-            process::exit(1);
-        }
+    if let Some(max) = cli.max_warnings
+        && total_warnings > max
+    {
+        eprintln!("Found {total_warnings} warning(s) (max allowed: {max})");
+        process::exit(1);
     }
 
     // Exit with code 1 if there were any errors.

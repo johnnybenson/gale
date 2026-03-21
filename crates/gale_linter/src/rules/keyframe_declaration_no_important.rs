@@ -27,10 +27,10 @@ impl Rule for KeyframeDeclarationNoImportant {
     fn check(&self, node: &CssNode, _context: &RuleContext) -> Vec<Diagnostic> {
         let mut diagnostics = Vec::new();
 
-        if let CssNode::AtRule(at_rule) = node {
-            if at_rule.name == "keyframes" {
-                collect_important_in_children(&at_rule.children, self, &mut diagnostics);
-            }
+        if let CssNode::AtRule(at_rule) = node
+            && at_rule.name == "keyframes"
+        {
+            collect_important_in_children(&at_rule.children, self, &mut diagnostics);
         }
 
         diagnostics

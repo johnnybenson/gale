@@ -115,18 +115,18 @@ impl Rule for FunctionCalcNoUnspacedOperator {
 
             for m in CALC_START.find_iter(value) {
                 let body_start = m.end();
-                if let Some(body) = extract_calc_body(value, body_start) {
-                    if has_unspaced_operator(body) {
-                        diagnostics.push(
-                            Diagnostic::new(
-                                self.name(),
-                                "Unexpected unspaced operator in calc function",
-                            )
-                            .severity(self.default_severity())
-                            .span(Span::new(decl.span.offset, decl.span.length)),
-                        );
-                        break; // One diagnostic per declaration is enough.
-                    }
+                if let Some(body) = extract_calc_body(value, body_start)
+                    && has_unspaced_operator(body)
+                {
+                    diagnostics.push(
+                        Diagnostic::new(
+                            self.name(),
+                            "Unexpected unspaced operator in calc function",
+                        )
+                        .severity(self.default_severity())
+                        .span(Span::new(decl.span.offset, decl.span.length)),
+                    );
+                    break; // One diagnostic per declaration is enough.
                 }
             }
         }

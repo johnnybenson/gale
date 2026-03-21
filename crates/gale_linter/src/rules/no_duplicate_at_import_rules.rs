@@ -28,19 +28,19 @@ impl Rule for NoDuplicateAtImportRules {
         let mut diagnostics = Vec::new();
 
         for node in nodes {
-            if let CssNode::AtRule(at_rule) = node {
-                if at_rule.name == "import" {
-                    let url = at_rule.params.trim().to_string();
-                    if !seen.insert(url.clone()) {
-                        diagnostics.push(
-                            Diagnostic::new(
-                                self.name(),
-                                format!("Unexpected duplicate @import rule \"{}\"", url),
-                            )
-                            .severity(self.default_severity())
-                            .span(Span::new(at_rule.span.offset, at_rule.span.length)),
-                        );
-                    }
+            if let CssNode::AtRule(at_rule) = node
+                && at_rule.name == "import"
+            {
+                let url = at_rule.params.trim().to_string();
+                if !seen.insert(url.clone()) {
+                    diagnostics.push(
+                        Diagnostic::new(
+                            self.name(),
+                            format!("Unexpected duplicate @import rule \"{}\"", url),
+                        )
+                        .severity(self.default_severity())
+                        .span(Span::new(at_rule.span.offset, at_rule.span.length)),
+                    );
                 }
             }
         }

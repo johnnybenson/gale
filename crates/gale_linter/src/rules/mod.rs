@@ -1,19 +1,24 @@
 pub mod annotation_no_unknown;
 pub mod at_rule_no_unknown;
+pub mod at_rule_no_vendor_prefix;
 pub mod block_no_empty;
+pub mod color_hex_length;
 pub mod color_no_invalid_hex;
 pub mod comment_no_empty;
 pub mod custom_property_no_missing_var_function;
 pub mod declaration_block_no_duplicate_custom_properties;
 pub mod declaration_block_no_duplicate_properties;
+pub mod declaration_block_no_redundant_longhand_properties;
 pub mod declaration_block_no_shorthand_property_overrides;
 pub mod font_family_no_duplicate_names;
 pub mod font_family_no_missing_generic_family_keyword;
 pub mod function_calc_no_unspaced_operator;
+pub mod function_name_case;
 pub mod keyframe_block_no_duplicate_selectors;
 pub mod media_feature_name_no_unknown;
 pub mod media_query_no_invalid;
 pub mod keyframe_declaration_no_important;
+pub mod length_zero_no_unit;
 pub mod no_descending_specificity;
 pub mod no_duplicate_at_import_rules;
 pub mod no_duplicate_selectors;
@@ -22,12 +27,18 @@ pub mod no_invalid_double_slash_comments;
 pub mod no_invalid_position_declaration;
 pub mod no_invalid_position_at_import_rule;
 pub mod no_irregular_whitespace;
+pub mod number_max_precision;
 pub mod property_no_unknown;
+pub mod property_no_vendor_prefix;
+pub mod selector_class_pattern;
 pub mod selector_pseudo_class_no_unknown;
-pub mod selector_type_no_unknown;
+pub mod selector_pseudo_element_colon_notation;
 pub mod selector_pseudo_element_no_unknown;
+pub mod selector_type_no_unknown;
+pub mod shorthand_property_no_redundant_values;
 pub mod string_no_newline;
 pub mod unit_no_unknown;
+pub mod value_no_vendor_prefix;
 
 use crate::registry::RuleRegistry;
 
@@ -35,7 +46,9 @@ use crate::registry::RuleRegistry;
 pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(annotation_no_unknown::AnnotationNoUnknown));
     registry.register(Box::new(at_rule_no_unknown::AtRuleNoUnknown));
+    registry.register(Box::new(at_rule_no_vendor_prefix::AtRuleNoVendorPrefix));
     registry.register(Box::new(block_no_empty::BlockNoEmpty));
+    registry.register(Box::new(color_hex_length::ColorHexLength));
     registry.register(Box::new(color_no_invalid_hex::ColorNoInvalidHex));
     registry.register(Box::new(comment_no_empty::CommentNoEmpty));
     registry.register(Box::new(custom_property_no_missing_var_function::CustomPropertyNoMissingVarFunction));
@@ -49,8 +62,7 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(keyframe_declaration_no_important::KeyframeDeclarationNoImportant));
     registry.register(Box::new(media_feature_name_no_unknown::MediaFeatureNameNoUnknown));
     registry.register(Box::new(media_query_no_invalid::MediaQueryNoInvalid));
-    // TODO: optimize before enabling — O(n²) on large files
-    // registry.register(Box::new(no_descending_specificity::NoDescendingSpecificity));
+    registry.register(Box::new(no_descending_specificity::NoDescendingSpecificity));
     registry.register(Box::new(no_duplicate_at_import_rules::NoDuplicateAtImportRules));
     registry.register(Box::new(no_duplicate_selectors::NoDuplicateSelectors));
     registry.register(Box::new(no_empty_source::NoEmptySource));
@@ -58,10 +70,19 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(no_invalid_position_at_import_rule::NoInvalidPositionAtImportRule));
     registry.register(Box::new(no_invalid_position_declaration::NoInvalidPositionDeclaration));
     registry.register(Box::new(no_irregular_whitespace::NoIrregularWhitespace));
+    registry.register(Box::new(declaration_block_no_redundant_longhand_properties::DeclarationBlockNoRedundantLonghandProperties));
+    registry.register(Box::new(function_name_case::FunctionNameCase));
+    registry.register(Box::new(length_zero_no_unit::LengthZeroNoUnit));
+    registry.register(Box::new(number_max_precision::NumberMaxPrecision));
     registry.register(Box::new(property_no_unknown::PropertyNoUnknown));
+    registry.register(Box::new(property_no_vendor_prefix::PropertyNoVendorPrefix));
+    registry.register(Box::new(selector_class_pattern::SelectorClassPattern));
     registry.register(Box::new(selector_pseudo_class_no_unknown::SelectorPseudoClassNoUnknown));
+    registry.register(Box::new(selector_pseudo_element_colon_notation::SelectorPseudoElementColonNotation));
     registry.register(Box::new(selector_pseudo_element_no_unknown::SelectorPseudoElementNoUnknown));
     registry.register(Box::new(selector_type_no_unknown::SelectorTypeNoUnknown));
+    registry.register(Box::new(shorthand_property_no_redundant_values::ShorthandPropertyNoRedundantValues));
     registry.register(Box::new(string_no_newline::StringNoNewline));
     registry.register(Box::new(unit_no_unknown::UnitNoUnknown));
+    registry.register(Box::new(value_no_vendor_prefix::ValueNoVendorPrefix));
 }

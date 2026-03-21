@@ -104,6 +104,38 @@ impl SourceLocation {
     }
 }
 
+/// Pre-built index for O(log n) byte-offset to line/column lookups.
+pub struct SourceLineIndex {
+    /// `line_starts[i]` is the byte offset where line `i` (0-indexed) begins.
+    /// Line 0 always starts at byte 0.
+    line_starts: Vec<usize>,
+}
+
+impl SourceLineIndex {
+    /// Build a line index from the given source text.
+    pub fn build(source: &str) -> Self {
+        let mut line_starts = vec![0usize];
+        for (i, b) in source.bytes().enumerate() {
+            if b == b'\n' {
+                line_starts.push(i + 1);
+            }
+        }
+        Self { line_starts }
+    }
+
+    /// Convert a byte offset to a 1-indexed (line, column) pair.
+    pub fn offset_to_location(&self, offset: usize) -> (usize, usize) {
+        // Binary search for the line containing `offset`.
+        let line_idx = match self.line_starts.binary_search(&offset) {
+            Ok(exact) => exact,
+            Err(insert) => insert - 1,
+        };
+        let line = line_idx + 1; // 1-indexed
+        let col = offset - self.line_starts[line_idx] + 1; // 1-indexed
+        (line, col)
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Edit & Fix
 // ---------------------------------------------------------------------------

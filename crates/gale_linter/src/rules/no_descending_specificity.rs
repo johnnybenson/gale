@@ -130,31 +130,73 @@ fn calculate_specificity(selector: &str) -> Specificity {
     Specificity(a, b, c)
 }
 
-/// Collect all style rule selectors from a list of nodes, recursing into at-rules.
-fn collect_selectors(nodes: &[CssNode], out: &mut Vec<(String, Specificity, Span)>) {
+/// Walk nodes and check specificity in a single pass (O(n)), avoiding intermediate allocation.
+fn check_specificity_walk(
+    nodes: &[CssNode],
+    max_specificity: &mut Option<(Specificity, String)>,
+    diagnostics: &mut Vec<Diagnostic>,
+    rule: &NoDescendingSpecificity,
+) {
     for node in nodes {
         match node {
             CssNode::Style(style) => {
-                // A selector list like "a, .b" can contain multiple selectors.
-                // Split by comma and use the highest specificity.
-                // But for reporting, we use the full selector string.
-                let spec = calculate_specificity(&style.selector);
-                let span = gale_diagnostics::Span::new(style.span.offset, style.span.length);
-                out.push((style.selector.clone(), spec, span));
+                check_one_selector(
+                    &style.selector,
+                    gale_diagnostics::Span::new(style.span.offset, style.span.length),
+                    max_specificity,
+                    diagnostics,
+                    rule,
+                );
 
                 // Recurse into nested children.
                 for child in &style.children {
-                    let child_spec = calculate_specificity(&child.selector);
-                    let child_span =
-                        gale_diagnostics::Span::new(child.span.offset, child.span.length);
-                    out.push((child.selector.clone(), child_spec, child_span));
+                    check_one_selector(
+                        &child.selector,
+                        gale_diagnostics::Span::new(child.span.offset, child.span.length),
+                        max_specificity,
+                        diagnostics,
+                        rule,
+                    );
                 }
             }
             CssNode::AtRule(at_rule) => {
-                collect_selectors(&at_rule.children, out);
+                check_specificity_walk(&at_rule.children, max_specificity, diagnostics, rule);
             }
             _ => {}
         }
+    }
+}
+
+fn check_one_selector(
+    selector: &str,
+    span: Span,
+    max_specificity: &mut Option<(Specificity, String)>,
+    diagnostics: &mut Vec<Diagnostic>,
+    rule: &NoDescendingSpecificity,
+) {
+    let spec = calculate_specificity(selector);
+
+    if let Some((prev_spec, prev_selector)) = max_specificity.as_ref()
+        && spec < *prev_spec
+    {
+        diagnostics.push(
+            Diagnostic::new(
+                rule.name(),
+                format!(
+                    "Expected selector \"{}\" to come before selector \"{}\" (lower specificity selectors should come first)",
+                    selector, prev_selector,
+                ),
+            )
+            .severity(rule.default_severity())
+            .span(span),
+        );
+    }
+
+    if max_specificity
+        .as_ref()
+        .is_none_or(|(prev, _)| spec >= *prev)
+    {
+        *max_specificity = Some((spec, selector.to_string()));
     }
 }
 
@@ -172,36 +214,10 @@ impl Rule for NoDescendingSpecificity {
     }
 
     fn check_root(&self, nodes: &[CssNode], _context: &RuleContext) -> Vec<Diagnostic> {
-        let mut selectors = Vec::new();
-        collect_selectors(nodes, &mut selectors);
-
         let mut diagnostics = Vec::new();
         let mut max_specificity: Option<(Specificity, String)> = None;
 
-        for (selector, spec, span) in &selectors {
-            if let Some((prev_spec, prev_selector)) = &max_specificity {
-                if spec < prev_spec {
-                    diagnostics.push(
-                        Diagnostic::new(
-                            self.name(),
-                            format!(
-                                "Expected selector \"{}\" to come before selector \"{}\" (lower specificity selectors should come first)",
-                                selector, prev_selector,
-                            ),
-                        )
-                        .severity(self.default_severity())
-                        .span(*span),
-                    );
-                }
-            }
-
-            if max_specificity
-                .as_ref()
-                .map_or(true, |(prev, _)| spec >= prev)
-            {
-                max_specificity = Some((*spec, selector.clone()));
-            }
-        }
+        check_specificity_walk(nodes, &mut max_specificity, &mut diagnostics, self);
 
         diagnostics
     }

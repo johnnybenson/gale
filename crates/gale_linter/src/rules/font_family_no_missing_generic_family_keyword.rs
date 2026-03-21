@@ -63,8 +63,8 @@ impl Rule for FontFamilyNoMissingGenericFamilyKeyword {
 
             // Remove surrounding quotes if present.
             let last_family_unquoted = last_family
-                .trim_start_matches(|c| c == '"' || c == '\'')
-                .trim_end_matches(|c| c == '"' || c == '\'')
+                .trim_start_matches(['"', '\''])
+                .trim_end_matches(['"', '\''])
                 .trim();
 
             let is_generic = GENERIC_FAMILIES

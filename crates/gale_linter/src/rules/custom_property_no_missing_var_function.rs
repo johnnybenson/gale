@@ -25,10 +25,10 @@ fn has_bare_custom_property(value: &str) -> bool {
     // Look for `--` that starts a CSS custom property identifier
     let chars_vec: Vec<char> = without_var.chars().collect();
     for (idx, ch) in chars_vec.iter().enumerate() {
-        if *ch == '-' && idx + 1 < chars_vec.len() && chars_vec[idx + 1] == '-' {
-            if idx == 0 || !chars_vec[idx - 1].is_ascii_alphanumeric() {
-                return true;
-            }
+        if *ch == '-' && idx + 1 < chars_vec.len() && chars_vec[idx + 1] == '-'
+            && (idx == 0 || !chars_vec[idx - 1].is_ascii_alphanumeric())
+        {
+            return true;
         }
     }
 

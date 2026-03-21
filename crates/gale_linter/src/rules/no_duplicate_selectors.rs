@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use gale_css_parser::CssNode;
 use gale_diagnostics::{Diagnostic, Severity, Span};
@@ -24,7 +24,7 @@ impl Rule for NoDuplicateSelectors {
     }
 
     fn check_root(&self, nodes: &[CssNode], _context: &RuleContext) -> Vec<Diagnostic> {
-        let mut seen: HashMap<String, ()> = HashMap::new();
+        let mut seen: HashSet<String> = HashSet::new();
         let mut diagnostics = Vec::new();
 
         collect_selectors(nodes, &mut seen, &mut diagnostics, self);
@@ -35,25 +35,25 @@ impl Rule for NoDuplicateSelectors {
 
 fn collect_selectors(
     nodes: &[CssNode],
-    seen: &mut HashMap<String, ()>,
+    seen: &mut HashSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
     rule: &NoDuplicateSelectors,
 ) {
     for node in nodes {
         match node {
             CssNode::Style(style_rule) => {
-                let normalized = style_rule.selector.trim().to_string();
-                if seen.contains_key(&normalized) {
+                let selector = style_rule.selector.trim();
+                if seen.contains(selector) {
                     diagnostics.push(
                         Diagnostic::new(
                             rule.name(),
-                            format!("Unexpected duplicate selector \"{}\"", normalized),
+                            format!("Unexpected duplicate selector \"{}\"", selector),
                         )
                         .severity(rule.default_severity())
                         .span(Span::new(style_rule.span.offset, style_rule.span.length)),
                     );
                 } else {
-                    seen.insert(normalized, ());
+                    seen.insert(selector.to_string());
                 }
             }
             CssNode::AtRule(at_rule) => {

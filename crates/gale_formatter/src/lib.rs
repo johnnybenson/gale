@@ -1,4 +1,4 @@
-use gale_diagnostics::{LintResult, Severity, SourceLocation};
+use gale_diagnostics::{LintResult, Severity, SourceLineIndex, SourceLocation};
 use owo_colors::OwoColorize;
 use serde::Serialize;
 
@@ -46,11 +46,13 @@ impl Formatter for TextFormatter {
                 continue;
             }
 
+            let line_index = SourceLineIndex::build(&result.source);
+
             output.push_str(&result.file_path.underline().to_string());
             output.push('\n');
 
             for diag in &result.diagnostics {
-                let (line, col) = compute_location(&result.source, diag.span.offset);
+                let (line, col) = line_index.offset_to_location(diag.span.offset);
 
                 let location = format!("{line}:{col}");
                 let (icon, colored_message) = match diag.severity {
@@ -134,11 +136,12 @@ impl Formatter for JsonFormatter {
         let json_results: Vec<JsonResult> = results
             .iter()
             .map(|result| {
+                let line_index = SourceLineIndex::build(&result.source);
                 let warnings = result
                     .diagnostics
                     .iter()
                     .map(|diag| {
-                        let (line, column) = compute_location(&result.source, diag.span.offset);
+                        let (line, column) = line_index.offset_to_location(diag.span.offset);
                         JsonWarning {
                             line,
                             column,
@@ -176,8 +179,9 @@ impl Formatter for CompactFormatter {
         let mut output = String::new();
 
         for result in results {
+            let line_index = SourceLineIndex::build(&result.source);
             for diag in &result.diagnostics {
-                let (line, col) = compute_location(&result.source, diag.span.offset);
+                let (line, col) = line_index.offset_to_location(diag.span.offset);
                 output.push_str(&format!(
                     "{}: line {}, col {}, {} - {} ({})\n",
                     result.file_path, line, col, diag.severity, diag.message, diag.rule_name,

@@ -170,10 +170,10 @@ impl Rule for DeclarationBlockNoShorthandPropertyOverrides {
 
             // Check if this property is a longhand of any shorthand.
             for &shorthand in SHORTHANDS {
-                if let Some(longhands) = longhands_for(shorthand) {
-                    if longhands.contains(&prop) && !seen_longhands.contains(&prop) {
-                        seen_longhands.push(prop);
-                    }
+                if let Some(longhands) = longhands_for(shorthand)
+                    && longhands.contains(&prop) && !seen_longhands.contains(&prop)
+                {
+                    seen_longhands.push(prop);
                 }
             }
         }

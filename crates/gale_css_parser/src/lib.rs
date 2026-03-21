@@ -10,18 +10,13 @@ use thiserror::Error;
 // ---------------------------------------------------------------------------
 
 /// The kind of CSS dialect we are parsing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Syntax {
+    #[default]
     Css,
     Scss,
     Less,
     Sass,
-}
-
-impl Default for Syntax {
-    fn default() -> Self {
-        Self::Css
-    }
 }
 
 /// Infer the [`Syntax`] from a file extension.
@@ -189,6 +184,42 @@ fn po() -> PrinterOptions<'static> {
 // lightningcss → simplified AST conversion
 // ---------------------------------------------------------------------------
 
+/// A pre-built index mapping line numbers to byte offsets for O(log n) lookup.
+struct LineIndex {
+    /// `line_starts[i]` is the byte offset where line `i` (0-indexed) begins.
+    line_starts: Vec<usize>,
+}
+
+impl LineIndex {
+    fn build(source: &str) -> Self {
+        let mut line_starts = vec![0usize];
+        for (i, b) in source.bytes().enumerate() {
+            if b == b'\n' {
+                line_starts.push(i + 1);
+            }
+        }
+        Self { line_starts }
+    }
+
+    /// Convert a 0-indexed `line` and 1-based `column` (UTF-16 code units) to a byte offset.
+    fn line_col_to_offset(&self, source: &str, line: u32, column: u32) -> usize {
+        let line = line as usize;
+        if line >= self.line_starts.len() {
+            return source.len();
+        }
+        let line_start = self.line_starts[line];
+        // column is 1-based, measured in UTF-16 code units.
+        let mut col: u32 = 1;
+        for (i, ch) in source[line_start..].char_indices() {
+            if col >= column {
+                return line_start + i;
+            }
+            col += ch.len_utf16() as u32;
+        }
+        source.len().min(line_start + source[line_start..].len())
+    }
+}
+
 fn parse_css(source: &str) -> Result<ParseResult, ParseError> {
     let opts = ParserOptions {
         flags: ParserFlags::NESTING,
@@ -201,7 +232,8 @@ fn parse_css(source: &str) -> Result<ParseResult, ParseError> {
             message: err.to_string(),
         })?;
 
-    let nodes = convert_rules(&stylesheet.rules.0, source);
+    let line_index = LineIndex::build(source);
+    let nodes = convert_rules(&stylesheet.rules.0, source, &line_index);
 
     Ok(ParseResult {
         nodes,
@@ -211,33 +243,33 @@ fn parse_css(source: &str) -> Result<ParseResult, ParseError> {
 }
 
 /// Convert a list of lightningcss rules into our [`CssNode`] list.
-fn convert_rules(rules: &[LcssRule], source: &str) -> Vec<CssNode> {
+fn convert_rules(rules: &[LcssRule], source: &str, idx: &LineIndex) -> Vec<CssNode> {
     let mut nodes = Vec::with_capacity(rules.len());
 
     for rule in rules {
         match rule {
             LcssRule::Style(style) => {
-                nodes.push(CssNode::Style(convert_style_rule(style, source)));
+                nodes.push(CssNode::Style(convert_style_rule(style, source, idx)));
             }
 
             LcssRule::Media(media) => {
                 let params = media.query.to_css_string(po()).unwrap_or_default();
-                let children = convert_rules(&media.rules.0, source);
+                let children = convert_rules(&media.rules.0, source, idx);
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "media".into(),
                     params,
-                    span: loc_to_span(media.loc, source),
+                    span: loc_to_span(media.loc, source, idx),
                     children,
                 }));
             }
 
             LcssRule::Supports(supports) => {
                 let params = supports.condition.to_css_string(po()).unwrap_or_default();
-                let children = convert_rules(&supports.rules.0, source);
+                let children = convert_rules(&supports.rules.0, source, idx);
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "supports".into(),
                     params,
-                    span: loc_to_span(supports.loc, source),
+                    span: loc_to_span(supports.loc, source, idx),
                     children,
                 }));
             }
@@ -247,7 +279,7 @@ fn convert_rules(rules: &[LcssRule], source: &str) -> Vec<CssNode> {
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "keyframes".into(),
                     params,
-                    span: loc_to_span(kf.loc, source),
+                    span: loc_to_span(kf.loc, source, idx),
                     children: Vec::new(),
                 }));
             }
@@ -270,7 +302,7 @@ fn convert_rules(rules: &[LcssRule], source: &str) -> Vec<CssNode> {
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "font-face".into(),
                     params: String::new(),
-                    span: loc_to_span(ff.loc, source),
+                    span: loc_to_span(ff.loc, source, idx),
                     children,
                 }));
             }
@@ -279,7 +311,7 @@ fn convert_rules(rules: &[LcssRule], source: &str) -> Vec<CssNode> {
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "import".into(),
                     params: import.url.as_ref().to_owned(),
-                    span: loc_to_span(import.loc, source),
+                    span: loc_to_span(import.loc, source, idx),
                     children: Vec::new(),
                 }));
             }
@@ -288,7 +320,7 @@ fn convert_rules(rules: &[LcssRule], source: &str) -> Vec<CssNode> {
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "namespace".into(),
                     params: ns.url.as_ref().to_owned(),
-                    span: loc_to_span(ns.loc, source),
+                    span: loc_to_span(ns.loc, source, idx),
                     children: Vec::new(),
                 }));
             }
@@ -299,11 +331,11 @@ fn convert_rules(rules: &[LcssRule], source: &str) -> Vec<CssNode> {
                     .as_ref()
                     .map(|n| n.to_css_string(po()).unwrap_or_default())
                     .unwrap_or_default();
-                let children = convert_rules(&container.rules.0, source);
+                let children = convert_rules(&container.rules.0, source, idx);
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "container".into(),
                     params,
-                    span: loc_to_span(container.loc, source),
+                    span: loc_to_span(container.loc, source, idx),
                     children,
                 }));
             }
@@ -319,11 +351,11 @@ fn convert_rules(rules: &[LcssRule], source: &str) -> Vec<CssNode> {
                             .join(".")
                     })
                     .unwrap_or_default();
-                let children = convert_rules(&layer.rules.0, source);
+                let children = convert_rules(&layer.rules.0, source, idx);
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "layer".into(),
                     params,
-                    span: loc_to_span(layer.loc, source),
+                    span: loc_to_span(layer.loc, source, idx),
                     children,
                 }));
             }
@@ -343,33 +375,33 @@ fn convert_rules(rules: &[LcssRule], source: &str) -> Vec<CssNode> {
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "layer".into(),
                     params,
-                    span: loc_to_span(layer.loc, source),
+                    span: loc_to_span(layer.loc, source, idx),
                     children: Vec::new(),
                 }));
             }
 
             LcssRule::Scope(scope) => {
-                let children = convert_rules(&scope.rules.0, source);
+                let children = convert_rules(&scope.rules.0, source, idx);
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "scope".into(),
                     params: String::new(),
-                    span: loc_to_span(scope.loc, source),
+                    span: loc_to_span(scope.loc, source, idx),
                     children,
                 }));
             }
 
             LcssRule::StartingStyle(ss) => {
-                let children = convert_rules(&ss.rules.0, source);
+                let children = convert_rules(&ss.rules.0, source, idx);
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "starting-style".into(),
                     params: String::new(),
-                    span: loc_to_span(ss.loc, source),
+                    span: loc_to_span(ss.loc, source, idx),
                     children,
                 }));
             }
 
             LcssRule::Nesting(nesting) => {
-                nodes.push(CssNode::Style(convert_style_rule(&nesting.style, source)));
+                nodes.push(CssNode::Style(convert_style_rule(&nesting.style, source, idx)));
             }
 
             LcssRule::NestedDeclarations(nested_decls) => {
@@ -385,7 +417,7 @@ fn convert_rules(rules: &[LcssRule], source: &str) -> Vec<CssNode> {
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "page".into(),
                     params: String::new(),
-                    span: loc_to_span(page.loc, source),
+                    span: loc_to_span(page.loc, source, idx),
                     children: Vec::new(),
                 }));
             }
@@ -395,7 +427,7 @@ fn convert_rules(rules: &[LcssRule], source: &str) -> Vec<CssNode> {
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "property".into(),
                     params,
-                    span: loc_to_span(prop.loc, source),
+                    span: loc_to_span(prop.loc, source, idx),
                     children: Vec::new(),
                 }));
             }
@@ -405,7 +437,7 @@ fn convert_rules(rules: &[LcssRule], source: &str) -> Vec<CssNode> {
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "counter-style".into(),
                     params,
-                    span: loc_to_span(cs.loc, source),
+                    span: loc_to_span(cs.loc, source, idx),
                     children: Vec::new(),
                 }));
             }
@@ -423,7 +455,7 @@ fn convert_rules(rules: &[LcssRule], source: &str) -> Vec<CssNode> {
                 nodes.push(CssNode::AtRule(AtRule {
                     name,
                     params,
-                    span: loc_to_span(unknown.loc, source),
+                    span: loc_to_span(unknown.loc, source, idx),
                     children: Vec::new(),
                 }));
             }
@@ -440,6 +472,7 @@ fn convert_rules(rules: &[LcssRule], source: &str) -> Vec<CssNode> {
 fn convert_style_rule(
     style: &lightningcss::rules::style::StyleRule,
     source: &str,
+    idx: &LineIndex,
 ) -> StyleRule {
     let selector = style.selectors.to_css_string(po()).unwrap_or_default();
 
@@ -455,14 +488,14 @@ fn convert_style_rule(
     let mut children = Vec::new();
     for rule in &style.rules.0 {
         if let LcssRule::Style(nested_style) = rule {
-            children.push(convert_style_rule(nested_style, source));
+            children.push(convert_style_rule(nested_style, source, idx));
         }
     }
 
     StyleRule {
         selector,
         declarations,
-        span: loc_to_span(style.loc, source),
+        span: loc_to_span(style.loc, source, idx),
         children,
     }
 }
@@ -492,6 +525,7 @@ fn convert_property(
 /// into a byte offset within `source`.
 ///
 /// Returns 0 if the line/column is out of range.
+#[cfg(test)]
 fn line_col_to_byte_offset(source: &str, line: u32, column: u32) -> usize {
     let mut current_line: u32 = 0;
     let mut line_start: usize = 0;
@@ -527,8 +561,8 @@ fn line_col_to_byte_offset(source: &str, line: u32, column: u32) -> usize {
 }
 
 /// Map a lightningcss `Location` (line/column) into our `Span` as a byte offset.
-fn loc_to_span(loc: lightningcss::rules::Location, source: &str) -> Span {
-    let offset = line_col_to_byte_offset(source, loc.line, loc.column);
+fn loc_to_span(loc: lightningcss::rules::Location, source: &str, idx: &LineIndex) -> Span {
+    let offset = idx.line_col_to_offset(source, loc.line, loc.column);
     Span {
         offset,
         length: 0,
