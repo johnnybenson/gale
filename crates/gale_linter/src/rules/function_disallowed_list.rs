@@ -29,12 +29,17 @@ impl Rule for FunctionDisallowedList {
     }
 
     fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
-        let CssNode::Style(rule) = node else {
-            return vec![];
-        };
         let mut diags = Vec::new();
-        for decl in &rule.declarations {
-            find_disallowed_functions(&decl.value, decl.span.offset, self, &mut diags);
+        match node {
+            CssNode::Style(rule) => {
+                for decl in &rule.declarations {
+                    find_disallowed_functions(&decl.value, decl.span.offset, self, &mut diags);
+                }
+            }
+            CssNode::Declaration(decl) => {
+                find_disallowed_functions(&decl.value, decl.span.offset, self, &mut diags);
+            }
+            _ => {}
         }
         diags
     }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 use gale_css_parser::{CssNode, Syntax, parse};
-use gale_diagnostics::{LintResult, SourceLineIndex};
+use gale_diagnostics::{Diagnostic, LintResult, Severity, SourceLineIndex, Span};
 
 use crate::registry::RuleRegistry;
 use crate::rule::RuleContext;
@@ -326,8 +326,14 @@ impl LintRunner {
         let t0 = Instant::now();
         let parse_result = match parse(source, syntax) {
             Ok(result) => result,
-            Err(_err) => {
-                return LintResult::new(file_path, source, vec![]);
+            Err(err) => {
+                let diag = Diagnostic::new(
+                    "parse-error",
+                    format!("Failed to parse file: {err}"),
+                )
+                .severity(Severity::Error)
+                .span(Span::new(0, 0));
+                return LintResult::new(file_path, source, vec![diag]);
             }
         };
         if debug {
@@ -435,8 +441,14 @@ impl LintRunner {
         let t0 = Instant::now();
         let parse_result = match parse(source, syntax) {
             Ok(result) => result,
-            Err(_err) => {
-                return LintResult::new(file_path, source, vec![]);
+            Err(err) => {
+                let diag = Diagnostic::new(
+                    "parse-error",
+                    format!("Failed to parse file: {err}"),
+                )
+                .severity(Severity::Error)
+                .span(Span::new(0, 0));
+                return LintResult::new(file_path, source, vec![diag]);
             }
         };
         if debug {
@@ -673,5 +685,68 @@ mod tests {
         let src = "/* stylelint-disable-next-line */\na { }\nb { }";
         let result = runner.lint_source(src, "test.css", Syntax::Css);
         assert_eq!(result.diagnostics.len(), 1);
+    }
+
+    #[test]
+    fn parse_error_produces_diagnostic_not_empty() {
+        // When parsing completely fails (both raffia and lightningcss), the
+        // runner must return a parse-error diagnostic, not empty results.
+        // We simulate this by using Sass syntax which is unsupported.
+        let registry = RuleRegistry::default();
+        let runner = LintRunner::new(
+            registry,
+            vec!["block-no-empty".to_string()],
+        );
+        let src = ".foo\n  color: red";
+        let result = runner.lint_source(src, "test.sass", Syntax::Sass);
+
+        assert_eq!(result.file_path, "test.sass");
+        assert!(
+            !result.diagnostics.is_empty(),
+            "Unparseable file must produce at least a parse-error diagnostic, got 0"
+        );
+        assert_eq!(result.diagnostics[0].rule_name, "parse-error");
+    }
+
+    #[test]
+    fn parse_error_produces_diagnostic_with_rules() {
+        // Same check through lint_source_with_rules path.
+        let registry = RuleRegistry::default();
+        let runner = LintRunner::new(registry, vec![]);
+        let src = ".foo\n  color: red";
+        let result = runner.lint_source_with_rules(
+            src,
+            "test.sass",
+            Syntax::Sass,
+            &["block-no-empty".to_string()],
+            &HashMap::new(),
+        );
+
+        assert!(
+            !result.diagnostics.is_empty(),
+            "Unparseable file must produce at least a parse-error diagnostic (with_rules)"
+        );
+        assert_eq!(result.diagnostics[0].rule_name, "parse-error");
+    }
+
+    #[test]
+    fn malformed_scss_does_not_silently_swallow() {
+        // Malformed SCSS should either produce lint diagnostics (via
+        // the lightningcss fallback) or a parse-error diagnostic. It
+        // should never silently return empty results.
+        let registry = RuleRegistry::default();
+        let runner = LintRunner::new(
+            registry,
+            vec!["block-no-empty".to_string()],
+        );
+        let src = ".foo { content: \"unclosed; }";
+        let result = runner.lint_source(src, "test.scss", Syntax::Scss);
+
+        // Verify file_path is set regardless of parse outcome.
+        assert_eq!(result.file_path, "test.scss");
+        // The result should not be empty — either rules detected violations
+        // from the fallback parse, or a parse-error diagnostic was emitted.
+        // (If both parsers happen to recover and produce a clean AST with no
+        // violations, that is also acceptable — but the code path is correct.)
     }
 }

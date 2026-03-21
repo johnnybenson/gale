@@ -142,4 +142,35 @@ mod tests {
         let diags = rule.check(&node, &make_context());
         assert!(diags.is_empty());
     }
+
+    #[test]
+    fn detects_important_in_parsed_css_keyframes() {
+        let css = "@keyframes fade { from { opacity: 0 !important; } }";
+        let result = gale_css_parser::parse(css, Syntax::Css).expect("should parse CSS");
+        let rule = KeyframeDeclarationNoImportant;
+        let ctx = make_context();
+        let mut all_diags = Vec::new();
+        for node in &result.nodes {
+            all_diags.extend(rule.check(node, &ctx));
+        }
+        assert_eq!(all_diags.len(), 1, "should detect !important in CSS keyframe");
+    }
+
+    #[test]
+    fn detects_important_in_parsed_scss_keyframes() {
+        let scss = "@keyframes fade { from { opacity: 0 !important; } }";
+        let result = gale_css_parser::parse(scss, Syntax::Scss).expect("should parse SCSS");
+        let rule = KeyframeDeclarationNoImportant;
+        let ctx = RuleContext {
+            file_path: "test.scss",
+            source: scss,
+            syntax: Syntax::Scss,
+            options: None,
+        };
+        let mut all_diags = Vec::new();
+        for node in &result.nodes {
+            all_diags.extend(rule.check(node, &ctx));
+        }
+        assert_eq!(all_diags.len(), 1, "should detect !important in SCSS keyframe");
+    }
 }

@@ -42,26 +42,43 @@ fn collect_selectors(
     for node in nodes {
         match node {
             CssNode::Style(style_rule) => {
-                let selector = style_rule.selector.trim();
-                if seen.contains(selector) {
+                let selector = normalize_selector(style_rule.selector.trim());
+                if seen.contains(&selector) {
                     diagnostics.push(
                         Diagnostic::new(
                             rule.name(),
-                            format!("Unexpected duplicate selector \"{}\"", selector),
+                            format!(
+                                "Unexpected duplicate selector \"{}\"",
+                                style_rule.selector.trim()
+                            ),
                         )
                         .severity(rule.default_severity())
                         .span(Span::new(style_rule.span.offset, style_rule.span.length)),
                     );
                 } else {
-                    seen.insert(selector.to_string());
+                    seen.insert(selector);
                 }
             }
             CssNode::AtRule(at_rule) => {
-                collect_selectors(&at_rule.children, seen, diagnostics, rule);
+                // Use a separate scope for at-rule children so that selectors
+                // inside different at-rules (e.g. @media) don't clash with
+                // top-level selectors.
+                let mut scoped_seen = HashSet::new();
+                collect_selectors(&at_rule.children, &mut scoped_seen, diagnostics, rule);
             }
             _ => {}
         }
     }
+}
+
+/// Normalize a selector for duplicate comparison.
+///
+/// Sorts comma-separated selector lists so that `a, b` and `b, a` are
+/// considered the same. Also trims whitespace around each part.
+fn normalize_selector(selector: &str) -> String {
+    let mut parts: Vec<&str> = selector.split(',').map(|s| s.trim()).collect();
+    parts.sort_unstable();
+    parts.join(", ")
 }
 
 #[cfg(test)]
@@ -140,5 +157,49 @@ mod tests {
         ];
         let diags = rule.check_root(&nodes, &make_context());
         assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn scoped_selectors_in_at_rules_dont_clash() {
+        let rule = NoDuplicateSelectors;
+        let nodes = vec![
+            CssNode::Style(StyleRule {
+                selector: ".foo".to_string(),
+                declarations: vec![],
+                children: vec![],
+                span: ParserSpan::new(0, 10),
+            }),
+            CssNode::AtRule(gale_css_parser::AtRule {
+                name: "media".to_string(),
+                params: "(min-width: 768px)".to_string(),
+                span: ParserSpan::new(11, 50),
+                children: vec![CssNode::Style(StyleRule {
+                    selector: ".foo".to_string(),
+                    declarations: vec![],
+                    children: vec![],
+                    span: ParserSpan::new(30, 10),
+                })],
+            }),
+        ];
+        let diags = rule.check_root(&nodes, &make_context());
+        assert!(
+            diags.is_empty(),
+            "same selector in different scopes should not be flagged"
+        );
+    }
+
+    #[test]
+    fn detects_duplicates_in_parsed_scss() {
+        let scss = ".foo { color: red; }\n.bar { color: blue; }\n.foo { display: block; }";
+        let result = gale_css_parser::parse(scss, Syntax::Scss).expect("should parse SCSS");
+        let rule = NoDuplicateSelectors;
+        let ctx = RuleContext {
+            file_path: "test.scss",
+            source: scss,
+            syntax: Syntax::Scss,
+            options: None,
+        };
+        let diags = rule.check_root(&result.nodes, &ctx);
+        assert_eq!(diags.len(), 1, "should detect duplicate .foo in SCSS");
     }
 }

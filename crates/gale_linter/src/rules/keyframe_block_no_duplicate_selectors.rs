@@ -161,4 +161,35 @@ mod tests {
         let diags = rule.check(&node, &make_context());
         assert!(diags.is_empty());
     }
+
+    #[test]
+    fn detects_duplicates_in_parsed_css_keyframes() {
+        let css = "@keyframes fade { from { opacity: 0; } to { opacity: 1; } from { opacity: 0.5; } }";
+        let result = gale_css_parser::parse(css, Syntax::Css).expect("should parse CSS");
+        let rule = KeyframeBlockNoDuplicateSelectors;
+        let ctx = make_context();
+        let mut all_diags = Vec::new();
+        for node in &result.nodes {
+            all_diags.extend(rule.check(node, &ctx));
+        }
+        assert_eq!(all_diags.len(), 1, "should detect duplicate 'from' in CSS keyframes");
+    }
+
+    #[test]
+    fn detects_duplicates_in_parsed_scss_keyframes() {
+        let scss = "@keyframes fade { from { opacity: 0; } to { opacity: 1; } from { opacity: 0.5; } }";
+        let result = gale_css_parser::parse(scss, Syntax::Scss).expect("should parse SCSS");
+        let rule = KeyframeBlockNoDuplicateSelectors;
+        let ctx = RuleContext {
+            file_path: "test.scss",
+            source: scss,
+            syntax: Syntax::Scss,
+            options: None,
+        };
+        let mut all_diags = Vec::new();
+        for node in &result.nodes {
+            all_diags.extend(rule.check(node, &ctx));
+        }
+        assert_eq!(all_diags.len(), 1, "should detect duplicate 'from' in SCSS keyframes");
+    }
 }

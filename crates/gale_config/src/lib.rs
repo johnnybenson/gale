@@ -246,10 +246,23 @@ impl RuleConfigValue {
                     options: Some(serde_json::Value::Number(n.clone())),
                 }
             }
-            RuleConfigValue::Severity(s) => RuleConfig {
-                severity: Some(parse_severity(s)),
-                options: None,
-            },
+            RuleConfigValue::Severity(s) => {
+                if is_severity_string(s) {
+                    RuleConfig {
+                        severity: Some(parse_severity(s)),
+                        options: None,
+                    }
+                } else {
+                    // Not a known severity — treat as a primary option value.
+                    // e.g. `color-named: "never"` or `color-hex-length: "short"`
+                    // means the rule is enabled at error severity with that
+                    // string as its primary option.
+                    RuleConfig {
+                        severity: Some(Severity::Error),
+                        options: Some(serde_json::Value::String(s.clone())),
+                    }
+                }
+            }
             RuleConfigValue::Array(items) => {
                 let first = items.first();
                 // Check if the first element is a known severity string.
@@ -303,6 +316,14 @@ impl RuleConfigValue {
     }
 }
 
+/// Returns `true` if the string is a known severity keyword.
+fn is_severity_string(s: &str) -> bool {
+    matches!(
+        s.to_lowercase().as_str(),
+        "error" | "warning" | "warn" | "off"
+    )
+}
+
 fn parse_severity(s: &str) -> Severity {
     match s.to_lowercase().as_str() {
         "error" => Severity::Error,
@@ -325,6 +346,7 @@ const ALL_RULE_NAMES: &[&str] = &[
     "block-no-empty",
     "color-hex-case",
     "color-hex-length",
+    "color-named",
     "color-no-invalid-hex",
     "comment-no-empty",
     "custom-property-no-missing-var-function",
@@ -337,13 +359,16 @@ const ALL_RULE_NAMES: &[&str] = &[
     "font-family-no-duplicate-names",
     "font-family-no-missing-generic-family-keyword",
     "function-calc-no-unspaced-operator",
+    "function-linear-gradient-no-nonstandard-direction",
     "function-name-case",
+    "function-url-no-scheme-relative",
     "function-url-quotes",
     "import-notation",
     "keyframe-block-no-duplicate-selectors",
     "keyframe-declaration-no-important",
     "length-zero-no-unit",
     "media-feature-name-no-unknown",
+    "media-feature-name-no-vendor-prefix",
     "media-query-no-invalid",
     "no-descending-specificity",
     "no-duplicate-at-import-rules",
@@ -376,6 +401,9 @@ const ALL_RULE_NAMES: &[&str] = &[
     "scss/operator-no-newline-before",
     "scss/operator-no-unspaced",
     "selector-class-pattern",
+    "selector-max-attribute",
+    "selector-max-universal",
+    "selector-no-vendor-prefix",
     "selector-pseudo-class-no-unknown",
     "selector-pseudo-element-colon-notation",
     "selector-pseudo-element-no-unknown",
@@ -589,10 +617,11 @@ pub fn resolve_preset(name: &str) -> Option<HashMap<String, RuleConfig>> {
             // The real stylelint-config-recommended-scss disables these core rules
             // because SCSS has its own replacements (scss/at-rule-no-unknown, etc.)
             for &rule in &[
+                "annotation-no-unknown",
                 "at-rule-no-unknown",
                 "comment-no-empty",
-                "no-duplicate-selectors",
-                "no-invalid-position-at-import-rule",
+                "function-no-unknown",
+                "media-query-no-invalid",
             ] {
                 rules.insert(
                     rule.to_string(),
@@ -737,10 +766,11 @@ pub fn resolve_preset(name: &str) -> Option<HashMap<String, RuleConfig>> {
             );
             // Disable rules that conflict with SCSS (inherited from recommended-scss)
             for &rule in &[
+                "annotation-no-unknown",
                 "at-rule-no-unknown",
                 "comment-no-empty",
-                "no-duplicate-selectors",
-                "no-invalid-position-at-import-rule",
+                "function-no-unknown",
+                "media-query-no-invalid",
             ] {
                 rules.insert(
                     rule.to_string(),
@@ -3513,4 +3543,5 @@ overrides:
         assert!(!scss_rules.contains_key("no-duplicate-selectors"));
         assert!(!scss_rules.contains_key("comment-no-empty"));
     }
+
 }

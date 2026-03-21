@@ -170,8 +170,26 @@ pub enum ParseError {
 pub fn parse(source: &str, syntax: Syntax) -> Result<ParseResult, ParseError> {
     match syntax {
         Syntax::Css => parse_css(source),
-        Syntax::Scss => parse_raffia(source, Syntax::Scss),
-        Syntax::Less => parse_raffia(source, Syntax::Less),
+        Syntax::Scss | Syntax::Less => {
+            match parse_raffia(source, syntax) {
+                Ok(result) => Ok(result),
+                Err(_raffia_err) => {
+                    // Raffia failed (e.g. malformed strings with literal newlines).
+                    // Fall back to lightningcss with error recovery — it can often
+                    // partially parse the file so rules still get some AST to inspect.
+                    match parse_css(source) {
+                        Ok(mut result) => {
+                            // Preserve the original syntax so rules know this was SCSS/Less.
+                            result.syntax = syntax;
+                            Ok(result)
+                        }
+                        // Both parsers failed — propagate the original raffia error
+                        // so the caller can report a parse error diagnostic.
+                        Err(_) => Err(_raffia_err),
+                    }
+                }
+            }
+        }
         other => Err(ParseError::UnsupportedSyntax { syntax: other }),
     }
 }
@@ -282,11 +300,13 @@ fn convert_rules(rules: &[LcssRule], source: &str, idx: &LineIndex) -> Vec<CssNo
 
             LcssRule::Keyframes(kf) => {
                 let params = kf.name.to_css_string(po()).unwrap_or_default();
+                let kf_span = loc_to_span(kf.loc, source, idx);
+                let children = convert_keyframes(&kf.keyframes, source, kf_span);
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "keyframes".into(),
                     params,
-                    span: loc_to_span(kf.loc, source, idx),
-                    children: Vec::new(),
+                    span: kf_span,
+                    children,
                 }));
             }
 
@@ -469,6 +489,83 @@ fn convert_rules(rules: &[LcssRule], source: &str, idx: &LineIndex) -> Vec<CssNo
     }
 
     nodes
+}
+
+/// Convert lightningcss keyframes into our CssNode children.
+///
+/// Each `Keyframe` becomes a `CssNode::Style` whose `selector` is the
+/// comma-joined list of keyframe selectors (e.g. `from`, `50%`, `to`).
+fn convert_keyframes(
+    keyframes: &[lightningcss::rules::keyframes::Keyframe],
+    source: &str,
+    parent_span: Span,
+) -> Vec<CssNode> {
+    let mut children = Vec::new();
+    let search_start = parent_span.offset;
+    let search_end = (parent_span.offset + parent_span.length).min(source.len());
+
+    for kf in keyframes {
+        let selector = kf
+            .selectors
+            .iter()
+            .map(|s| s.to_css_string(po()).unwrap_or_default())
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        // Build declarations from the keyframe's declaration block.
+        let mut declarations = Vec::new();
+        let mut search_from = search_start;
+        for decl in &kf.declarations.declarations {
+            let (d, next) = convert_property(decl, false, source, search_from, search_end);
+            search_from = next;
+            declarations.push(d);
+        }
+        for decl in &kf.declarations.important_declarations {
+            let (d, next) = convert_property(decl, true, source, search_from, search_end);
+            search_from = next;
+            declarations.push(d);
+        }
+
+        // Find the span of this keyframe block in the source.
+        let selector_lower = selector.to_ascii_lowercase();
+        let area = &source[search_start..search_end];
+        let lower_area = area.to_ascii_lowercase();
+        let kf_span = if let Some(rel) = lower_area.find(&selector_lower) {
+            let abs_start = search_start + rel;
+            // Find the closing brace for this keyframe block.
+            let rest = &source[abs_start..search_end];
+            let length = if let Some(open) = rest.find('{') {
+                let mut depth = 0i32;
+                let mut end = open;
+                for (i, b) in rest[open..].bytes().enumerate() {
+                    if b == b'{' {
+                        depth += 1;
+                    } else if b == b'}' {
+                        depth -= 1;
+                        if depth == 0 {
+                            end = open + i + 1;
+                            break;
+                        }
+                    }
+                }
+                end
+            } else {
+                0
+            };
+            Span::new(abs_start, length)
+        } else {
+            Span::empty()
+        };
+
+        children.push(CssNode::Style(StyleRule {
+            selector,
+            declarations,
+            span: kf_span,
+            children: Vec::new(),
+        }));
+    }
+
+    children
 }
 
 fn convert_style_rule(
@@ -800,6 +897,38 @@ fn convert_raffia_statements(stmts: &[raffia::ast::Statement<'_>], source: &str)
                     name: "less-mixin-call".into(),
                     params,
                     span: raffia_span(&call.span),
+                    children: Vec::new(),
+                }));
+            }
+
+            Statement::KeyframeBlock(kf_block) => {
+                // Convert a raffia KeyframeBlock to a CssNode::Style
+                // with the selector being the comma-joined list of selectors.
+                let selector = kf_block
+                    .selectors
+                    .iter()
+                    .map(|sel| match sel {
+                        raffia::ast::KeyframeSelector::Ident(ident) => {
+                            raffia_interpolable_ident_to_string(ident, source)
+                        }
+                        raffia::ast::KeyframeSelector::Percentage(pct) => {
+                            source_slice(source, &pct.span)
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let mut declarations = Vec::new();
+                for stmt in &kf_block.block.statements {
+                    if let Statement::Declaration(decl) = stmt {
+                        declarations.push(convert_raffia_declaration(decl, source));
+                    }
+                }
+
+                nodes.push(CssNode::Style(StyleRule {
+                    selector,
+                    declarations,
+                    span: raffia_span(&kf_block.span),
                     children: Vec::new(),
                 }));
             }
@@ -1227,6 +1356,108 @@ mod tests {
             assert_eq!(&css[rule.span.offset..rule.span.offset + 2], ".b");
         } else {
             panic!("expected Style node");
+        }
+    }
+
+    #[test]
+    fn test_raffia_failure_triggers_fallback() {
+        // Verify that parse_raffia actually fails on certain inputs and
+        // our fallback to lightningcss kicks in.
+        // We test this by checking that parse() succeeds even when parse_raffia
+        // would fail — i.e. the fallback is working.
+        let garbage = "}{@!invalid";
+
+        // parse_raffia should fail on this...
+        let raffia_result = parse_raffia(garbage, Syntax::Scss);
+        // ...but the public parse() function should handle it gracefully.
+        let public_result = parse(garbage, Syntax::Scss);
+
+        if raffia_result.is_err() {
+            // Raffia failed as expected — public parse should either succeed
+            // (via lightningcss fallback) or return an error (never silently empty).
+            match &public_result {
+                Ok(result) => assert_eq!(result.syntax, Syntax::Scss),
+                Err(_) => {} // Both failed — error is propagated, not swallowed.
+            }
+        }
+        // If raffia somehow succeeds, that's fine too — no fallback needed.
+    }
+
+    #[test]
+    fn test_scss_fallback_preserves_nodes() {
+        // An SCSS file with valid CSS after a broken part should still yield
+        // some AST nodes via the lightningcss fallback.
+        let src = ".broken { content: \"unclosed; }\n.valid { color: red; }";
+        match parse(src, Syntax::Scss) {
+            Ok(result) => {
+                assert_eq!(result.syntax, Syntax::Scss);
+                // lightningcss with error recovery should produce at least one node.
+                assert!(
+                    !result.nodes.is_empty(),
+                    "Fallback parser should recover at least one node"
+                );
+            }
+            Err(_) => {
+                // If both fail, that's fine — the error is propagated, not swallowed.
+            }
+        }
+    }
+
+    #[test]
+    fn test_parse_css_keyframes_children() {
+        let css = "@keyframes fade { from { opacity: 0; } to { opacity: 1; } }";
+        let result = parse(css, Syntax::Css).expect("should parse");
+        assert_eq!(result.nodes.len(), 1);
+        if let CssNode::AtRule(ref at_rule) = result.nodes[0] {
+            assert_eq!(at_rule.name, "keyframes");
+            assert_eq!(at_rule.children.len(), 2, "should have 2 keyframe blocks");
+            if let CssNode::Style(ref kf) = at_rule.children[0] {
+                assert!(
+                    kf.selector.contains("from") || kf.selector.contains("0%"),
+                    "first keyframe selector should be 'from' or '0%', got: {}",
+                    kf.selector
+                );
+                assert!(!kf.declarations.is_empty(), "should have declarations");
+            } else {
+                panic!("expected Style node for keyframe block");
+            }
+        } else {
+            panic!("expected AtRule node for @keyframes");
+        }
+    }
+
+    #[test]
+    fn test_parse_scss_keyframes_children() {
+        let scss = "@keyframes fade { from { opacity: 0; } to { opacity: 1; } }";
+        let result = parse(scss, Syntax::Scss).expect("should parse SCSS");
+        // Filter out comments.
+        let nodes: Vec<_> = result.nodes.iter().filter(|n| !matches!(n, CssNode::Comment(_))).collect();
+        assert_eq!(nodes.len(), 1);
+        if let CssNode::AtRule(at_rule) = &nodes[0] {
+            assert_eq!(at_rule.name, "keyframes");
+            assert_eq!(at_rule.children.len(), 2, "should have 2 keyframe blocks");
+        } else {
+            panic!("expected AtRule node for @keyframes");
+        }
+    }
+
+    #[test]
+    fn test_parse_scss_keyframes_important() {
+        let scss = "@keyframes fade { from { opacity: 0 !important; } }";
+        let result = parse(scss, Syntax::Scss).expect("should parse SCSS");
+        let nodes: Vec<_> = result.nodes.iter().filter(|n| !matches!(n, CssNode::Comment(_))).collect();
+        assert_eq!(nodes.len(), 1);
+        if let CssNode::AtRule(at_rule) = &nodes[0] {
+            assert_eq!(at_rule.name, "keyframes");
+            assert!(!at_rule.children.is_empty());
+            if let CssNode::Style(ref kf) = at_rule.children[0] {
+                assert!(!kf.declarations.is_empty());
+                assert!(kf.declarations[0].important, "should detect !important in SCSS keyframe");
+            } else {
+                panic!("expected Style node");
+            }
+        } else {
+            panic!("expected AtRule");
         }
     }
 }

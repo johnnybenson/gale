@@ -27,11 +27,13 @@ impl Rule for DeclarationPropertyValueDisallowedList {
     }
 
     fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
-        let CssNode::Style(rule) = node else {
-            return vec![];
-        };
         let mut diags = Vec::new();
-        for decl in &rule.declarations {
+        let declarations: Vec<&gale_css_parser::Declaration> = match node {
+            CssNode::Style(rule) => rule.declarations.iter().collect(),
+            CssNode::Declaration(decl) => vec![decl],
+            _ => return vec![],
+        };
+        for decl in declarations {
             let prop_lower = decl.property.to_ascii_lowercase();
             let val_lower = decl.value.to_ascii_lowercase();
             for &(disallowed_prop, disallowed_val) in DISALLOWED_PAIRS {

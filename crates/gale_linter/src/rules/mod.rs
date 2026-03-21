@@ -27,7 +27,9 @@ pub mod font_family_no_missing_generic_family_keyword;
 pub mod font_weight_notation;
 pub mod function_calc_no_unspaced_operator;
 pub mod function_disallowed_list;
+pub mod function_linear_gradient_no_nonstandard_direction;
 pub mod function_name_case;
+pub mod function_url_no_scheme_relative;
 pub mod function_url_quotes;
 pub mod hue_degree_notation;
 pub mod import_notation;
@@ -37,6 +39,7 @@ pub mod length_zero_no_unit;
 pub mod max_line_length;
 pub mod max_nesting_depth;
 pub mod media_feature_name_no_unknown;
+pub mod media_feature_name_no_vendor_prefix;
 pub mod media_feature_range_notation;
 pub mod media_query_no_invalid;
 pub mod no_descending_specificity;
@@ -58,13 +61,16 @@ pub mod property_no_vendor_prefix;
 pub mod rule_empty_line_before;
 pub mod selector_class_pattern;
 pub mod selector_disallowed_list;
+pub mod selector_max_attribute;
 pub mod selector_max_class;
 pub mod selector_max_compound_selectors;
 pub mod selector_max_id;
 pub mod selector_max_specificity;
 pub mod selector_max_type;
+pub mod selector_max_universal;
 pub mod selector_nested_pattern;
 pub mod selector_no_qualifying_type;
+pub mod selector_no_vendor_prefix;
 pub mod selector_not_notation;
 pub mod selector_pseudo_class_no_unknown;
 pub mod selector_pseudo_element_colon_notation;
@@ -143,7 +149,11 @@ pub fn register_all(registry: &mut RuleRegistry) {
         function_calc_no_unspaced_operator::FunctionCalcNoUnspacedOperator,
     ));
     registry.register(Box::new(function_disallowed_list::FunctionDisallowedList));
+    registry.register(Box::new(function_linear_gradient_no_nonstandard_direction::FunctionLinearGradientNoNonstandardDirection));
     registry.register(Box::new(function_name_case::FunctionNameCase));
+    registry.register(Box::new(
+        function_url_no_scheme_relative::FunctionUrlNoSchemeRelative,
+    ));
     registry.register(Box::new(function_url_quotes::FunctionUrlQuotes));
     registry.register(Box::new(hue_degree_notation::HueDegreeNotation));
     registry.register(Box::new(import_notation::ImportNotation));
@@ -158,6 +168,9 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(max_nesting_depth::MaxNestingDepth));
     registry.register(Box::new(
         media_feature_name_no_unknown::MediaFeatureNameNoUnknown,
+    ));
+    registry.register(Box::new(
+        media_feature_name_no_vendor_prefix::MediaFeatureNameNoVendorPrefix,
     ));
     registry.register(Box::new(
         media_feature_range_notation::MediaFeatureRangeNotation,
@@ -192,6 +205,7 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(rule_empty_line_before::RuleEmptyLineBefore));
     registry.register(Box::new(selector_class_pattern::SelectorClassPattern));
     registry.register(Box::new(selector_disallowed_list::SelectorDisallowedList));
+    registry.register(Box::new(selector_max_attribute::SelectorMaxAttribute));
     registry.register(Box::new(selector_max_class::SelectorMaxClass));
     registry.register(Box::new(
         selector_max_compound_selectors::SelectorMaxCompoundSelectors,
@@ -199,9 +213,13 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(selector_max_id::SelectorMaxId));
     registry.register(Box::new(selector_max_specificity::SelectorMaxSpecificity));
     registry.register(Box::new(selector_max_type::SelectorMaxType));
+    registry.register(Box::new(selector_max_universal::SelectorMaxUniversal));
     registry.register(Box::new(selector_nested_pattern::SelectorNestedPattern));
     registry.register(Box::new(
         selector_no_qualifying_type::SelectorNoQualifyingType,
+    ));
+    registry.register(Box::new(
+        selector_no_vendor_prefix::SelectorNoVendorPrefix,
     ));
     registry.register(Box::new(selector_not_notation::SelectorNotNotation));
     registry.register(Box::new(
