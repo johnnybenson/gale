@@ -161,8 +161,12 @@ pub fn run() -> Result<()> {
     }
 
     // Format & print.
+    let t_fmt = std::time::Instant::now();
     let formatter = create_formatter(&cli.formatter);
     let output = gale_formatter::Formatter::format(&*formatter, &results);
+    if std::env::var("GALE_DEBUG_PERF").as_deref() == Ok("1") {
+        eprintln!("[perf] format: {:.3}s", t_fmt.elapsed().as_secs_f64());
+    }
     if !output.is_empty() {
         print!("{output}");
     }

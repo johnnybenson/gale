@@ -1,0 +1,23 @@
+{
+  "name": "gale-lint",
+  "version": "0.1.0",
+  "description": "An extremely fast CSS linter, written in Rust",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LyricalString/gale"
+  },
+  "keywords": ["css", "linter", "stylelint", "rust", "fast"],
+  "bin": {
+    "gale": "bin/gale"
+  },
+  "files": ["bin/", "README.md"],
+  "optionalDependencies": {
+    "@gale-lint/cli-darwin-arm64": "0.1.0",
+    "@gale-lint/cli-darwin-x64": "0.1.0",
+    "@gale-lint/cli-linux-x64": "0.1.0",
+    "@gale-lint/cli-linux-arm64": "0.1.0",
+    "@gale-lint/cli-win32-x64": "0.1.0",
+    "@gale-lint/cli-win32-arm64": "0.1.0"
+  }
+}

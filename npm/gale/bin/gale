@@ -1,0 +1,60 @@
+#!/usr/bin/env node
+
+"use strict";
+
+const { execFileSync } = require("child_process");
+const { resolve } = require("path");
+
+const PLATFORMS = {
+  "darwin arm64": "@gale-lint/cli-darwin-arm64/gale",
+  "darwin x64": "@gale-lint/cli-darwin-x64/gale",
+  "linux x64": "@gale-lint/cli-linux-x64/gale",
+  "linux arm64": "@gale-lint/cli-linux-arm64/gale",
+  "win32 x64": "@gale-lint/cli-win32-x64/gale.exe",
+  "win32 arm64": "@gale-lint/cli-win32-arm64/gale.exe",
+};
+
+function getGaleBinary() {
+  // Allow override via environment variable
+  const envBinary = process.env.GALE_BINARY;
+  if (envBinary) {
+    return envBinary;
+  }
+
+  const platformKey = `${process.platform} ${process.arch}`;
+  const packagePath = PLATFORMS[platformKey];
+
+  if (!packagePath) {
+    console.error(
+      `Gale does not support your platform yet: ${process.platform} ${process.arch}.\n` +
+        "You can set the GALE_BINARY environment variable to point to a Gale binary."
+    );
+    process.exit(1);
+  }
+
+  try {
+    return require.resolve(packagePath);
+  } catch {
+    console.error(
+      `Could not find the Gale binary for your platform (${platformKey}).\n` +
+        "This likely means the optional dependency was not installed.\n\n" +
+        "Try reinstalling with:\n" +
+        "  npm install gale-lint\n\n" +
+        "Or set the GALE_BINARY environment variable to point to a Gale binary."
+    );
+    process.exit(1);
+  }
+}
+
+const binaryPath = getGaleBinary();
+
+try {
+  execFileSync(binaryPath, process.argv.slice(2), {
+    stdio: "inherit",
+  });
+} catch (error) {
+  if (error.status !== undefined) {
+    process.exit(error.status);
+  }
+  throw error;
+}
