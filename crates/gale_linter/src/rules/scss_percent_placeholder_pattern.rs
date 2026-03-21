@@ -4,7 +4,7 @@ use regex::Regex;
 
 use crate::rule::{Rule, RuleContext};
 
-const DEFAULT_PATTERN: &str = "^[a-z][a-z0-9]*(-[a-z0-9]+)*$";
+const DEFAULT_PATTERN: &str = "^[a-z][a-z0-9]*(-[a-z0-9]+)*-?$";
 
 /// Specify a pattern for `%placeholder` selectors.
 ///
@@ -110,6 +110,15 @@ mod tests {
         assert!(
             ScssPercentPlaceholderPattern
                 .check(&style("%my-placeholder"), &scss_ctx())
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn allows_trailing_hyphen() {
+        assert!(
+            ScssPercentPlaceholderPattern
+                .check(&style("%responsive-container-"), &scss_ctx())
                 .is_empty()
         );
     }

@@ -81,9 +81,36 @@ static DEPRECATED_GLOBAL_FUNCTIONS: &[&str] = &[
     "zip",
 ];
 
+/// Functions that are also valid CSS natives and should NOT be flagged.
+/// These are Sass functions that overlap with CSS math/color/filter functions.
+static CSS_NATIVE_FUNCTIONS: &[&str] = &[
+    "abs",
+    "alpha",
+    "blue",
+    "ceil",
+    "floor",
+    "grayscale",
+    "green",
+    "hue",
+    "invert",
+    "max",
+    "min",
+    "percentage",
+    "red",
+    "round",
+    "saturate",
+];
+
 fn is_deprecated_global(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     DEPRECATED_GLOBAL_FUNCTIONS
+        .binary_search(&lower.as_str())
+        .is_ok()
+}
+
+fn is_css_native(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    CSS_NATIVE_FUNCTIONS
         .binary_search(&lower.as_str())
         .is_ok()
 }
@@ -117,8 +144,26 @@ impl Rule for ScssNoGlobalFunctionNames {
         let bytes = value.as_bytes();
         let len = bytes.len();
         let mut i = 0;
+        let mut in_single_quote = false;
+        let mut in_double_quote = false;
 
         while i < len {
+            // Track string context to skip function names inside strings
+            if bytes[i] == b'"' && !in_single_quote {
+                in_double_quote = !in_double_quote;
+                i += 1;
+                continue;
+            }
+            if bytes[i] == b'\'' && !in_double_quote {
+                in_single_quote = !in_single_quote;
+                i += 1;
+                continue;
+            }
+            if in_single_quote || in_double_quote {
+                i += 1;
+                continue;
+            }
+
             // Skip non-alpha/hyphen
             if !bytes[i].is_ascii_alphabetic() && bytes[i] != b'-' {
                 i += 1;
@@ -136,9 +181,14 @@ impl Rule for ScssNoGlobalFunctionNames {
             // Check if followed by `(`
             if i < len && bytes[i] == b'(' {
                 let func_name = &value[start..i];
-                if is_deprecated_global(func_name) {
-                    // Calculate the span offset within the declaration value.
-                    // decl.span covers the whole declaration; we report on the decl span.
+
+                // Skip namespaced calls (e.g., `math.div(`, `map.get(`)
+                let is_namespaced = start > 0 && bytes[start - 1] == b'.';
+
+                if !is_namespaced
+                    && is_deprecated_global(func_name)
+                    && !is_css_native(func_name)
+                {
                     diagnostics.push(
                         Diagnostic::new(
                             self.name(),
@@ -219,7 +269,34 @@ mod tests {
     fn allows_module_function() {
         // `color.adjust()` is not a deprecated global.
         let d = ScssNoGlobalFunctionNames.check(&decl("color.adjust(red, $red: 10)"), &scss_ctx());
-        // "adjust" alone without hyphen is not in the list (only `adjust-color`).
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn allows_namespaced_map_get() {
+        // `map.get()` should not be flagged — it uses a namespace
+        let d = ScssNoGlobalFunctionNames.check(&decl("map.get($map, key)"), &scss_ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn allows_css_native_min_max() {
+        let d = ScssNoGlobalFunctionNames.check(&decl("min(100px, 50vw)"), &scss_ctx());
+        assert!(d.is_empty());
+        let d = ScssNoGlobalFunctionNames.check(&decl("max(100px, 50vw)"), &scss_ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn allows_css_native_round() {
+        let d = ScssNoGlobalFunctionNames.check(&decl("round(1.5)"), &scss_ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn allows_function_in_string() {
+        let d = ScssNoGlobalFunctionNames
+            .check(&decl("\"use map-get() instead\""), &scss_ctx());
         assert!(d.is_empty());
     }
 

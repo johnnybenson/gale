@@ -3,6 +3,22 @@ use gale_diagnostics::{Diagnostic, Severity, Span};
 
 use crate::rule::{Rule, RuleContext};
 
+/// Returns `true` if `content` (the text after `//`) looks like a decorative
+/// separator — i.e. it consists entirely of a single repeated non-alphanumeric,
+/// non-whitespace character (e.g. `====`, `----`, `****`, `####`).
+fn is_separator_comment(content: &str) -> bool {
+    let mut chars = content.chars();
+    let first = match chars.next() {
+        Some(c) => c,
+        None => return false,
+    };
+    // The repeated character must not be alphanumeric or whitespace.
+    if first.is_alphanumeric() || first.is_whitespace() {
+        return false;
+    }
+    chars.all(|c| c == first)
+}
+
 /// Require or disallow whitespace after `//` in SCSS line comments.
 ///
 /// By default expects `"always"` — a space after `//`:
@@ -57,6 +73,23 @@ impl Rule for ScssDoubleSlashCommentWhitespaceInside {
 
         // Empty comments (`//` with nothing after) are always allowed.
         if content.is_empty() {
+            return vec![];
+        }
+
+        // Triple-slash comments (`///`) are SassDoc and should be ignored.
+        if content.starts_with('/') {
+            return vec![];
+        }
+
+        // `//!` comments are special directive comments and should be ignored.
+        if content.starts_with('!') {
+            return vec![];
+        }
+
+        // Comment separators like `//====`, `//----`, `//****`, `//####`, etc.
+        // If the content after `//` consists entirely of a single repeated
+        // non-alphanumeric, non-whitespace character, treat it as a separator.
+        if is_separator_comment(content) {
             return vec![];
         }
 
@@ -152,6 +185,62 @@ mod tests {
         let d = ScssDoubleSlashCommentWhitespaceInside
             .check(&block_comment("/*comment*/"), &scss_ctx());
         assert!(d.is_empty());
+    }
+
+    #[test]
+    fn allows_triple_slash_sassdoc() {
+        let d =
+            ScssDoubleSlashCommentWhitespaceInside.check(&line_comment("/// @param"), &scss_ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn allows_triple_slash_bare() {
+        let d = ScssDoubleSlashCommentWhitespaceInside.check(&line_comment("///"), &scss_ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn allows_bang_comment() {
+        let d =
+            ScssDoubleSlashCommentWhitespaceInside.check(&line_comment("//! important"), &scss_ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn allows_separator_equals() {
+        let d = ScssDoubleSlashCommentWhitespaceInside
+            .check(&line_comment("//========"), &scss_ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn allows_separator_dashes() {
+        let d = ScssDoubleSlashCommentWhitespaceInside
+            .check(&line_comment("//--------"), &scss_ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn allows_separator_stars() {
+        let d = ScssDoubleSlashCommentWhitespaceInside
+            .check(&line_comment("//****"), &scss_ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn allows_separator_hashes() {
+        let d = ScssDoubleSlashCommentWhitespaceInside
+            .check(&line_comment("//####"), &scss_ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn still_reports_regular_no_space() {
+        let d = ScssDoubleSlashCommentWhitespaceInside
+            .check(&line_comment("//TODO fix this"), &scss_ctx());
+        assert_eq!(d.len(), 1);
+        assert!(d[0].message.contains("Expected whitespace"));
     }
 
     #[test]

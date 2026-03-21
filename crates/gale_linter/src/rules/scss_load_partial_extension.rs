@@ -37,7 +37,7 @@ impl Rule for ScssLoadPartialExtension {
             return vec![];
         }
 
-        for ext in &[".scss", ".sass", ".css"] {
+        for ext in &[".scss", ".sass"] {
             if path.ends_with(ext) {
                 return vec![
                     Diagnostic::new(
@@ -106,9 +106,9 @@ mod tests {
     }
 
     #[test]
-    fn reports_css_extension() {
+    fn allows_css_extension() {
         let d = ScssLoadPartialExtension.check(&use_rule("\"reset.css\""), &scss_ctx());
-        assert_eq!(d.len(), 1);
+        assert!(d.is_empty());
     }
 
     #[test]

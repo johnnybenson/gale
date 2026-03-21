@@ -36,6 +36,7 @@ GALE_ROOT = SCRIPT_DIR.parent.parent  # gale/
 # Known Gale-supported rules (core Stylelint rules implemented in Gale).
 # Used to filter Stylelint output so we only compare what Gale can check.
 GALE_RULES = {
+    # Core Stylelint rules
     "alpha-value-notation", "annotation-no-unknown", "at-rule-no-unknown",
     "at-rule-no-vendor-prefix", "block-no-empty", "color-hex-case",
     "color-hex-length", "color-named", "color-no-invalid-hex",
@@ -66,6 +67,26 @@ GALE_RULES = {
     "selector-pseudo-element-no-unknown", "selector-type-no-unknown",
     "shorthand-property-no-redundant-values", "string-no-newline",
     "unit-no-unknown", "value-keyword-case", "value-no-vendor-prefix",
+    # stylelint-order plugin rules
+    "order/order", "order/properties-order", "order/properties-alphabetical-order",
+    # stylelint-scss plugin rules
+    "scss/at-else-closing-brace-newline-after", "scss/at-else-closing-brace-space-after",
+    "scss/at-extend-no-missing-placeholder", "scss/at-function-pattern",
+    "scss/at-if-closing-brace-newline-after", "scss/at-if-closing-brace-space-after",
+    "scss/at-if-no-null", "scss/at-import-partial-extension",
+    "scss/at-mixin-argumentless-call-parentheses", "scss/at-mixin-pattern",
+    "scss/at-rule-no-unknown", "scss/comment-no-empty",
+    "scss/declaration-nested-properties", "scss/declaration-nested-properties-no-divided-groups",
+    "scss/dollar-variable-colon-space-after", "scss/dollar-variable-colon-space-before",
+    "scss/dollar-variable-no-missing-interpolation", "scss/dollar-variable-pattern",
+    "scss/double-slash-comment-whitespace-inside", "scss/function-no-unknown",
+    "scss/function-quote-no-quoted-strings-inside", "scss/function-unquote-no-unquoted-strings-inside",
+    "scss/load-no-partial-leading-underscore", "scss/load-partial-extension",
+    "scss/no-duplicate-dollar-variables", "scss/no-duplicate-mixins",
+    "scss/no-global-function-names", "scss/operator-no-newline-after",
+    "scss/operator-no-newline-before", "scss/operator-no-unspaced",
+    "scss/partial-no-import", "scss/percent-placeholder-pattern",
+    "scss/selector-no-redundant-nesting-selector",
 }
 
 # ---------------------------------------------------------------------------
