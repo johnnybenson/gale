@@ -8,7 +8,7 @@
 # and produces a markdown results table.
 #
 # Usage:
-#   ./benchmarks/benchmark.sh              # Full benchmark (Bootstrap + Gutenberg)
+#   ./benchmarks/benchmark.sh              # Full benchmark (all 9 repos)
 #   ./benchmarks/benchmark.sh bootstrap    # Single repo
 #   ./benchmarks/benchmark.sh --help       # Show help
 #
@@ -23,7 +23,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR/.."
-CLONES_DIR="$SCRIPT_DIR/.repos"
+# Prefer the differential test clones to avoid re-downloading
+DIFF_CLONES_DIR="$PROJECT_DIR/tests/differential/.clones"
+if [ -d "$DIFF_CLONES_DIR" ]; then
+  CLONES_DIR="$DIFF_CLONES_DIR"
+else
+  CLONES_DIR="$SCRIPT_DIR/.repos"
+fi
 RESULTS_FILE="$SCRIPT_DIR/results.md"
 GALE_BIN="$PROJECT_DIR/target/release/gale"
 
@@ -33,7 +39,14 @@ MIN_RUNS=10
 # Test repositories: name|repo|branch|glob_pattern|search_dir
 REPOS=(
   "bootstrap|twbs/bootstrap|main|scss/**/*.scss|scss"
+  "carbon|carbon-design-system/carbon|main|packages/**/*.scss|packages"
+  "freecodecamp|freeCodeCamp/freeCodeCamp|main|client/**/*.css|client"
+  "grafana|grafana/grafana|main|public/**/*.{css,scss}|public"
+  "govuk-frontend|alphagov/govuk-frontend|main|packages/**/*.scss|packages"
   "gutenberg|wordpress/gutenberg|trunk|packages/**/*.scss|packages"
+  "material-ui|mui/material-ui|master|packages/**/*.css|packages"
+  "patternfly|patternfly/patternfly|main|src/**/*.scss|src"
+  "primer-css|primer/css|main|src/**/*.scss|src"
 )
 
 # ---------------------------------------------------------------------------
@@ -87,11 +100,9 @@ install_deps() {
 
 count_files() {
   local dir="$1"
-  local pattern="$2"
+  local search_dir="$2"
   # Use find to count matching files (portable)
-  local search_subdir
-  search_subdir=$(echo "$pattern" | cut -d'/' -f1)
-  find "$dir/$search_subdir" -name "*.scss" -o -name "*.css" 2>/dev/null | grep -v node_modules | wc -l | tr -d ' '
+  find "$dir/$search_dir" -not -path "*/node_modules/*" -not -path "*/.git/*" \( -name "*.scss" -o -name "*.css" -o -name "*.less" \) 2>/dev/null | wc -l | tr -d ' '
 }
 
 # ---------------------------------------------------------------------------
@@ -199,7 +210,7 @@ run_benchmark_for_repo() {
 
   # Count files
   local file_count
-  file_count=$(count_files "$clone_dir" "$glob_pattern")
+  file_count=$(count_files "$clone_dir" "$search_dir")
   echo "    Files matching pattern: $file_count"
 
   # Run hyperfine
@@ -266,8 +277,8 @@ run_parity_test() {
   local stylelint_tmp="$SCRIPT_DIR/.parity-stylelint-${name}.json"
   local gale_tmp="$SCRIPT_DIR/.parity-gale-${name}.json"
 
-  (cd "$clone_dir" && "$stylelint_bin" "$glob_pattern" --formatter json --quiet 2>/dev/null || true) > "$stylelint_tmp"
-  (cd "$clone_dir" && "$GALE_BIN" "$glob_pattern" --formatter json --quiet 2>/dev/null || true) > "$gale_tmp"
+  (cd "$clone_dir" && "$stylelint_bin" "$glob_pattern" --formatter json 2>/dev/null || true) > "$stylelint_tmp"
+  (cd "$clone_dir" && "$GALE_BIN" "$glob_pattern" --formatter json 2>/dev/null || true) > "$gale_tmp"
 
   # Compare using Python for robust JSON diffing
   local parity_result
@@ -297,38 +308,104 @@ def parse_warnings(path):
 stylelint_w = parse_warnings(sys.argv[1])
 gale_w = parse_warnings(sys.argv[2])
 
-# Only compare rules that Gale implements
+# Only compare rules that Gale implements (all 161 from ALL_RULE_NAMES)
 gale_rules = {
-    "alpha-value-notation", "annotation-no-unknown", "at-rule-no-unknown",
-    "at-rule-no-vendor-prefix", "block-no-empty", "color-hex-case",
-    "color-hex-length", "color-named", "color-no-invalid-hex",
-    "comment-empty-line-before", "comment-no-empty",
+    "alpha-value-notation", "annotation-no-unknown",
+    "at-rule-allowed-list", "at-rule-descriptor-no-unknown",
+    "at-rule-descriptor-value-no-unknown", "at-rule-disallowed-list",
+    "at-rule-empty-line-before", "at-rule-no-deprecated",
+    "at-rule-no-unknown", "at-rule-no-vendor-prefix",
+    "at-rule-prelude-no-invalid", "at-rule-property-required-list",
+    "block-no-empty", "block-no-redundant-nested-style-rules",
+    "color-function-alias-notation", "color-function-notation",
+    "color-hex-alpha", "color-hex-case", "color-hex-length",
+    "color-named", "color-no-hex", "color-no-invalid-hex",
+    "comment-empty-line-before", "comment-no-empty", "comment-pattern",
+    "comment-whitespace-inside", "comment-word-disallowed-list",
+    "container-name-pattern", "custom-media-pattern",
+    "custom-property-empty-line-before",
     "custom-property-no-missing-var-function", "custom-property-pattern",
     "declaration-block-no-duplicate-custom-properties",
     "declaration-block-no-duplicate-properties",
     "declaration-block-no-redundant-longhand-properties",
     "declaration-block-no-shorthand-property-overrides",
+    "declaration-block-single-line-max-declarations",
     "declaration-empty-line-before", "declaration-no-important",
+    "declaration-property-unit-allowed-list",
+    "declaration-property-unit-disallowed-list",
+    "declaration-property-value-allowed-list",
+    "declaration-property-value-disallowed-list",
+    "declaration-property-value-keyword-no-deprecated",
+    "declaration-property-value-no-unknown",
+    "display-notation", "font-family-name-quotes",
     "font-family-no-duplicate-names",
     "font-family-no-missing-generic-family-keyword",
-    "function-calc-no-unspaced-operator", "function-name-case",
-    "function-url-quotes", "import-notation",
+    "font-weight-notation", "function-allowed-list",
+    "function-calc-no-unspaced-operator", "function-disallowed-list",
+    "function-linear-gradient-no-nonstandard-direction",
+    "function-name-case", "function-no-unknown",
+    "function-url-no-scheme-relative", "function-url-quotes",
+    "function-url-scheme-allowed-list", "function-url-scheme-disallowed-list",
+    "hue-degree-notation", "import-notation",
     "keyframe-block-no-duplicate-selectors",
-    "keyframe-declaration-no-important", "length-zero-no-unit",
-    "max-nesting-depth", "media-feature-name-no-unknown",
-    "media-query-no-invalid", "no-descending-specificity",
-    "no-duplicate-at-import-rules", "no-duplicate-selectors",
-    "no-empty-source", "no-invalid-double-slash-comments",
-    "no-invalid-position-at-import-rule", "no-invalid-position-declaration",
-    "no-irregular-whitespace", "no-unknown-animations",
-    "number-max-precision", "property-no-unknown", "property-no-vendor-prefix",
-    "rule-empty-line-before", "selector-class-pattern",
-    "selector-max-compound-selectors", "selector-max-id",
-    "selector-no-qualifying-type", "selector-pseudo-class-no-unknown",
+    "keyframe-declaration-no-important", "keyframe-selector-notation",
+    "keyframes-name-pattern", "layer-name-pattern",
+    "length-zero-no-unit", "lightness-notation",
+    "max-line-length", "max-nesting-depth",
+    "media-feature-name-allowed-list", "media-feature-name-disallowed-list",
+    "media-feature-name-no-unknown", "media-feature-name-no-vendor-prefix",
+    "media-feature-name-unit-allowed-list",
+    "media-feature-name-value-allowed-list",
+    "media-feature-name-value-no-unknown", "media-feature-range-notation",
+    "media-query-no-invalid", "media-type-no-deprecated",
+    "named-grid-areas-no-invalid",
+    "nesting-selector-no-missing-scoping-root",
+    "no-descending-specificity", "no-duplicate-at-import-rules",
+    "no-duplicate-selectors", "no-empty-source",
+    "no-invalid-double-slash-comments",
+    "no-invalid-position-at-import-rule",
+    "no-invalid-position-declaration", "no-irregular-whitespace",
+    "no-unknown-animations", "number-leading-zero", "number-max-precision",
+    "order/properties-alphabetical-order", "order/properties-order",
+    "property-allowed-list", "property-disallowed-list",
+    "property-no-deprecated", "property-no-unknown",
+    "property-no-vendor-prefix", "rule-empty-line-before",
+    "rule-nesting-at-rule-required-list",
+    "rule-selector-property-disallowed-list",
+    "scss/at-extend-no-missing-placeholder", "scss/at-if-no-null",
+    "scss/at-rule-no-unknown", "scss/comment-no-empty",
+    "scss/declaration-nested-properties-no-divided-groups",
+    "scss/dollar-variable-no-missing-interpolation",
+    "scss/function-quote-no-quoted-strings-inside",
+    "scss/function-unquote-no-unquoted-strings-inside",
+    "scss/load-no-partial-leading-underscore", "scss/load-partial-extension",
+    "scss/no-duplicate-mixins", "scss/no-global-function-names",
+    "scss/operator-no-newline-after", "scss/operator-no-newline-before",
+    "scss/operator-no-unspaced", "selector-anb-no-unmatchable",
+    "selector-attribute-name-disallowed-list",
+    "selector-attribute-operator-allowed-list",
+    "selector-attribute-operator-disallowed-list",
+    "selector-attribute-quotes", "selector-class-pattern",
+    "selector-combinator-allowed-list", "selector-combinator-disallowed-list",
+    "selector-disallowed-list", "selector-id-pattern",
+    "selector-max-attribute", "selector-max-class",
+    "selector-max-combinators", "selector-max-compound-selectors",
+    "selector-max-id", "selector-max-pseudo-class",
+    "selector-max-specificity", "selector-max-type",
+    "selector-max-universal", "selector-nested-pattern",
+    "selector-no-qualifying-type", "selector-no-vendor-prefix",
+    "selector-not-notation", "selector-pseudo-class-allowed-list",
+    "selector-pseudo-class-disallowed-list",
+    "selector-pseudo-class-no-unknown",
+    "selector-pseudo-element-allowed-list",
     "selector-pseudo-element-colon-notation",
-    "selector-pseudo-element-no-unknown", "selector-type-no-unknown",
+    "selector-pseudo-element-disallowed-list",
+    "selector-pseudo-element-no-unknown", "selector-type-case",
+    "selector-type-no-unknown",
     "shorthand-property-no-redundant-values", "string-no-newline",
-    "unit-no-unknown", "value-keyword-case", "value-no-vendor-prefix",
+    "string-quotes", "syntax-string-no-invalid", "time-min-milliseconds",
+    "unit-allowed-list", "unit-disallowed-list", "unit-no-unknown",
+    "value-keyword-case", "value-no-vendor-prefix",
 }
 
 stylelint_filtered = {w for w in stylelint_w if w[3] in gale_rules}
@@ -428,7 +505,8 @@ usage() {
   echo ""
   echo "Run Gale vs Stylelint benchmarks on real-world repositories."
   echo ""
-  echo "Repos:    bootstrap, gutenberg (default: all)"
+  echo "Repos:    bootstrap, carbon, freecodecamp, grafana, govuk-frontend,"
+  echo "          gutenberg, material-ui, patternfly, primer-css (default: all)"
   echo ""
   echo "Options:"
   echo "  --help          Show this help"
@@ -497,7 +575,7 @@ main() {
       done
     done
     if [ ${#repos_to_run[@]} -eq 0 ]; then
-      error "No matching repos found. Available: bootstrap, gutenberg"
+      error "No matching repos found. Available: bootstrap, carbon, freecodecamp, grafana, govuk-frontend, gutenberg, material-ui, patternfly, primer-css"
     fi
   else
     repos_to_run=("${REPOS[@]}")

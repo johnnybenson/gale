@@ -146,6 +146,11 @@ fn build_explicit_ignore_matcher(
     builder.build().ok()
 }
 
+/// Returns `true` if the string contains glob meta-characters (`*`, `?`, `{`, `[`).
+fn is_glob_pattern(s: &str) -> bool {
+    s.contains('*') || s.contains('?') || s.contains('{') || s.contains('[')
+}
+
 fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> {
     let mut files: Vec<PathBuf> = Vec::new();
 
@@ -175,6 +180,127 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
         .collect();
 
     for pattern in paths {
+        // If the argument contains glob meta-characters, use the `ignore`
+        // crate's `WalkBuilder` (same as for directory walks) so that
+        // `.gitignore`, `.galeignore`, `.stylelintignore`, and default
+        // `node_modules` exclusion are all respected.  The glob pattern is
+        // compiled via `globset` and used as a post-filter on the walked
+        // paths.
+        if is_glob_pattern(pattern) {
+            // Compile the glob pattern for matching against walked paths.
+            // Use `literal_separator(true)` so that `*` does not match `/`,
+            // preserving standard glob semantics where `*.css` only matches
+            // files in the current directory while `**/*.css` matches
+            // recursively.
+            let glob_matcher = match globset::GlobBuilder::new(pattern)
+                .literal_separator(true)
+                .build()
+            {
+                Ok(g) => g.compile_matcher(),
+                Err(err) => {
+                    eprintln!("Warning: invalid glob pattern '{pattern}': {err}");
+                    continue;
+                }
+            };
+
+            // Determine the walk root: use the longest literal prefix of the
+            // pattern (before the first meta-character).  Fall back to "."
+            // when the pattern starts with a meta-character (e.g. `**/*.css`).
+            let walk_root = {
+                let first_meta = pattern
+                    .find(|c: char| c == '*' || c == '?' || c == '{' || c == '[')
+                    .unwrap_or(pattern.len());
+                let prefix = &pattern[..first_meta];
+                let root = Path::new(prefix)
+                    .parent()
+                    .unwrap_or_else(|| Path::new("."));
+                if root.as_os_str().is_empty() {
+                    PathBuf::from(".")
+                } else {
+                    root.to_path_buf()
+                }
+            };
+
+            let mut builder = WalkBuilder::new(&walk_root);
+            builder.hidden(false);
+
+            if opts.no_ignore {
+                builder.git_ignore(false);
+                builder.git_global(false);
+                builder.git_exclude(false);
+            } else {
+                builder.git_ignore(true);
+                builder.add_custom_ignore_filename(".galeignore");
+                builder.add_custom_ignore_filename(".stylelintignore");
+
+                if let Some(ignore_file) = opts.ignore_path {
+                    if ignore_file.exists() {
+                        if let Some(err) = builder.add_ignore(ignore_file) {
+                            eprintln!(
+                                "Warning: failed to load ignore file {}: {err}",
+                                ignore_file.display()
+                            );
+                        }
+                    }
+                }
+
+                if !opts.ignore_patterns.is_empty() {
+                    let mut overrides =
+                        ignore::overrides::OverrideBuilder::new(&walk_root);
+                    for pat in opts.ignore_patterns {
+                        if let Err(err) = overrides.add(&format!("!{pat}")) {
+                            eprintln!("Warning: invalid ignore pattern '{pat}': {err}");
+                        }
+                    }
+                    if let Ok(built) = overrides.build() {
+                        builder.overrides(built);
+                    }
+                }
+            }
+
+            for entry in builder.build().flatten() {
+                let entry_path = entry.path();
+                if entry_path.is_file() && is_css_file(entry_path) {
+                    // Check the glob pattern against the path.
+                    // Check the glob pattern against the path.
+                    if !glob_matcher.is_match(entry_path) {
+                        // Also try matching the relative path from cwd.
+                        let rel = entry_path
+                            .strip_prefix(&cwd)
+                            .unwrap_or(entry_path);
+                        if !glob_matcher.is_match(rel) {
+                            continue;
+                        }
+                    }
+
+                    // Respect .stylelintignore / .galeignore for explicitly
+                    // matched files (belt-and-suspenders with WalkBuilder).
+                    if let Some(ref gi) = explicit_ignore {
+                        if gi
+                            .matched_path_or_any_parents(entry_path, false)
+                            .is_ignore()
+                        {
+                            continue;
+                        }
+                    }
+
+                    // Check config ignore patterns.
+                    if !config_ignore_matchers.is_empty() {
+                        let abs = entry_path
+                            .canonicalize()
+                            .unwrap_or_else(|_| entry_path.to_path_buf());
+                        let rel = abs.strip_prefix(&cwd).unwrap_or(&abs);
+                        if config_ignore_matchers.iter().any(|m| m.is_match(rel)) {
+                            continue;
+                        }
+                    }
+
+                    files.push(entry_path.to_path_buf());
+                }
+            }
+            continue;
+        }
+
         let path = Path::new(pattern);
 
         if path.is_file() {
@@ -724,4 +850,132 @@ pub fn run() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    /// Helper: create a temporary directory tree with CSS files for glob tests.
+    fn create_test_tree(base: &Path) {
+        let sub = base.join("sub");
+        fs::create_dir_all(&sub).unwrap();
+        fs::write(base.join("a.css"), "a {}").unwrap();
+        fs::write(base.join("b.scss"), "$x: 1;").unwrap();
+        fs::write(base.join("c.txt"), "not css").unwrap();
+        fs::write(sub.join("d.css"), "d {}").unwrap();
+        fs::write(sub.join("e.less"), ".e {}").unwrap();
+    }
+
+    fn default_opts() -> DiscoverOptions<'static> {
+        DiscoverOptions {
+            no_ignore: true,
+            ignore_path: None,
+            ignore_patterns: &[],
+        }
+    }
+
+    #[test]
+    fn test_is_glob_pattern() {
+        assert!(is_glob_pattern("**/*.css"));
+        assert!(is_glob_pattern("src/*.scss"));
+        assert!(is_glob_pattern("src/{a,b}.css"));
+        assert!(is_glob_pattern("src/[ab].css"));
+        assert!(is_glob_pattern("src/??.css"));
+        assert!(!is_glob_pattern("src/file.css"));
+        assert!(!is_glob_pattern("src/dir"));
+        assert!(!is_glob_pattern("plain-path"));
+    }
+
+    #[test]
+    fn test_glob_star_css() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_test_tree(tmp.path());
+
+        let pattern = format!("{}/*.css", tmp.path().display());
+        let files = discover_files(&[pattern], &default_opts());
+
+        assert_eq!(files.len(), 1);
+        assert!(files[0].ends_with("a.css"));
+    }
+
+    #[test]
+    fn test_glob_recursive_double_star() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_test_tree(tmp.path());
+
+        let pattern = format!("{}/**/*.css", tmp.path().display());
+        let files = discover_files(&[pattern], &default_opts());
+
+        // Should find a.css and sub/d.css
+        assert_eq!(files.len(), 2);
+        let names: Vec<String> = files
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+        assert!(names.contains(&"a.css".to_string()));
+        assert!(names.contains(&"d.css".to_string()));
+    }
+
+    #[test]
+    fn test_glob_scss_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_test_tree(tmp.path());
+
+        let pattern = format!("{}/**/*.scss", tmp.path().display());
+        let files = discover_files(&[pattern], &default_opts());
+
+        assert_eq!(files.len(), 1);
+        assert!(files[0].ends_with("b.scss"));
+    }
+
+    #[test]
+    fn test_glob_no_match_returns_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_test_tree(tmp.path());
+
+        let pattern = format!("{}/**/*.sass", tmp.path().display());
+        let files = discover_files(&[pattern], &default_opts());
+
+        assert!(files.is_empty());
+    }
+
+    #[test]
+    fn test_glob_mixed_with_directory_arg() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_test_tree(tmp.path());
+
+        // Mix a glob pattern with a plain directory argument.
+        let glob_pat = format!("{}/*.scss", tmp.path().display());
+        let dir_arg = tmp.path().join("sub").display().to_string();
+        let files = discover_files(&[glob_pat, dir_arg], &default_opts());
+
+        // Glob should find b.scss; directory walk should find d.css + e.less.
+        assert_eq!(files.len(), 3);
+    }
+
+    #[test]
+    fn test_non_glob_file_still_works() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_test_tree(tmp.path());
+
+        let file_arg = tmp.path().join("a.css").display().to_string();
+        let files = discover_files(&[file_arg], &default_opts());
+
+        assert_eq!(files.len(), 1);
+        assert!(files[0].ends_with("a.css"));
+    }
+
+    #[test]
+    fn test_non_glob_directory_still_works() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_test_tree(tmp.path());
+
+        let dir_arg = tmp.path().display().to_string();
+        let files = discover_files(&[dir_arg], &default_opts());
+
+        // Should find all CSS files recursively: a.css, b.scss, sub/d.css, sub/e.less
+        assert_eq!(files.len(), 4);
+    }
 }
