@@ -1,8 +1,17 @@
+use std::time::Instant;
+
 use gale_css_parser::{CssNode, Syntax, parse};
 use gale_diagnostics::LintResult;
 
 use crate::registry::RuleRegistry;
 use crate::rule::RuleContext;
+
+/// Returns `true` when the `GALE_DEBUG_PERF` environment variable is set to `"1"`.
+fn perf_enabled() -> bool {
+    std::env::var("GALE_DEBUG_PERF")
+        .map(|v| v == "1")
+        .unwrap_or(false)
+}
 
 /// The main lint runner that applies enabled rules to parsed CSS.
 pub struct LintRunner {
@@ -21,12 +30,18 @@ impl LintRunner {
 
     /// Parse and lint a CSS source string, returning all diagnostics.
     pub fn lint_source(&self, source: &str, file_path: &str, syntax: Syntax) -> LintResult {
+        let debug = perf_enabled();
+
+        let t0 = Instant::now();
         let parse_result = match parse(source, syntax) {
             Ok(result) => result,
             Err(_err) => {
                 return LintResult::new(file_path, source, vec![]);
             }
         };
+        if debug {
+            eprintln!("[perf] parse: {:.3}s", t0.elapsed().as_secs_f64());
+        }
 
         let context = RuleContext {
             file_path,
@@ -44,25 +59,49 @@ impl LintRunner {
             .collect();
 
         // Run document-level checks (check_root).
+        let t1 = Instant::now();
         for rule in &active_rules {
+            let tr = Instant::now();
             let mut results = rule.check_root(&parse_result.nodes, &context);
+            if debug {
+                let elapsed = tr.elapsed().as_secs_f64();
+                if elapsed > 0.001 {
+                    eprintln!("[perf] check_root {}: {:.3}s", rule.name(), elapsed);
+                }
+            }
             diagnostics.append(&mut results);
+        }
+        if debug {
+            eprintln!("[perf] check_root total: {:.3}s", t1.elapsed().as_secs_f64());
         }
 
         // Walk each top-level node for per-node checks.
+        let t2 = Instant::now();
         for node in &parse_result.nodes {
             walk_node(node, &active_rules, &context, &mut diagnostics);
         }
+        if debug {
+            eprintln!("[perf] walk: {:.3}s", t2.elapsed().as_secs_f64());
+        }
 
         // Set file_path on all diagnostics.
+        let t3 = Instant::now();
         for diag in &mut diagnostics {
             if diag.file_path.is_empty() {
                 diag.file_path = file_path.to_string();
             }
         }
+        if debug {
+            eprintln!("[perf] set_file_path: {:.3}s", t3.elapsed().as_secs_f64());
+        }
 
         // Sort diagnostics by position for consistent output.
+        let t4 = Instant::now();
         diagnostics.sort_by_key(|d| d.span.offset);
+        if debug {
+            eprintln!("[perf] sort: {:.3}s", t4.elapsed().as_secs_f64());
+            eprintln!("[perf] total diagnostics: {}", diagnostics.len());
+        }
 
         LintResult::new(file_path, source, diagnostics)
     }

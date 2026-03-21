@@ -29,6 +29,14 @@ pub fn is_known_unit(name: &str) -> bool {
     lookup(KNOWN_UNITS, name)
 }
 
+pub fn is_known_media_feature(name: &str) -> bool {
+    lookup(KNOWN_MEDIA_FEATURES, name)
+}
+
+pub fn is_known_html_element(name: &str) -> bool {
+    lookup(KNOWN_HTML_ELEMENTS, name)
+}
+
 // ---------------------------------------------------------------------------
 // CSS Properties (curated standard set, sorted)
 // ---------------------------------------------------------------------------
@@ -690,6 +698,178 @@ static KNOWN_UNITS: &[&str] = &[
     "x",
 ];
 
+// ---------------------------------------------------------------------------
+// CSS Media Features (sorted)
+// ---------------------------------------------------------------------------
+
+static KNOWN_MEDIA_FEATURES: &[&str] = &[
+    "any-hover",
+    "any-pointer",
+    "aspect-ratio",
+    "color",
+    "color-gamut",
+    "color-index",
+    "display-mode",
+    "dynamic-range",
+    "forced-colors",
+    "grid",
+    "height",
+    "hover",
+    "inverted-colors",
+    "max-aspect-ratio",
+    "max-color",
+    "max-color-index",
+    "max-height",
+    "max-monochrome",
+    "max-resolution",
+    "max-width",
+    "min-aspect-ratio",
+    "min-color",
+    "min-color-index",
+    "min-height",
+    "min-monochrome",
+    "min-resolution",
+    "min-width",
+    "monochrome",
+    "orientation",
+    "overflow-block",
+    "overflow-inline",
+    "pointer",
+    "prefers-color-scheme",
+    "prefers-contrast",
+    "prefers-reduced-data",
+    "prefers-reduced-motion",
+    "prefers-reduced-transparency",
+    "resolution",
+    "scan",
+    "scripting",
+    "update",
+    "video-dynamic-range",
+    "width",
+];
+
+// ---------------------------------------------------------------------------
+// HTML Elements (sorted)
+// ---------------------------------------------------------------------------
+
+static KNOWN_HTML_ELEMENTS: &[&str] = &[
+    "a",
+    "abbr",
+    "address",
+    "area",
+    "article",
+    "aside",
+    "audio",
+    "b",
+    "base",
+    "bdi",
+    "bdo",
+    "blockquote",
+    "body",
+    "br",
+    "button",
+    "canvas",
+    "caption",
+    "cite",
+    "code",
+    "col",
+    "colgroup",
+    "data",
+    "datalist",
+    "dd",
+    "del",
+    "details",
+    "dfn",
+    "dialog",
+    "div",
+    "dl",
+    "dt",
+    "em",
+    "embed",
+    "fieldset",
+    "figcaption",
+    "figure",
+    "footer",
+    "form",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "head",
+    "header",
+    "hgroup",
+    "hr",
+    "html",
+    "i",
+    "iframe",
+    "img",
+    "input",
+    "ins",
+    "kbd",
+    "label",
+    "legend",
+    "li",
+    "link",
+    "main",
+    "map",
+    "mark",
+    "math",
+    "menu",
+    "meta",
+    "meter",
+    "nav",
+    "noscript",
+    "object",
+    "ol",
+    "optgroup",
+    "option",
+    "output",
+    "p",
+    "param",
+    "picture",
+    "pre",
+    "progress",
+    "q",
+    "rp",
+    "rt",
+    "ruby",
+    "s",
+    "samp",
+    "script",
+    "search",
+    "section",
+    "select",
+    "slot",
+    "small",
+    "source",
+    "span",
+    "strong",
+    "style",
+    "sub",
+    "summary",
+    "sup",
+    "svg",
+    "table",
+    "tbody",
+    "td",
+    "template",
+    "textarea",
+    "tfoot",
+    "th",
+    "thead",
+    "time",
+    "title",
+    "tr",
+    "track",
+    "u",
+    "ul",
+    "var",
+    "video",
+    "wbr",
+];
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -738,6 +918,24 @@ mod tests {
     }
 
     #[test]
+    fn known_media_features() {
+        assert!(is_known_media_feature("width"));
+        assert!(is_known_media_feature("min-width"));
+        assert!(is_known_media_feature("hover"));
+        assert!(is_known_media_feature("prefers-color-scheme"));
+        assert!(!is_known_media_feature("fake-feature"));
+    }
+
+    #[test]
+    fn known_html_elements() {
+        assert!(is_known_html_element("div"));
+        assert!(is_known_html_element("span"));
+        assert!(is_known_html_element("a"));
+        assert!(is_known_html_element("section"));
+        assert!(!is_known_html_element("fakeelement"));
+    }
+
+    #[test]
     fn arrays_are_sorted() {
         fn assert_sorted(arr: &[&str], name: &str) {
             for window in arr.windows(2) {
@@ -754,5 +952,7 @@ mod tests {
         assert_sorted(KNOWN_PSEUDO_CLASSES, "KNOWN_PSEUDO_CLASSES");
         assert_sorted(KNOWN_PSEUDO_ELEMENTS, "KNOWN_PSEUDO_ELEMENTS");
         assert_sorted(KNOWN_UNITS, "KNOWN_UNITS");
+        assert_sorted(KNOWN_MEDIA_FEATURES, "KNOWN_MEDIA_FEATURES");
+        assert_sorted(KNOWN_HTML_ELEMENTS, "KNOWN_HTML_ELEMENTS");
     }
 }
