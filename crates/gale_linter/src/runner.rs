@@ -264,6 +264,11 @@ impl LintRunner {
         }
     }
 
+    /// Check if a rule name is known to the registry.
+    pub fn has_rule(&self, name: &str) -> bool {
+        self.registry.get(name).is_some()
+    }
+
     /// Parse and lint a CSS source string, returning all diagnostics.
     pub fn lint_source(&self, source: &str, file_path: &str, syntax: Syntax) -> LintResult {
         let debug = perf_enabled();
