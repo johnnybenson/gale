@@ -93,10 +93,10 @@ fn check_value(
                 // Find matching close paren.
                 let mut depth = 1i32;
                 let mut close = after_paren;
-                for j in after_paren..len {
-                    if bytes[j] == b'(' {
+                for (j, &byte) in bytes.iter().enumerate().take(len).skip(after_paren) {
+                    if byte == b'(' {
                         depth += 1;
-                    } else if bytes[j] == b')' {
+                    } else if byte == b')' {
                         depth -= 1;
                         if depth == 0 {
                             close = j;
@@ -196,29 +196,37 @@ mod tests {
 
     #[test]
     fn accepts_standard_direction() {
-        let d = FunctionLinearGradientNoNonstandardDirection
-            .check(&style_with_value("linear-gradient(to top, red, blue)"), &ctx());
+        let d = FunctionLinearGradientNoNonstandardDirection.check(
+            &style_with_value("linear-gradient(to top, red, blue)"),
+            &ctx(),
+        );
         assert!(d.is_empty());
     }
 
     #[test]
     fn accepts_angle() {
-        let d = FunctionLinearGradientNoNonstandardDirection
-            .check(&style_with_value("linear-gradient(45deg, red, blue)"), &ctx());
+        let d = FunctionLinearGradientNoNonstandardDirection.check(
+            &style_with_value("linear-gradient(45deg, red, blue)"),
+            &ctx(),
+        );
         assert!(d.is_empty());
     }
 
     #[test]
     fn reports_nonstandard_in_declaration_node() {
-        let d = FunctionLinearGradientNoNonstandardDirection
-            .check(&decl_with_value("linear-gradient(bottom, red, blue)"), &ctx());
+        let d = FunctionLinearGradientNoNonstandardDirection.check(
+            &decl_with_value("linear-gradient(bottom, red, blue)"),
+            &ctx(),
+        );
         assert_eq!(d.len(), 1);
     }
 
     #[test]
     fn reports_two_word_direction() {
-        let d = FunctionLinearGradientNoNonstandardDirection
-            .check(&style_with_value("linear-gradient(top right, red, blue)"), &ctx());
+        let d = FunctionLinearGradientNoNonstandardDirection.check(
+            &style_with_value("linear-gradient(top right, red, blue)"),
+            &ctx(),
+        );
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("top right"));
     }

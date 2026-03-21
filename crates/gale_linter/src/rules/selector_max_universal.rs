@@ -132,49 +132,34 @@ mod tests {
 
     #[test]
     fn reports_too_many_universal() {
-        let d = SelectorMaxUniversal.check(
-            &style_with_selector("* *"),
-            &ctx(),
-        );
+        let d = SelectorMaxUniversal.check(&style_with_selector("* *"), &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("found 2"));
     }
 
     #[test]
     fn allows_single_universal() {
-        let d = SelectorMaxUniversal.check(
-            &style_with_selector("*"),
-            &ctx(),
-        );
+        let d = SelectorMaxUniversal.check(&style_with_selector("*"), &ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_no_universal() {
-        let d = SelectorMaxUniversal.check(
-            &style_with_selector("div .class"),
-            &ctx(),
-        );
+        let d = SelectorMaxUniversal.check(&style_with_selector("div .class"), &ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn skips_star_in_attribute_value() {
         // [attr*=val] contains * but it's not a universal selector
-        let d = SelectorMaxUniversal.check(
-            &style_with_selector("div[class*='foo']"),
-            &ctx(),
-        );
+        let d = SelectorMaxUniversal.check(&style_with_selector("div[class*='foo']"), &ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn checks_each_selector_separately() {
         // Each individual selector has 1 universal, within the default max
-        let d = SelectorMaxUniversal.check(
-            &style_with_selector("*, *"),
-            &ctx(),
-        );
+        let d = SelectorMaxUniversal.check(&style_with_selector("*, *"), &ctx());
         assert!(d.is_empty());
     }
 
@@ -187,10 +172,7 @@ mod tests {
             syntax: Syntax::Css,
             options: Some(&options),
         };
-        let d = SelectorMaxUniversal.check(
-            &style_with_selector("* *"),
-            &ctx,
-        );
+        let d = SelectorMaxUniversal.check(&style_with_selector("* *"), &ctx);
         assert!(d.is_empty());
     }
 }

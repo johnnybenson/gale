@@ -105,94 +105,67 @@ mod tests {
 
     #[test]
     fn reports_webkit_input_placeholder() {
-        let d = SelectorNoVendorPrefix.check(
-            &style_with_selector("::-webkit-input-placeholder"),
-            &ctx(),
-        );
+        let d = SelectorNoVendorPrefix
+            .check(&style_with_selector("::-webkit-input-placeholder"), &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("-webkit-"));
     }
 
     #[test]
     fn reports_moz_placeholder() {
-        let d = SelectorNoVendorPrefix.check(
-            &style_with_selector("::-moz-placeholder"),
-            &ctx(),
-        );
+        let d = SelectorNoVendorPrefix.check(&style_with_selector("::-moz-placeholder"), &ctx());
         assert_eq!(d.len(), 1);
     }
 
     #[test]
     fn reports_ms_input_placeholder() {
-        let d = SelectorNoVendorPrefix.check(
-            &style_with_selector(":-ms-input-placeholder"),
-            &ctx(),
-        );
+        let d =
+            SelectorNoVendorPrefix.check(&style_with_selector(":-ms-input-placeholder"), &ctx());
         assert_eq!(d.len(), 1);
     }
 
     #[test]
     fn reports_webkit_full_screen() {
-        let d = SelectorNoVendorPrefix.check(
-            &style_with_selector(":-webkit-full-screen"),
-            &ctx(),
-        );
+        let d = SelectorNoVendorPrefix.check(&style_with_selector(":-webkit-full-screen"), &ctx());
         assert_eq!(d.len(), 1);
     }
 
     #[test]
     fn allows_standard_selector() {
-        let d = SelectorNoVendorPrefix.check(
-            &style_with_selector("::placeholder"),
-            &ctx(),
-        );
+        let d = SelectorNoVendorPrefix.check(&style_with_selector("::placeholder"), &ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_class_selector() {
-        let d = SelectorNoVendorPrefix.check(
-            &style_with_selector(".my-class"),
-            &ctx(),
-        );
+        let d = SelectorNoVendorPrefix.check(&style_with_selector(".my-class"), &ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_webkit_slider_thumb() {
         // ::-webkit-slider-thumb has no standard equivalent — not autoprefixable.
-        let d = SelectorNoVendorPrefix.check(
-            &style_with_selector("&::-webkit-slider-thumb"),
-            &ctx(),
-        );
+        let d =
+            SelectorNoVendorPrefix.check(&style_with_selector("&::-webkit-slider-thumb"), &ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_moz_range_thumb() {
-        let d = SelectorNoVendorPrefix.check(
-            &style_with_selector("&::-moz-range-thumb"),
-            &ctx(),
-        );
+        let d = SelectorNoVendorPrefix.check(&style_with_selector("&::-moz-range-thumb"), &ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_webkit_autofill() {
         // :-webkit-autofill has no standard equivalent — not autoprefixable.
-        let d = SelectorNoVendorPrefix.check(
-            &style_with_selector("&:-webkit-autofill"),
-            &ctx(),
-        );
+        let d = SelectorNoVendorPrefix.check(&style_with_selector("&:-webkit-autofill"), &ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_moz_focusring() {
-        let d = SelectorNoVendorPrefix.check(
-            &style_with_selector("&:-moz-focusring"),
-            &ctx(),
-        );
+        let d = SelectorNoVendorPrefix.check(&style_with_selector("&:-moz-focusring"), &ctx());
         assert!(d.is_empty());
     }
 
@@ -207,10 +180,7 @@ mod tests {
 
     #[test]
     fn allows_moz_focus_inner() {
-        let d = SelectorNoVendorPrefix.check(
-            &style_with_selector("::-moz-focus-inner"),
-            &ctx(),
-        );
+        let d = SelectorNoVendorPrefix.check(&style_with_selector("::-moz-focus-inner"), &ctx());
         assert!(d.is_empty());
     }
 }

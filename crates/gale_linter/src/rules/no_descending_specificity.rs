@@ -16,6 +16,29 @@ pub struct NoDescendingSpecificity;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct Specificity(u32, u32, u32);
 
+/// Extract the content inside balanced parentheses, advancing `i` past the
+/// closing `)`.  Assumes `chars[*i] == '('` on entry.
+fn extract_parenthesized_content(chars: &[char], i: &mut usize) -> String {
+    let mut depth = 1;
+    *i += 1; // skip opening '('
+    let start = *i;
+    while *i < chars.len() && depth > 0 {
+        if chars[*i] == '(' {
+            depth += 1;
+        } else if chars[*i] == ')' {
+            depth -= 1;
+        }
+        if depth > 0 {
+            *i += 1;
+        }
+    }
+    let content: String = chars[start..*i].iter().collect();
+    if *i < chars.len() {
+        *i += 1; // skip closing ')'
+    }
+    content
+}
+
 /// Calculate the specificity of a selector string.
 ///
 /// This is a simplified calculation that handles common cases:
@@ -75,9 +98,10 @@ fn calculate_specificity(selector: &str) -> Specificity {
                     }
                 } else {
                     // Pseudo-class (:hover, :first-child, etc.)
-                    // Exception: :where() has 0 specificity, :is() and :not()
-                    // take the specificity of their most specific argument.
-                    // For simplicity, we just count all pseudo-classes as b += 1.
+                    // Special handling per CSS Selectors Level 4:
+                    // - :where() has zero specificity
+                    // - :is(), :not(), :has() take the specificity of their
+                    //   most specific argument
                     let start = i;
                     while i < len
                         && (chars[i].is_alphanumeric() || chars[i] == '-' || chars[i] == '_')
@@ -86,7 +110,7 @@ fn calculate_specificity(selector: &str) -> Specificity {
                     }
                     let pseudo_name: String = chars[start..i].iter().collect();
                     if pseudo_name == "where" {
-                        // :where() has 0 specificity
+                        // :where() has 0 specificity -- skip arguments entirely
                         if i < len && chars[i] == '(' {
                             let mut depth = 1;
                             i += 1;
@@ -98,6 +122,20 @@ fn calculate_specificity(selector: &str) -> Specificity {
                                 }
                                 i += 1;
                             }
+                        }
+                    } else if pseudo_name == "is" || pseudo_name == "not" || pseudo_name == "has" {
+                        // :is(), :not(), :has() take the specificity of the
+                        // most specific argument (comma-separated selectors).
+                        if i < len && chars[i] == '(' {
+                            let inner = extract_parenthesized_content(&chars, &mut i);
+                            let mut max_arg = Specificity(0, 0, 0);
+                            for arg in inner.split(',') {
+                                let arg_spec = calculate_specificity(arg.trim());
+                                max_arg = max_arg.max(arg_spec);
+                            }
+                            a += max_arg.0;
+                            b += max_arg.1;
+                            c += max_arg.2;
                         }
                     } else {
                         b += 1;
@@ -312,5 +350,35 @@ mod tests {
         assert_eq!(calculate_specificity("#id"), Specificity(1, 0, 0));
         assert_eq!(calculate_specificity("a.class"), Specificity(0, 1, 1));
         assert_eq!(calculate_specificity("#id .class a"), Specificity(1, 1, 1));
+    }
+
+    #[test]
+    fn test_where_has_zero_specificity() {
+        // :where() contributes nothing
+        assert_eq!(calculate_specificity(":where(.a)"), Specificity(0, 0, 0));
+        assert_eq!(calculate_specificity(":where(#id)"), Specificity(0, 0, 0));
+        assert_eq!(calculate_specificity("a:where(.b)"), Specificity(0, 0, 1));
+    }
+
+    #[test]
+    fn test_is_takes_max_argument_specificity() {
+        // :is(.a) has specificity of .a => (0,1,0)
+        assert_eq!(calculate_specificity(":is(.a)"), Specificity(0, 1, 0));
+        // :is(#id, .a) takes the max => (1,0,0)
+        assert_eq!(calculate_specificity(":is(#id, .a)"), Specificity(1, 0, 0));
+        // a:is(.b) => type(a) + class(.b) = (0,1,1)
+        assert_eq!(calculate_specificity("a:is(.b)"), Specificity(0, 1, 1));
+    }
+
+    #[test]
+    fn test_not_takes_max_argument_specificity() {
+        assert_eq!(calculate_specificity(":not(.a)"), Specificity(0, 1, 0));
+        assert_eq!(calculate_specificity(":not(#id)"), Specificity(1, 0, 0));
+    }
+
+    #[test]
+    fn test_has_takes_max_argument_specificity() {
+        assert_eq!(calculate_specificity(":has(.a)"), Specificity(0, 1, 0));
+        assert_eq!(calculate_specificity(":has(> .a)"), Specificity(0, 1, 0));
     }
 }

@@ -296,9 +296,10 @@ impl RuleConfigValue {
                     // First element is a primary option (e.g. "always", 4):
                     // ["always", { except: [...] }] or [4, { ... }]
                     // Severity defaults to Error (enabled), and the entire
-                    // secondary options object is stored in options.
-                    // The primary option value is also stored so rules can read it.
-                    let options = items.get(1).cloned();
+                    // array is stored as options so rules can access
+                    // options[0] for the primary option and options[1] for
+                    // secondary options.
+                    let options = Some(serde_json::Value::Array(items.clone()));
                     RuleConfig {
                         severity: Some(Severity::Error),
                         options,
@@ -356,6 +357,7 @@ const ALL_RULE_NAMES: &[&str] = &[
     "declaration-block-no-shorthand-property-overrides",
     "declaration-empty-line-before",
     "declaration-no-important",
+    "font-family-name-quotes",
     "font-family-no-duplicate-names",
     "font-family-no-missing-generic-family-keyword",
     "function-calc-no-unspaced-operator",
@@ -1144,7 +1146,7 @@ fn replace_whole_word(source: &str, word: &str, replacement: &str) -> String {
         let before_ok = if pos == 0 {
             true
         } else {
-            let ch = remaining.as_bytes()[pos - 1] as char;
+            let ch = remaining[..pos].chars().next_back().unwrap_or('\0');
             !ch.is_alphanumeric() && ch != '_' && ch != '$'
         };
         // Check character after the match
@@ -1152,7 +1154,7 @@ fn replace_whole_word(source: &str, word: &str, replacement: &str) -> String {
         let after_ok = if after_pos >= remaining.len() {
             true
         } else {
-            let ch = remaining.as_bytes()[after_pos] as char;
+            let ch = remaining[after_pos..].chars().next().unwrap_or('\0');
             !ch.is_alphanumeric() && ch != '_' && ch != '$'
         };
 
@@ -1769,12 +1771,29 @@ fn convert_single_to_double_quotes(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
     let mut in_double_quote = false;
+    let mut in_template = false;
     let mut escape_next = false;
 
     while let Some(c) = chars.next() {
         if escape_next {
             result.push(c);
             escape_next = false;
+            continue;
+        }
+
+        // Handle template literal toggling
+        if c == '`' && !in_double_quote {
+            in_template = !in_template;
+            result.push(c);
+            continue;
+        }
+
+        // While inside a template literal, pass everything through unchanged
+        if in_template {
+            if c == '\\' {
+                escape_next = true;
+            }
+            result.push(c);
             continue;
         }
 
@@ -3140,6 +3159,133 @@ export default config
     }
 
     #[test]
+    fn js_config_with_esm_import_with_comments() {
+        // Simulates the real stylelint-config-recess-order pattern
+        // where groups.js has JS comments inside the array.
+        let tmp = std::env::temp_dir().join("gale_test_esm_import_comments");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        std::fs::write(
+            tmp.join("groups.js"),
+            r#"
+/**
+ * @typedef {Object} Group
+ * @property {Array<string>} properties
+ */
+
+/** @type {Group[]} */
+const propertyGroups = [
+    {
+        /**
+         * Compose rules from other selectors in CSS Modules.
+         * @see https://github.com/css-modules/css-modules#composition
+         */
+        properties: ['composes'],
+    },
+    {
+        // Must be first (unless using the above).
+        properties: ['all'],
+    },
+    {
+        // Position.
+        properties: [
+            'position',
+            'top',
+            'right',
+            'bottom',
+            'left',
+        ],
+    },
+    {
+        // Display.
+        properties: ['display', 'flex'],
+    },
+]
+
+export default propertyGroups
+"#,
+        )
+        .unwrap();
+
+        let config_src = r#"
+import propertyGroups from './groups.js'
+
+const config = {
+    plugins: ['stylelint-order'],
+    rules: {
+        'order/properties-order': propertyGroups,
+    },
+}
+
+export default config
+"#;
+
+        let raw = parse_js_config(config_src, Some(tmp.as_path())).unwrap();
+        let rules = raw.rules.unwrap();
+        assert!(
+            rules.contains_key("order/properties-order"),
+            "should have order/properties-order rule"
+        );
+
+        let val = rules.get("order/properties-order").unwrap();
+        match val {
+            RuleConfigValue::Array(arr) => {
+                assert_eq!(arr.len(), 4, "should have 4 property groups");
+                assert!(arr[0].is_object());
+            }
+            _ => panic!(
+                "Expected array value for order/properties-order, got {:?}",
+                val
+            ),
+        }
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn js_config_recess_order_real_files() {
+        // Test with the actual recess-order files if available.
+        let recess_dir = std::path::Path::new(
+            "../../benchmarks/.repos/bootstrap/node_modules/stylelint-config-recess-order",
+        );
+        if !recess_dir.exists() {
+            // Skip if the benchmark repo isn't set up.
+            return;
+        }
+
+        let index_path = recess_dir.join("index.js");
+        let contents = std::fs::read_to_string(&index_path).unwrap();
+        let result = parse_js_config(&contents, Some(recess_dir));
+        match &result {
+            Ok(config) => {
+                let rules = config.rules.as_ref().expect("should have rules");
+                assert!(
+                    rules.contains_key("order/properties-order"),
+                    "recess-order config should have order/properties-order"
+                );
+                let val = rules.get("order/properties-order").unwrap();
+                match val {
+                    RuleConfigValue::Array(arr) => {
+                        assert!(
+                            arr.len() > 5,
+                            "should have many property groups, got {}",
+                            arr.len()
+                        );
+                    }
+                    other => panic!(
+                        "Expected Array for order/properties-order, got {:?}",
+                        std::mem::discriminant(other)
+                    ),
+                }
+            }
+            Err(e) => {
+                panic!("Failed to parse recess-order config: {e}");
+            }
+        }
+    }
+
+    #[test]
     fn js_config_with_cjs_import_resolution() {
         let tmp = std::env::temp_dir().join("gale_test_cjs_import");
         let _ = std::fs::remove_dir_all(&tmp);
@@ -3543,5 +3689,4 @@ overrides:
         assert!(!scss_rules.contains_key("no-duplicate-selectors"));
         assert!(!scss_rules.contains_key("comment-no-empty"));
     }
-
 }

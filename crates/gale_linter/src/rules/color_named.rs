@@ -180,10 +180,7 @@ impl Rule for ColorNamed {
         };
 
         // Read the primary option: "never" (default) or "always-where-possible"
-        let option = ctx
-            .options
-            .and_then(|v| v.as_str())
-            .unwrap_or("never");
+        let option = ctx.options.and_then(|v| v.as_str()).unwrap_or("never");
 
         // Only "never" mode is implemented (disallow named colors)
         if option != "never" {
@@ -201,12 +198,9 @@ impl Rule for ColorNamed {
             for &color in NAMED_COLORS {
                 if contains_color_word(&cleaned_lower, color) {
                     diags.push(
-                        Diagnostic::new(
-                            self.name(),
-                            format!("Unexpected named color \"{color}\""),
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(decl.span.offset, decl.span.length)),
+                        Diagnostic::new(self.name(), format!("Unexpected named color \"{color}\""))
+                            .severity(self.default_severity())
+                            .span(Span::new(decl.span.offset, decl.span.length)),
                     );
                 }
             }
@@ -245,7 +239,9 @@ fn strip_ignored_parts(value: &str) -> String {
         // Skip SCSS variables $name
         if chars[i] == '$' {
             i += 1;
-            while i < len && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_') {
+            while i < len
+                && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
+            {
                 i += 1;
             }
             result.push(' ');
@@ -254,9 +250,9 @@ fn strip_ignored_parts(value: &str) -> String {
 
         // Skip var(...) with nested parens
         if i + 3 < len
-            && chars[i].to_ascii_lowercase() == 'v'
-            && chars[i + 1].to_ascii_lowercase() == 'a'
-            && chars[i + 2].to_ascii_lowercase() == 'r'
+            && chars[i].eq_ignore_ascii_case(&'v')
+            && chars[i + 1].eq_ignore_ascii_case(&'a')
+            && chars[i + 2].eq_ignore_ascii_case(&'r')
             && chars[i + 3] == '('
         {
             // Make sure 'var' is a word boundary (not part of a longer identifier)
@@ -297,11 +293,15 @@ fn contains_color_word(haystack: &str, word: &str) -> bool {
     for i in 0..=(bytes.len() - wlen) {
         if &bytes[i..i + wlen] == word_bytes {
             // Before: must be start of string or non-ident char
-            let before_ok =
-                i == 0 || !(bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'-' || bytes[i - 1] == b'_');
+            let before_ok = i == 0
+                || !(bytes[i - 1].is_ascii_alphanumeric()
+                    || bytes[i - 1] == b'-'
+                    || bytes[i - 1] == b'_');
             // After: must be end of string or non-ident char
             let after_ok = i + wlen == bytes.len()
-                || !(bytes[i + wlen].is_ascii_alphanumeric() || bytes[i + wlen] == b'-' || bytes[i + wlen] == b'_');
+                || !(bytes[i + wlen].is_ascii_alphanumeric()
+                    || bytes[i + wlen] == b'-'
+                    || bytes[i + wlen] == b'_');
             if before_ok && after_ok {
                 return true;
             }

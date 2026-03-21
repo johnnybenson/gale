@@ -641,7 +641,7 @@ fn convert_property(
 /// Search for a CSS declaration (`property-name: ...;` or `property-name: ... }`)
 /// in the source text between `from` and `to`, returning its span.
 fn find_declaration_span(source: &str, from: usize, to: usize, property: &str) -> Span {
-    let area = &source[from..to.min(source.len())];
+    let area = source.get(from..to.min(source.len())).unwrap_or("");
     let lower_area = area.to_ascii_lowercase();
     let lower_prop = property.to_ascii_lowercase();
 
@@ -705,7 +705,7 @@ fn loc_to_span(loc: lightningcss::rules::Location, source: &str, idx: &LineIndex
     let offset = idx.line_col_to_offset(source, loc.line, loc.column);
 
     // Find the matching closing brace to determine length.
-    let rest = &source[offset..];
+    let rest = source.get(offset..).unwrap_or("");
     let length = if let Some(open) = rest.find('{') {
         let mut depth = 0i32;
         let mut end = open;
@@ -996,7 +996,11 @@ fn convert_raffia_declaration(decl: &raffia::ast::Declaration<'_>, source: &str)
     } else {
         let first = decl.value.first().unwrap().span();
         let last = decl.value.last().unwrap().span();
-        source[first.start..last.end].trim().to_owned()
+        source
+            .get(first.start..last.end)
+            .unwrap_or("")
+            .trim()
+            .to_owned()
     };
 
     let important = decl.important.is_some();
@@ -1042,7 +1046,7 @@ fn raffia_span(s: &raffia::pos::Span) -> Span {
 fn source_slice(source: &str, span: &raffia::pos::Span) -> String {
     let start = span.start.min(source.len());
     let end = span.end.min(source.len());
-    source[start..end].trim().to_owned()
+    source.get(start..end).unwrap_or("").trim().to_owned()
 }
 
 /// Convert a raffia `InterpolableIdent` to a plain string.
@@ -1431,7 +1435,11 @@ mod tests {
         let scss = "@keyframes fade { from { opacity: 0; } to { opacity: 1; } }";
         let result = parse(scss, Syntax::Scss).expect("should parse SCSS");
         // Filter out comments.
-        let nodes: Vec<_> = result.nodes.iter().filter(|n| !matches!(n, CssNode::Comment(_))).collect();
+        let nodes: Vec<_> = result
+            .nodes
+            .iter()
+            .filter(|n| !matches!(n, CssNode::Comment(_)))
+            .collect();
         assert_eq!(nodes.len(), 1);
         if let CssNode::AtRule(at_rule) = &nodes[0] {
             assert_eq!(at_rule.name, "keyframes");
@@ -1445,14 +1453,21 @@ mod tests {
     fn test_parse_scss_keyframes_important() {
         let scss = "@keyframes fade { from { opacity: 0 !important; } }";
         let result = parse(scss, Syntax::Scss).expect("should parse SCSS");
-        let nodes: Vec<_> = result.nodes.iter().filter(|n| !matches!(n, CssNode::Comment(_))).collect();
+        let nodes: Vec<_> = result
+            .nodes
+            .iter()
+            .filter(|n| !matches!(n, CssNode::Comment(_)))
+            .collect();
         assert_eq!(nodes.len(), 1);
         if let CssNode::AtRule(at_rule) = &nodes[0] {
             assert_eq!(at_rule.name, "keyframes");
             assert!(!at_rule.children.is_empty());
             if let CssNode::Style(ref kf) = at_rule.children[0] {
                 assert!(!kf.declarations.is_empty());
-                assert!(kf.declarations[0].important, "should detect !important in SCSS keyframe");
+                assert!(
+                    kf.declarations[0].important,
+                    "should detect !important in SCSS keyframe"
+                );
             } else {
                 panic!("expected Style node");
             }

@@ -35,6 +35,12 @@ impl Rule for StringNoNewline {
 
         diagnostics
     }
+
+    // Note: A source-level scan (check_root) was considered to catch
+    // literal newlines in strings that the parser cannot handle, but it
+    // produces false positives on SCSS files because `//` comments
+    // contain apostrophes (e.g. "we're") that look like string
+    // delimiters. This is a known parser limitation.
 }
 
 fn check_value_for_newlines(

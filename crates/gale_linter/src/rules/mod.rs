@@ -22,6 +22,7 @@ pub mod declaration_block_single_line_max_declarations;
 pub mod declaration_empty_line_before;
 pub mod declaration_no_important;
 pub mod declaration_property_value_disallowed_list;
+pub mod font_family_name_quotes;
 pub mod font_family_no_duplicate_names;
 pub mod font_family_no_missing_generic_family_keyword;
 pub mod font_weight_notation;
@@ -138,6 +139,7 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(
         declaration_property_value_disallowed_list::DeclarationPropertyValueDisallowedList,
     ));
+    registry.register(Box::new(font_family_name_quotes::FontFamilyNameQuotes));
     registry.register(Box::new(
         font_family_no_duplicate_names::FontFamilyNoDuplicateNames,
     ));
@@ -218,9 +220,7 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(
         selector_no_qualifying_type::SelectorNoQualifyingType,
     ));
-    registry.register(Box::new(
-        selector_no_vendor_prefix::SelectorNoVendorPrefix,
-    ));
+    registry.register(Box::new(selector_no_vendor_prefix::SelectorNoVendorPrefix));
     registry.register(Box::new(selector_not_notation::SelectorNotNotation));
     registry.register(Box::new(
         selector_pseudo_class_no_unknown::SelectorPseudoClassNoUnknown,

@@ -322,6 +322,11 @@ pub fn apply_fixes(source: &str, diagnostics: &[Diagnostic]) -> (String, usize) 
             continue;
         }
 
+        // UTF-8 boundary check.
+        if !result.is_char_boundary(start) || !result.is_char_boundary(end) {
+            continue;
+        }
+
         result.replace_range(start..end, &edit.new_text);
         last_offset = start;
         applied += 1;

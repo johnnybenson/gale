@@ -1,9 +1,15 @@
 use gale_css_parser::CssNode;
 use gale_diagnostics::{Diagnostic, Severity, Span};
+use regex::Regex;
 
 use crate::rule::{Rule, RuleContext};
 
-/// Enforces kebab-case pattern for class selectors.
+const DEFAULT_PATTERN: &str = "^[a-z][a-z0-9]*(-[a-z0-9]+)*$";
+
+/// Enforces a pattern for class selectors.
+///
+/// Accepts a regex string as the primary option (e.g. `"^[a-z][a-zA-Z0-9]+$"`).
+/// Defaults to kebab-case pattern if no option is provided.
 ///
 /// Equivalent to Stylelint's `selector-class-pattern` rule.
 pub struct SelectorClassPattern;
@@ -25,6 +31,18 @@ impl Rule for SelectorClassPattern {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+
+        // Read the user-supplied regex pattern from options, or use the default kebab-case pattern.
+        let pattern_str = ctx
+            .options
+            .and_then(|v| v.as_str())
+            .unwrap_or(DEFAULT_PATTERN);
+
+        let re = match Regex::new(pattern_str) {
+            Ok(r) => r,
+            Err(_) => return vec![],
+        };
+
         let mut diags = Vec::new();
         for class in extract_class_names(&rule.selector) {
             // Skip class names containing SCSS interpolation #{...}
@@ -35,11 +53,13 @@ impl Rule for SelectorClassPattern {
             {
                 continue;
             }
-            if !is_kebab_case(&class) {
+            if !re.is_match(&class) {
                 diags.push(
                     Diagnostic::new(
                         self.name(),
-                        format!("Expected class selector \".{class}\" to match kebab-case pattern"),
+                        format!(
+                            "Expected class selector \".{class}\" to match pattern \"{pattern_str}\""
+                        ),
                     )
                     .severity(self.default_severity())
                     .span(Span::new(rule.span.offset, rule.span.length)),
@@ -96,34 +116,6 @@ fn extract_class_names(selector: &str) -> Vec<String> {
     classes
 }
 
-/// Matches `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`
-fn is_kebab_case(name: &str) -> bool {
-    let chars: Vec<char> = name.chars().collect();
-    if chars.is_empty() {
-        return false;
-    }
-    if !chars[0].is_ascii_lowercase() {
-        return false;
-    }
-
-    let mut i = 1;
-    while i < chars.len() {
-        if chars[i] == '-' {
-            i += 1;
-            // Must be followed by at least one lowercase letter or digit
-            if i >= chars.len() || !(chars[i].is_ascii_lowercase() || chars[i].is_ascii_digit()) {
-                return false;
-            }
-        } else if chars[i].is_ascii_lowercase() || chars[i].is_ascii_digit() {
-            // ok
-        } else {
-            return false;
-        }
-        i += 1;
-    }
-    true
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,6 +127,15 @@ mod tests {
             source: "",
             syntax: Syntax::Css,
             options: None,
+        }
+    }
+
+    fn ctx_with_options(opts: &serde_json::Value) -> RuleContext<'_> {
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: Some(opts),
         }
     }
 
@@ -177,5 +178,28 @@ mod tests {
     fn reports_underscore_class() {
         let d = SelectorClassPattern.check(&style_with_selector(".my_class"), &ctx());
         assert_eq!(d.len(), 1);
+    }
+
+    #[test]
+    fn custom_pattern_camel_case() {
+        let opts = serde_json::json!("^[a-z][a-zA-Z0-9]+$");
+        let c = ctx_with_options(&opts);
+        // camelCase should pass
+        assert!(
+            SelectorClassPattern
+                .check(&style_with_selector(".myClass"), &c)
+                .is_empty()
+        );
+        // kebab-case should fail
+        let d = SelectorClassPattern.check(&style_with_selector(".my-class"), &c);
+        assert_eq!(d.len(), 1);
+    }
+
+    #[test]
+    fn custom_pattern_in_message() {
+        let opts = serde_json::json!("^[a-z][a-zA-Z0-9]+$");
+        let c = ctx_with_options(&opts);
+        let d = SelectorClassPattern.check(&style_with_selector(".my-class"), &c);
+        assert!(d[0].message.contains("^[a-z][a-zA-Z0-9]+$"));
     }
 }

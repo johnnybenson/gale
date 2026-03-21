@@ -76,9 +76,30 @@ fn collect_selectors(
 /// Sorts comma-separated selector lists so that `a, b` and `b, a` are
 /// considered the same. Also trims whitespace around each part.
 fn normalize_selector(selector: &str) -> String {
-    let mut parts: Vec<&str> = selector.split(',').map(|s| s.trim()).collect();
+    let mut parts: Vec<String> = selector
+        .split(',')
+        .map(|s| collapse_whitespace(s.trim()))
+        .collect();
     parts.sort_unstable();
     parts.join(", ")
+}
+
+/// Collapse runs of whitespace into a single space.
+fn collapse_whitespace(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut prev_was_space = false;
+    for ch in s.chars() {
+        if ch.is_whitespace() {
+            if !prev_was_space {
+                result.push(' ');
+                prev_was_space = true;
+            }
+        } else {
+            result.push(ch);
+            prev_was_space = false;
+        }
+    }
+    result
 }
 
 #[cfg(test)]

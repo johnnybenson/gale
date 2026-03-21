@@ -153,7 +153,11 @@ mod tests {
         for node in &result.nodes {
             all_diags.extend(rule.check(node, &ctx));
         }
-        assert_eq!(all_diags.len(), 1, "should detect !important in CSS keyframe");
+        assert_eq!(
+            all_diags.len(),
+            1,
+            "should detect !important in CSS keyframe"
+        );
     }
 
     #[test]
@@ -171,6 +175,10 @@ mod tests {
         for node in &result.nodes {
             all_diags.extend(rule.check(node, &ctx));
         }
-        assert_eq!(all_diags.len(), 1, "should detect !important in SCSS keyframe");
+        assert_eq!(
+            all_diags.len(),
+            1,
+            "should detect !important in SCSS keyframe"
+        );
     }
 }

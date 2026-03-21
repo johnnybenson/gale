@@ -74,10 +74,24 @@ pub fn compute_hash(contents: &str, config_hash: u64) -> u64 {
 }
 
 /// Compute a stable hash for the current linter configuration so that cache
-/// entries are invalidated when the config changes.
-pub fn compute_config_hash(enabled_rules: &[String]) -> u64 {
+/// entries are invalidated when the config changes (including rule options).
+pub fn compute_config_hash(rules: &HashMap<String, gale_config::RuleConfig>) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    enabled_rules.hash(&mut hasher);
+    // Sort rule names for deterministic ordering.
+    let mut sorted: Vec<&String> = rules.keys().collect();
+    sorted.sort();
+    for name in sorted {
+        name.hash(&mut hasher);
+        let rc = &rules[name];
+        // Hash severity (use debug repr for determinism).
+        format!("{:?}", rc.severity).hash(&mut hasher);
+        // Hash options via canonical JSON serialization.
+        if let Some(ref opts) = rc.options {
+            serde_json::to_string(opts)
+                .unwrap_or_default()
+                .hash(&mut hasher);
+        }
+    }
     hasher.finish()
 }
 

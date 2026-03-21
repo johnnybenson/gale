@@ -11,6 +11,24 @@ use gale_diagnostics::{Severity, SourceLineIndex};
 use gale_linter::{LintRunner, RuleRegistry};
 
 // ---------------------------------------------------------------------------
+// UTF-16 column conversion
+// ---------------------------------------------------------------------------
+
+/// Convert a byte-based column offset to a UTF-16 code-unit offset.
+///
+/// The LSP specification requires `Position.character` to be measured in UTF-16
+/// code units. `SourceLineIndex` returns byte-based columns, so we must convert
+/// by iterating through the characters on the line and summing `len_utf16()`.
+///
+/// `line_start_byte` is the byte offset where the line begins and `byte_col` is
+/// the number of bytes from that start (0-indexed).
+fn byte_col_to_utf16(source: &str, line_start_byte: usize, byte_col: usize) -> u32 {
+    let end = (line_start_byte + byte_col).min(source.len());
+    let slice = &source[line_start_byte..end];
+    slice.chars().map(|ch| ch.len_utf16() as u32).sum()
+}
+
+// ---------------------------------------------------------------------------
 // Server state
 // ---------------------------------------------------------------------------
 
@@ -58,7 +76,7 @@ impl GaleLspServer {
         uri: &Url,
         source: &str,
     ) -> Vec<tower_lsp::lsp_types::Diagnostic> {
-        let runner_guard = self.runner.read().unwrap();
+        let runner_guard = self.runner.read().unwrap_or_else(|e| e.into_inner());
         let Some(runner) = runner_guard.as_ref() else {
             return Vec::new();
         };
@@ -80,15 +98,20 @@ impl GaleLspServer {
                 let (start_line, start_col) = line_index.offset_to_location(d.span.offset);
                 let (end_line, end_col) = line_index.offset_to_location(d.span.end());
 
-                // SourceLineIndex returns 1-indexed; LSP uses 0-indexed.
+                // SourceLineIndex returns 1-indexed line/col where col is
+                // byte-based. LSP uses 0-indexed line and UTF-16 code-unit
+                // character offsets.
+                let start_line_byte = d.span.offset - (start_col - 1);
+                let end_line_byte = d.span.end() - (end_col - 1);
+
                 let range = Range {
                     start: Position {
                         line: start_line.saturating_sub(1) as u32,
-                        character: start_col.saturating_sub(1) as u32,
+                        character: byte_col_to_utf16(source, start_line_byte, start_col - 1),
                     },
                     end: Position {
                         line: end_line.saturating_sub(1) as u32,
-                        character: end_col.saturating_sub(1) as u32,
+                        character: byte_col_to_utf16(source, end_line_byte, end_col - 1),
                     },
                 };
 
@@ -142,7 +165,7 @@ impl LanguageServer for GaleLspServer {
 
         // Build the lint runner once.
         let runner = Self::build_runner(&config);
-        *self.runner.write().unwrap() = Some(runner);
+        *self.runner.write().unwrap_or_else(|e| e.into_inner()) = Some(runner);
 
         Ok(InitializeResult {
             capabilities: ServerCapabilities {

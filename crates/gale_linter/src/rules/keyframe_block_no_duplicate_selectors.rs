@@ -164,7 +164,8 @@ mod tests {
 
     #[test]
     fn detects_duplicates_in_parsed_css_keyframes() {
-        let css = "@keyframes fade { from { opacity: 0; } to { opacity: 1; } from { opacity: 0.5; } }";
+        let css =
+            "@keyframes fade { from { opacity: 0; } to { opacity: 1; } from { opacity: 0.5; } }";
         let result = gale_css_parser::parse(css, Syntax::Css).expect("should parse CSS");
         let rule = KeyframeBlockNoDuplicateSelectors;
         let ctx = make_context();
@@ -172,12 +173,17 @@ mod tests {
         for node in &result.nodes {
             all_diags.extend(rule.check(node, &ctx));
         }
-        assert_eq!(all_diags.len(), 1, "should detect duplicate 'from' in CSS keyframes");
+        assert_eq!(
+            all_diags.len(),
+            1,
+            "should detect duplicate 'from' in CSS keyframes"
+        );
     }
 
     #[test]
     fn detects_duplicates_in_parsed_scss_keyframes() {
-        let scss = "@keyframes fade { from { opacity: 0; } to { opacity: 1; } from { opacity: 0.5; } }";
+        let scss =
+            "@keyframes fade { from { opacity: 0; } to { opacity: 1; } from { opacity: 0.5; } }";
         let result = gale_css_parser::parse(scss, Syntax::Scss).expect("should parse SCSS");
         let rule = KeyframeBlockNoDuplicateSelectors;
         let ctx = RuleContext {
@@ -190,6 +196,10 @@ mod tests {
         for node in &result.nodes {
             all_diags.extend(rule.check(node, &ctx));
         }
-        assert_eq!(all_diags.len(), 1, "should detect duplicate 'from' in SCSS keyframes");
+        assert_eq!(
+            all_diags.len(),
+            1,
+            "should detect duplicate 'from' in SCSS keyframes"
+        );
     }
 }

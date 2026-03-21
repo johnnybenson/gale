@@ -30,7 +30,7 @@ impl Rule for MediaFeatureNameNoVendorPrefix {
         };
 
         // Only check @media rules
-        if rule.name.to_ascii_lowercase() != "media" {
+        if !rule.name.eq_ignore_ascii_case("media") {
             return vec![];
         }
 
@@ -83,29 +83,22 @@ mod tests {
 
     #[test]
     fn reports_webkit_device_pixel_ratio() {
-        let d = MediaFeatureNameNoVendorPrefix.check(
-            &media_rule("(-webkit-min-device-pixel-ratio: 2)"),
-            &ctx(),
-        );
+        let d = MediaFeatureNameNoVendorPrefix
+            .check(&media_rule("(-webkit-min-device-pixel-ratio: 2)"), &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("-webkit-"));
     }
 
     #[test]
     fn reports_moz_prefix() {
-        let d = MediaFeatureNameNoVendorPrefix.check(
-            &media_rule("(-moz-device-pixel-ratio: 2)"),
-            &ctx(),
-        );
+        let d = MediaFeatureNameNoVendorPrefix
+            .check(&media_rule("(-moz-device-pixel-ratio: 2)"), &ctx());
         assert_eq!(d.len(), 1);
     }
 
     #[test]
     fn allows_standard_media_features() {
-        let d = MediaFeatureNameNoVendorPrefix.check(
-            &media_rule("(min-width: 768px)"),
-            &ctx(),
-        );
+        let d = MediaFeatureNameNoVendorPrefix.check(&media_rule("(min-width: 768px)"), &ctx());
         assert!(d.is_empty());
     }
 

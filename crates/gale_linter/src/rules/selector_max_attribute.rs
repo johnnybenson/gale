@@ -122,39 +122,28 @@ mod tests {
 
     #[test]
     fn reports_too_many_attribute_selectors() {
-        let d = SelectorMaxAttribute.check(
-            &style_with_selector("[type='text'][disabled]"),
-            &ctx(),
-        );
+        let d = SelectorMaxAttribute.check(&style_with_selector("[type='text'][disabled]"), &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("found 2"));
     }
 
     #[test]
     fn allows_within_limit() {
-        let d = SelectorMaxAttribute.check(
-            &style_with_selector("input[type='text']"),
-            &ctx(),
-        );
+        let d = SelectorMaxAttribute.check(&style_with_selector("input[type='text']"), &ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_no_attributes() {
-        let d = SelectorMaxAttribute.check(
-            &style_with_selector("div.class"),
-            &ctx(),
-        );
+        let d = SelectorMaxAttribute.check(&style_with_selector("div.class"), &ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn checks_each_selector_in_list_separately() {
         // Each individual selector has 1 attribute, which is within the default max of 1
-        let d = SelectorMaxAttribute.check(
-            &style_with_selector("[type='text'], [disabled]"),
-            &ctx(),
-        );
+        let d =
+            SelectorMaxAttribute.check(&style_with_selector("[type='text'], [disabled]"), &ctx());
         assert!(d.is_empty());
     }
 
@@ -187,10 +176,7 @@ mod tests {
             syntax: Syntax::Css,
             options: Some(&options),
         };
-        let d = SelectorMaxAttribute.check(
-            &style_with_selector("[type='text'][disabled]"),
-            &ctx,
-        );
+        let d = SelectorMaxAttribute.check(&style_with_selector("[type='text'][disabled]"), &ctx);
         assert!(d.is_empty());
     }
 }

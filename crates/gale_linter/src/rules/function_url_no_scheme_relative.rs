@@ -67,10 +67,10 @@ fn check_value(
                 let after_paren = paren_pos + 1;
                 let mut depth = 1i32;
                 let mut close = after_paren;
-                for j in after_paren..len {
-                    if bytes[j] == b'(' {
+                for (j, &byte) in bytes.iter().enumerate().take(len).skip(after_paren) {
+                    if byte == b'(' {
                         depth += 1;
-                    } else if bytes[j] == b')' {
+                    } else if byte == b')' {
                         depth -= 1;
                         if depth == 0 {
                             close = j;
@@ -161,15 +161,16 @@ mod tests {
 
     #[test]
     fn accepts_absolute_url() {
-        let d = FunctionUrlNoSchemeRelative
-            .check(&style_with_value("url(https://example.com/image.png)"), &ctx());
+        let d = FunctionUrlNoSchemeRelative.check(
+            &style_with_value("url(https://example.com/image.png)"),
+            &ctx(),
+        );
         assert!(d.is_empty());
     }
 
     #[test]
     fn accepts_relative_url() {
-        let d = FunctionUrlNoSchemeRelative
-            .check(&style_with_value("url(images/bg.png)"), &ctx());
+        let d = FunctionUrlNoSchemeRelative.check(&style_with_value("url(images/bg.png)"), &ctx());
         assert!(d.is_empty());
     }
 
@@ -182,8 +183,7 @@ mod tests {
 
     #[test]
     fn ignores_non_url_function() {
-        let d = FunctionUrlNoSchemeRelative
-            .check(&style_with_value("rgb(0, 0, 0)"), &ctx());
+        let d = FunctionUrlNoSchemeRelative.check(&style_with_value("rgb(0, 0, 0)"), &ctx());
         assert!(d.is_empty());
     }
 }

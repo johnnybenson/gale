@@ -291,7 +291,12 @@ pub fn run() -> Result<()> {
                 .as_ref()
                 .map(|s| format!("{s:?}").to_lowercase())
                 .unwrap_or_else(|| "error".to_string());
-            rules_json.insert(name.clone(), serde_json::Value::String(severity));
+            if let Some(ref opts) = rc.options {
+                // Show [severity, options] for rules with options.
+                rules_json.insert(name.clone(), serde_json::json!([severity, opts]));
+            } else {
+                rules_json.insert(name.clone(), serde_json::Value::String(severity));
+            }
         }
         let output = serde_json::json!({
             "file": file_str,
@@ -303,7 +308,7 @@ pub fn run() -> Result<()> {
 
     // Set up caching if --cache is enabled.
     let cache_path = resolve_cache_path(cli.cache_location.as_deref());
-    let config_hash = compute_config_hash(&enabled_rules);
+    let config_hash = compute_config_hash(&config.rules);
     let mut lint_cache = if cli.cache {
         debug!("Loading cache from {}", cache_path.display());
         LintCache::load(&cache_path)
@@ -372,9 +377,7 @@ pub fn run() -> Result<()> {
     // Lint: either from stdin or from discovered files.
     let mut results: Vec<LintResult> = if cli.stdin {
         let mut source = String::new();
-        std::io::stdin()
-            .read_to_string(&mut source)
-            .expect("Failed to read from stdin");
+        std::io::stdin().read_to_string(&mut source)?;
 
         let file_path = &cli.stdin_filename;
         let syntax = detect_syntax(file_path);
@@ -407,7 +410,7 @@ pub fn run() -> Result<()> {
 
                     // Check cache: skip only files that were clean (0 diagnostics).
                     {
-                        let cache = cache_mutex.lock().unwrap();
+                        let cache = cache_mutex.lock().unwrap_or_else(|e| e.into_inner());
                         if cache.is_clean(&file_path, content_hash) {
                             debug!("Cache hit (clean): {file_path}");
                             return None;
@@ -420,7 +423,7 @@ pub fn run() -> Result<()> {
 
                     // Update cache with the new result.
                     {
-                        let mut cache = cache_mutex.lock().unwrap();
+                        let mut cache = cache_mutex.lock().unwrap_or_else(|e| e.into_inner());
                         cache.record(file_path, content_hash, result.diagnostics.len());
                     }
 

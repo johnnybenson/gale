@@ -327,12 +327,9 @@ impl LintRunner {
         let parse_result = match parse(source, syntax) {
             Ok(result) => result,
             Err(err) => {
-                let diag = Diagnostic::new(
-                    "parse-error",
-                    format!("Failed to parse file: {err}"),
-                )
-                .severity(Severity::Error)
-                .span(Span::new(0, 0));
+                let diag = Diagnostic::new("parse-error", format!("Failed to parse file: {err}"))
+                    .severity(Severity::Error)
+                    .span(Span::new(0, 0));
                 return LintResult::new(file_path, source, vec![diag]);
             }
         };
@@ -442,12 +439,9 @@ impl LintRunner {
         let parse_result = match parse(source, syntax) {
             Ok(result) => result,
             Err(err) => {
-                let diag = Diagnostic::new(
-                    "parse-error",
-                    format!("Failed to parse file: {err}"),
-                )
-                .severity(Severity::Error)
-                .span(Span::new(0, 0));
+                let diag = Diagnostic::new("parse-error", format!("Failed to parse file: {err}"))
+                    .severity(Severity::Error)
+                    .span(Span::new(0, 0));
                 return LintResult::new(file_path, source, vec![diag]);
             }
         };
@@ -693,10 +687,7 @@ mod tests {
         // runner must return a parse-error diagnostic, not empty results.
         // We simulate this by using Sass syntax which is unsupported.
         let registry = RuleRegistry::default();
-        let runner = LintRunner::new(
-            registry,
-            vec!["block-no-empty".to_string()],
-        );
+        let runner = LintRunner::new(registry, vec!["block-no-empty".to_string()]);
         let src = ".foo\n  color: red";
         let result = runner.lint_source(src, "test.sass", Syntax::Sass);
 
@@ -735,10 +726,7 @@ mod tests {
         // the lightningcss fallback) or a parse-error diagnostic. It
         // should never silently return empty results.
         let registry = RuleRegistry::default();
-        let runner = LintRunner::new(
-            registry,
-            vec!["block-no-empty".to_string()],
-        );
+        let runner = LintRunner::new(registry, vec!["block-no-empty".to_string()]);
         let src = ".foo { content: \"unclosed; }";
         let result = runner.lint_source(src, "test.scss", Syntax::Scss);
 

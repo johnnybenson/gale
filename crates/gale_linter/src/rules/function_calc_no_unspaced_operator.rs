@@ -42,15 +42,27 @@ fn extract_calc_body(s: &str, start: usize) -> Option<&str> {
     Some(&s[inner_start..])
 }
 
-/// Check if a calc body contains unspaced `+` or `-` operators.
+/// Describes which side(s) of an operator are missing a space.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum UnspacedSide {
+    Before,
+    After,
+}
+
+/// Check a calc body for unspaced `+` or `-` operators.
 /// Rules: `+` and `-` must be preceded and followed by whitespace.
 /// Exception: `-` at the very start (unary minus) or after `(` is fine.
 /// Only checks at the top-level nesting depth (depth 0); operators inside
 /// nested function calls like `var(--prop)` or `min(…)` are ignored.
-fn has_unspaced_operator(body: &str) -> bool {
+///
+/// Returns a list of violations (one per missing-space side), matching
+/// Stylelint's behaviour of emitting separate diagnostics for "before"
+/// and "after".
+fn find_unspaced_operators(body: &str) -> Vec<(usize, char, UnspacedSide)> {
     let bytes = body.as_bytes();
     let len = bytes.len();
     let mut depth = 0i32; // parenthesis nesting depth
+    let mut results = Vec::new();
 
     for i in 0..len {
         let ch = bytes[i];
@@ -104,20 +116,21 @@ fn has_unspaced_operator(body: &str) -> bool {
                 {
                     continue;
                 }
-                // Also after `)` followed by an operator  — `var(…) * -1`
-                // The `)` itself is not an operator, but the preceding
-                // operator (handled above via whitespace scan) covers this.
             }
 
-            // For `+`, it should always be a binary operator in calc
-            // For `-`, skip if it follows another operator or `(`
-            if !has_space_before || !has_space_after {
-                return true;
+            let op_char = ch as char;
+
+            // Emit separate diagnostics for each missing side, matching Stylelint.
+            if !has_space_before {
+                results.push((i, op_char, UnspacedSide::Before));
+            }
+            if !has_space_after {
+                results.push((i, op_char, UnspacedSide::After));
             }
         }
     }
 
-    false
+    results
 }
 
 impl Rule for FunctionCalcNoUnspacedOperator {
@@ -148,22 +161,34 @@ impl Rule for FunctionCalcNoUnspacedOperator {
 
             for m in CALC_START.find_iter(value) {
                 let body_start = m.end();
-                if let Some(body) = extract_calc_body(value, body_start)
+                if let Some(body) = extract_calc_body(value, body_start) {
                     // In SCSS/Less/Sass, skip calc() bodies that contain
                     // interpolation (`#{...}`) or SCSS variables (`$var`).
                     // These will be compiled to valid CSS by the preprocessor.
-                    && !(is_scss && (body.contains("#{") || body.contains('$')))
-                    && has_unspaced_operator(body)
-                {
-                    diagnostics.push(
-                        Diagnostic::new(
-                            self.name(),
-                            "Unexpected unspaced operator in calc function",
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(decl.span.offset, decl.span.length)),
-                    );
-                    break; // One diagnostic per declaration is enough.
+                    if is_scss && (body.contains("#{") || body.contains('$')) {
+                        continue;
+                    }
+
+                    let violations = find_unspaced_operators(body);
+                    for (_pos, op, side) in &violations {
+                        let msg = match side {
+                            UnspacedSide::Before => {
+                                format!(
+                                    "Expected a space before the '{op}' operator in calc function"
+                                )
+                            }
+                            UnspacedSide::After => {
+                                format!(
+                                    "Expected a space after the '{op}' operator in calc function"
+                                )
+                            }
+                        };
+                        diagnostics.push(
+                            Diagnostic::new(self.name(), msg)
+                                .severity(self.default_severity())
+                                .span(Span::new(decl.span.offset, decl.span.length)),
+                        );
+                    }
                 }
             }
         }
@@ -187,7 +212,7 @@ mod tests {
     }
 
     #[test]
-    fn reports_unspaced_plus_in_calc() {
+    fn reports_unspaced_plus_in_calc_both_sides() {
         let rule = FunctionCalcNoUnspacedOperator;
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
@@ -201,12 +226,34 @@ mod tests {
             span: ParserSpan::new(0, 28),
         });
         let diags = rule.check(&node, &make_context());
-        assert_eq!(diags.len(), 1);
-        assert!(diags[0].message.contains("unspaced operator"));
+        // Both sides unspaced → 2 diagnostics (before + after)
+        assert_eq!(diags.len(), 2);
+        assert!(diags[0].message.contains("before"));
+        assert!(diags[1].message.contains("after"));
     }
 
     #[test]
-    fn reports_unspaced_minus_in_calc() {
+    fn reports_unspaced_plus_in_calc_one_side() {
+        let rule = FunctionCalcNoUnspacedOperator;
+        let node = CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![Declaration {
+                property: "width".to_string(),
+                value: "calc(100% +20px)".to_string(),
+                span: ParserSpan::new(4, 23),
+                important: false,
+            }],
+            children: vec![],
+            span: ParserSpan::new(0, 29),
+        });
+        let diags = rule.check(&node, &make_context());
+        // Only missing space after → 1 diagnostic
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].message.contains("after"));
+    }
+
+    #[test]
+    fn reports_unspaced_minus_in_calc_both_sides() {
         let rule = FunctionCalcNoUnspacedOperator;
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
@@ -220,7 +267,7 @@ mod tests {
             span: ParserSpan::new(0, 28),
         });
         let diags = rule.check(&node, &make_context());
-        assert_eq!(diags.len(), 1);
+        assert_eq!(diags.len(), 2);
     }
 
     #[test]
