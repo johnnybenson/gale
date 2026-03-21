@@ -2,6 +2,8 @@
 //!
 //! All arrays are sorted alphabetically for binary search.
 
+use gale_css_parser::Syntax;
+
 // Lookup helpers — case-insensitive binary search.
 
 fn lookup(haystack: &[&str], needle: &str) -> bool {
@@ -15,6 +17,22 @@ pub fn is_known_property(name: &str) -> bool {
 
 pub fn is_known_at_rule(name: &str) -> bool {
     lookup(KNOWN_AT_RULES, name)
+}
+
+/// Returns `true` when the at-rule name is valid for the given syntax.
+///
+/// - `Syntax::Css` — only standard CSS at-rules.
+/// - `Syntax::Scss` / `Syntax::Sass` — CSS at-rules plus SCSS-specific ones.
+/// - `Syntax::Less` — CSS at-rules plus Less-specific ones.
+pub fn is_known_at_rule_for_syntax(name: &str, syntax: Syntax) -> bool {
+    if is_known_at_rule(name) {
+        return true;
+    }
+    match syntax {
+        Syntax::Scss | Syntax::Sass => lookup(KNOWN_SCSS_AT_RULES, name),
+        Syntax::Less => lookup(KNOWN_LESS_AT_RULES, name),
+        Syntax::Css => false,
+    }
 }
 
 pub fn is_known_pseudo_class(name: &str) -> bool {
@@ -530,6 +548,40 @@ static KNOWN_AT_RULES: &[&str] = &[
 ];
 
 // ---------------------------------------------------------------------------
+// SCSS / Sass at-rules (sorted)
+// ---------------------------------------------------------------------------
+
+static KNOWN_SCSS_AT_RULES: &[&str] = &[
+    "at-root",
+    "content",
+    "debug",
+    "each",
+    "else",
+    "else if",
+    "error",
+    "extend",
+    "for",
+    "forward",
+    "function",
+    "if",
+    "include",
+    "mixin",
+    "return",
+    "use",
+    "warn",
+    "while",
+];
+
+// ---------------------------------------------------------------------------
+// Less at-rules (sorted)
+// ---------------------------------------------------------------------------
+
+static KNOWN_LESS_AT_RULES: &[&str] = &[
+    "detached-ruleset",
+    "plugin",
+];
+
+// ---------------------------------------------------------------------------
 // Pseudo-classes (without the leading colon)
 // ---------------------------------------------------------------------------
 
@@ -893,6 +945,29 @@ mod tests {
     }
 
     #[test]
+    fn known_at_rules_for_scss() {
+        assert!(is_known_at_rule_for_syntax("media", Syntax::Scss));
+        assert!(is_known_at_rule_for_syntax("mixin", Syntax::Scss));
+        assert!(is_known_at_rule_for_syntax("include", Syntax::Scss));
+        assert!(is_known_at_rule_for_syntax("if", Syntax::Scss));
+        assert!(is_known_at_rule_for_syntax("each", Syntax::Scss));
+        assert!(is_known_at_rule_for_syntax("use", Syntax::Scss));
+        assert!(is_known_at_rule_for_syntax("forward", Syntax::Scss));
+        assert!(is_known_at_rule_for_syntax("at-root", Syntax::Scss));
+        assert!(!is_known_at_rule_for_syntax("mixin", Syntax::Css));
+        assert!(!is_known_at_rule_for_syntax("plugin", Syntax::Scss));
+    }
+
+    #[test]
+    fn known_at_rules_for_less() {
+        assert!(is_known_at_rule_for_syntax("media", Syntax::Less));
+        assert!(is_known_at_rule_for_syntax("plugin", Syntax::Less));
+        assert!(is_known_at_rule_for_syntax("detached-ruleset", Syntax::Less));
+        assert!(!is_known_at_rule_for_syntax("plugin", Syntax::Css));
+        assert!(!is_known_at_rule_for_syntax("mixin", Syntax::Less));
+    }
+
+    #[test]
     fn known_pseudo_classes() {
         assert!(is_known_pseudo_class("hover"));
         assert!(is_known_pseudo_class("focus"));
@@ -949,6 +1024,8 @@ mod tests {
         }
         assert_sorted(KNOWN_PROPERTIES, "KNOWN_PROPERTIES");
         assert_sorted(KNOWN_AT_RULES, "KNOWN_AT_RULES");
+        assert_sorted(KNOWN_SCSS_AT_RULES, "KNOWN_SCSS_AT_RULES");
+        assert_sorted(KNOWN_LESS_AT_RULES, "KNOWN_LESS_AT_RULES");
         assert_sorted(KNOWN_PSEUDO_CLASSES, "KNOWN_PSEUDO_CLASSES");
         assert_sorted(KNOWN_PSEUDO_ELEMENTS, "KNOWN_PSEUDO_ELEMENTS");
         assert_sorted(KNOWN_UNITS, "KNOWN_UNITS");

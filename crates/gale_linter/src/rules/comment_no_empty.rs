@@ -24,6 +24,14 @@ impl Rule for CommentNoEmpty {
     fn check(&self, node: &CssNode, context: &RuleContext) -> Vec<Diagnostic> {
         match node {
             CssNode::Comment(comment) => {
+                // In SCSS/Less/Sass, skip double-slash comments (`//`).
+                // `//` and `// ` are commonly used as visual separators and
+                // should not be flagged. The SCSS-specific rule
+                // `scss/comment-no-empty` handles them if needed.
+                if comment.is_line {
+                    return vec![];
+                }
+
                 // The text field contains the full comment including delimiters.
                 // Strip `/*` and `*/` and check if the content is empty/whitespace.
                 let inner = comment
@@ -84,6 +92,7 @@ mod tests {
     fn reports_empty_comment() {
         let rule = CommentNoEmpty;
         let node = CssNode::Comment(Comment {
+            is_line: false,
             text: "/* */".to_string(),
             span: ParserSpan::new(0, 5),
         });
@@ -96,6 +105,7 @@ mod tests {
     fn reports_minimal_empty_comment() {
         let rule = CommentNoEmpty;
         let node = CssNode::Comment(Comment {
+            is_line: false,
             text: "/**/".to_string(),
             span: ParserSpan::new(0, 4),
         });
@@ -107,11 +117,39 @@ mod tests {
     fn ignores_non_empty_comment() {
         let rule = CommentNoEmpty;
         let node = CssNode::Comment(Comment {
+            is_line: false,
             text: "/* hello */".to_string(),
             span: ParserSpan::new(0, 11),
         });
         let diags = rule.check(&node, &make_context());
         assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn skips_scss_double_slash_comments() {
+        let rule = CommentNoEmpty;
+        let ctx = RuleContext {
+            file_path: "test.scss",
+            source: "//\n// \n",
+            syntax: Syntax::Scss,
+        };
+        // Empty double-slash comment
+        let node = CssNode::Comment(gale_css_parser::Comment {
+            is_line: true,
+            text: "".to_string(),
+            span: ParserSpan::new(0, 2),
+        });
+        let diags = rule.check(&node, &ctx);
+        assert!(diags.is_empty());
+
+        // Double-slash comment with only a space
+        let node2 = CssNode::Comment(gale_css_parser::Comment {
+            is_line: true,
+            text: " ".to_string(),
+            span: ParserSpan::new(3, 3),
+        });
+        let diags2 = rule.check(&node2, &ctx);
+        assert!(diags2.is_empty());
     }
 
     #[test]
@@ -124,6 +162,7 @@ mod tests {
             syntax: Syntax::Css,
         };
         let node = CssNode::Comment(Comment {
+            is_line: false,
             text: "/* */".to_string(),
             span: ParserSpan::new(0, 5),
         });

@@ -25,6 +25,11 @@ impl Rule for UnitNoUnknown {
         };
         let mut diags = Vec::new();
         for decl in &rule.declarations {
+            // Skip `content` property — its values use CSS escapes (e.g. "\00A0")
+            // that can be misinterpreted as units.
+            if decl.property.eq_ignore_ascii_case("content") {
+                continue;
+            }
             for unit in extract_units(&decl.value) {
                 if !is_known_unit(&unit) {
                     diags.push(

@@ -36,7 +36,7 @@ fn collect_disabled_ranges(source: &str, line_index: &SourceLineIndex) -> Vec<Di
 
     while i + 1 < len {
         if bytes[i] == b'/' && bytes[i + 1] == b'*' {
-            // Found comment start — find the end.
+            // Found block comment start — find the end.
             let comment_start = i;
             if let Some(end_pos) = find_comment_end(bytes, i + 2) {
                 let comment_end = end_pos + 2; // past `*/`
@@ -56,6 +56,32 @@ fn collect_disabled_ranges(source: &str, line_index: &SourceLineIndex) -> Vec<Di
                 i = comment_end;
             } else {
                 break; // unterminated comment
+            }
+        } else if bytes[i] == b'/' && bytes[i + 1] == b'/' {
+            // Found line comment (`//`) — used in SCSS/Less for disable directives.
+            let comment_start = i;
+            i += 2; // skip `//`
+            let inner_start = i;
+            // Find end of line
+            while i < len && bytes[i] != b'\n' {
+                i += 1;
+            }
+            let inner = &source[inner_start..i];
+            let trimmed = inner.trim();
+            let comment_end = i;
+
+            process_directive(
+                trimmed,
+                comment_start,
+                comment_end,
+                source,
+                line_index,
+                &mut open_disables,
+                &mut ranges,
+            );
+
+            if i < len {
+                i += 1; // skip newline
             }
         } else {
             i += 1;
@@ -323,6 +349,76 @@ impl LintRunner {
             eprintln!("[perf] sort: {:.3}s", t5.elapsed().as_secs_f64());
             eprintln!("[perf] total diagnostics: {}", diagnostics.len());
         }
+
+        LintResult::new(file_path, source, diagnostics)
+    }
+
+    /// Parse and lint a CSS source string using a custom set of enabled rule
+    /// names instead of the runner's default list.  Used when config overrides
+    /// change the effective rules for a specific file.
+    pub fn lint_source_with_rules(
+        &self,
+        source: &str,
+        file_path: &str,
+        syntax: Syntax,
+        enabled_rules: &[String],
+    ) -> LintResult {
+        let debug = perf_enabled();
+
+        let t0 = Instant::now();
+        let parse_result = match parse(source, syntax) {
+            Ok(result) => result,
+            Err(_err) => {
+                return LintResult::new(file_path, source, vec![]);
+            }
+        };
+        if debug {
+            eprintln!("[perf] parse: {:.3}s", t0.elapsed().as_secs_f64());
+        }
+
+        let context = RuleContext {
+            file_path,
+            source,
+            syntax,
+        };
+
+        let mut diagnostics = Vec::new();
+
+        let active_rules: Vec<&dyn crate::rule::Rule> = enabled_rules
+            .iter()
+            .filter_map(|name| self.registry.get(name))
+            .collect();
+
+        let t1 = Instant::now();
+        for rule in &active_rules {
+            let mut results = rule.check_root(&parse_result.nodes, &context);
+            diagnostics.append(&mut results);
+        }
+        if debug {
+            eprintln!("[perf] check_root total: {:.3}s", t1.elapsed().as_secs_f64());
+        }
+
+        let t2 = Instant::now();
+        for node in &parse_result.nodes {
+            walk_node(node, &active_rules, &context, &mut diagnostics);
+        }
+        if debug {
+            eprintln!("[perf] walk: {:.3}s", t2.elapsed().as_secs_f64());
+        }
+
+        for diag in &mut diagnostics {
+            if diag.file_path.is_empty() {
+                diag.file_path = file_path.to_string();
+            }
+        }
+
+        let line_index = SourceLineIndex::build(source);
+        let disabled_ranges = collect_disabled_ranges(source, &line_index);
+        if !disabled_ranges.is_empty() {
+            diagnostics.retain(|d| !is_disabled(d, &disabled_ranges));
+        }
+
+        diagnostics.sort_by_key(|d| d.span.offset);
 
         LintResult::new(file_path, source, diagnostics)
     }

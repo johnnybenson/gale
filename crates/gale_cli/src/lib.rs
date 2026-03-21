@@ -24,11 +24,15 @@ use crate::cache::{LintCache, compute_config_hash, compute_hash, resolve_cache_p
 // ---------------------------------------------------------------------------
 
 #[derive(Parser)]
-#[command(name = "gale", about = "An extremely fast CSS linter, written in Rust")]
+#[command(name = "gale", version, about = "An extremely fast CSS linter, written in Rust")]
 pub struct Cli {
     /// Files or glob patterns to lint
-    #[arg(required_unless_present_any = ["stdin", "init", "lsp"])]
+    #[arg(required_unless_present_any = ["stdin", "init", "lsp", "print_config"])]
     files: Vec<String>,
+
+    /// Resolve and print the effective config for FILE as JSON, then exit
+    #[arg(long, value_name = "FILE")]
+    print_config: Option<PathBuf>,
 
     /// Start the LSP server (for editor integration)
     #[arg(long)]
@@ -266,9 +270,31 @@ pub fn run() -> Result<()> {
                     .map(|s| !matches!(s, gale_config::Severity::Off))
                     .unwrap_or(true)
             })
+            .filter(|(name, _)| registry.get(name).is_some())
             .map(|(name, _)| name.clone())
             .collect()
     };
+
+    // Handle --print-config: print resolved config as JSON and exit.
+    if let Some(ref file) = cli.print_config {
+        let file_str = file.display().to_string();
+        let effective_rules = config.rules_for_file(&file_str);
+        let mut rules_json = serde_json::Map::new();
+        for (name, rc) in &effective_rules {
+            let severity = rc
+                .severity
+                .as_ref()
+                .map(|s| format!("{s:?}").to_lowercase())
+                .unwrap_or_else(|| "error".to_string());
+            rules_json.insert(name.clone(), serde_json::Value::String(severity));
+        }
+        let output = serde_json::json!({
+            "file": file_str,
+            "rules": rules_json,
+        });
+        println!("{}", serde_json::to_string_pretty(&output)?);
+        return Ok(());
+    }
 
     // Set up caching if --cache is enabled.
     let cache_path = resolve_cache_path(cli.cache_location.as_deref());
@@ -280,7 +306,36 @@ pub fn run() -> Result<()> {
         LintCache::default()
     };
 
-    let runner = LintRunner::new(registry, enabled_rules);
+    let runner = LintRunner::new(registry, enabled_rules.clone());
+    let has_overrides = config.has_overrides();
+
+    /// Lint a single file, computing the effective rules from overrides if needed.
+    fn lint_file(
+        runner: &LintRunner,
+        source: &str,
+        file_path: &str,
+        syntax: gale_css_parser::Syntax,
+        config: &GaleConfig,
+        has_overrides: bool,
+    ) -> LintResult {
+        if has_overrides {
+            let effective_rules = config.rules_for_file(file_path);
+            let file_enabled: Vec<String> = effective_rules
+                .iter()
+                .filter(|(_, cfg)| {
+                    cfg.severity
+                        .as_ref()
+                        .map(|s| !matches!(s, gale_config::Severity::Off))
+                        .unwrap_or(true)
+                })
+                .filter(|(name, _)| runner.has_rule(name))
+                .map(|(name, _)| name.clone())
+                .collect();
+            runner.lint_source_with_rules(source, file_path, syntax, &file_enabled)
+        } else {
+            runner.lint_source(source, file_path, syntax)
+        }
+    }
 
     // Lint: either from stdin or from discovered files.
     let mut results: Vec<LintResult> = if cli.stdin {
@@ -291,7 +346,7 @@ pub fn run() -> Result<()> {
 
         let file_path = &cli.stdin_filename;
         let syntax = detect_syntax(file_path);
-        let result = runner.lint_source(&source, file_path, syntax);
+        let result = lint_file(&runner, &source, file_path, syntax, &config, has_overrides);
         vec![result]
     } else {
         // Discover files.
@@ -328,7 +383,7 @@ pub fn run() -> Result<()> {
                     }
 
                     let syntax = detect_syntax(&file_path);
-                    let result = runner.lint_source(&source, &file_path, syntax);
+                    let result = lint_file(&runner, &source, &file_path, syntax, &config, has_overrides);
 
                     // Update cache with the new result.
                     {
@@ -352,7 +407,7 @@ pub fn run() -> Result<()> {
                     let source = std::fs::read_to_string(file).ok()?;
                     let file_path = file.display().to_string();
                     let syntax = detect_syntax(&file_path);
-                    Some(runner.lint_source(&source, &file_path, syntax))
+                    Some(lint_file(&runner, &source, &file_path, syntax, &config, has_overrides))
                 })
                 .collect()
         }
@@ -370,14 +425,14 @@ pub fn run() -> Result<()> {
                     total_fixed += count;
                     // Re-lint the fixed source to get remaining diagnostics.
                     let syntax = detect_syntax(&result.file_path);
-                    *result = runner.lint_source(&fixed_source, &result.file_path, syntax);
+                    *result = lint_file(&runner, &fixed_source, &result.file_path, syntax, &config, has_overrides);
                 } else if let Err(err) = std::fs::write(&result.file_path, &fixed_source) {
                     eprintln!("Error writing {}: {err}", result.file_path);
                 } else {
                     total_fixed += count;
                     // Re-lint the fixed source to get remaining diagnostics.
                     let syntax = detect_syntax(&result.file_path);
-                    *result = runner.lint_source(&fixed_source, &result.file_path, syntax);
+                    *result = lint_file(&runner, &fixed_source, &result.file_path, syntax, &config, has_overrides);
                 }
             }
         }

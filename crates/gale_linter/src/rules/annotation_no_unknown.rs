@@ -75,6 +75,7 @@ mod tests {
         CssNode::Comment(Comment {
             text: text.to_string(),
             span: ParserSpan::new(0, text.len()),
+            is_line: false,
         })
     }
 

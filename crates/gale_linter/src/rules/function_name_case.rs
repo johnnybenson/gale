@@ -8,6 +8,34 @@ use crate::rule::{Rule, RuleContext};
 /// Equivalent to Stylelint's `function-name-case` rule.
 pub struct FunctionNameCase;
 
+/// CSS functions whose canonical name contains uppercase letters.
+/// These should not be flagged by the lowercase enforcement rule.
+const CAMEL_CASE_FUNCTIONS: &[&str] = &[
+    "translateX",
+    "translateY",
+    "translateZ",
+    "translate3d",
+    "scaleX",
+    "scaleY",
+    "scaleZ",
+    "scale3d",
+    "rotateX",
+    "rotateY",
+    "rotateZ",
+    "rotate3d",
+    "skewX",
+    "skewY",
+    "perspective",
+];
+
+/// Returns true if the function name is a known camelCase CSS function
+/// (case-insensitive match against the canonical name).
+fn is_camel_case_css_function(name: &str) -> bool {
+    CAMEL_CASE_FUNCTIONS
+        .iter()
+        .any(|&f| f.eq_ignore_ascii_case(name))
+}
+
 impl Rule for FunctionNameCase {
     fn name(&self) -> &'static str {
         "function-name-case"
@@ -32,7 +60,9 @@ impl Rule for FunctionNameCase {
             let has_source = decl_end <= ctx.source.len() && decl_start < decl_end;
 
             for func_name in extract_function_names(&decl.value) {
-                if func_name != func_name.to_ascii_lowercase() {
+                if func_name != func_name.to_ascii_lowercase()
+                    && !is_camel_case_css_function(&func_name)
+                {
                     let lowered = func_name.to_ascii_lowercase();
 
                     // Try to find the function name in the source to build a fix

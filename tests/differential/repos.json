@@ -1,0 +1,44 @@
+[
+  {
+    "name": "grafana",
+    "repo": "grafana/grafana",
+    "branch": "main",
+    "paths": ["public"],
+    "notes": "Simple config, extends stylelint-config-sass-guidelines. Mostly disabled rules."
+  },
+  {
+    "name": "bootstrap",
+    "repo": "twbs/bootstrap",
+    "branch": "main",
+    "paths": ["scss"],
+    "notes": "Extends stylelint-config-standard + scss. Uses scss, stylistic, order plugins."
+  },
+  {
+    "name": "gutenberg",
+    "repo": "wordpress/gutenberg",
+    "branch": "trunk",
+    "paths": ["packages"],
+    "notes": "WordPress editor. Extends stylelint-config-recommended + scss."
+  },
+  {
+    "name": "material-ui",
+    "repo": "mui/material-ui",
+    "branch": "master",
+    "paths": ["."],
+    "notes": "Pure CSS files. Config hidden in @mui/internal-code-infra."
+  },
+  {
+    "name": "primer-css",
+    "repo": "primer/css",
+    "branch": "main",
+    "paths": ["src"],
+    "notes": "GitHub design system. Heavy use of custom Primer plugins."
+  },
+  {
+    "name": "carbon",
+    "repo": "carbon-design-system/carbon",
+    "branch": "main",
+    "paths": ["packages"],
+    "notes": "IBM design system. Very strict config with many plugins."
+  }
+]

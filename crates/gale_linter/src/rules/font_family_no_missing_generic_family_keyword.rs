@@ -55,6 +55,12 @@ impl Rule for FontFamilyNoMissingGenericFamilyKeyword {
                 continue;
             }
 
+            // Skip if the value contains var() — the custom property may
+            // resolve to a value that includes a generic family.
+            if value.contains("var(") {
+                continue;
+            }
+
             // Split by comma and check the last entry.
             let last_family = match value.rsplit(',').next() {
                 Some(f) => f.trim(),

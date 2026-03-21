@@ -21,7 +21,7 @@ impl Rule for SelectorNoQualifyingType {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
@@ -29,6 +29,13 @@ impl Rule for SelectorNoQualifyingType {
         // Check each comma-separated selector individually
         for sel in rule.selector.split(',') {
             let sel = sel.trim();
+            // Skip selectors containing SCSS interpolation — the actual selector
+            // is dynamic and cannot be validated at lint time.
+            if matches!(ctx.syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass)
+                && sel.contains("#{")
+            {
+                continue;
+            }
             if has_qualifying_type(sel) {
                 diags.push(
                     Diagnostic::new(

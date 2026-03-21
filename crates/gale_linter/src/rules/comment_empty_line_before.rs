@@ -37,6 +37,14 @@ fn check_comment_nodes(
 ) {
     for (i, node) in nodes.iter().enumerate() {
         if let CssNode::Comment(comment) = node {
+            // In SCSS/Less/Sass, skip double-slash comments (`//`).
+            // These are very common inline comments and should not require
+            // empty lines before them. The SCSS-specific rule
+            // `scss/double-slash-comment-empty-line-before` handles them separately.
+            if comment.is_line {
+                continue;
+            }
+
             // Skip the first node in a list (first-nested exception)
             if i == 0 {
                 continue;
@@ -91,6 +99,7 @@ mod tests {
                 span: ParserSpan::new(0, 17),
             }),
             CssNode::Comment(Comment {
+                is_line: false,
                 text: "/* comment */".to_string(),
                 span: ParserSpan::new(comment_offset, 13),
             }),
@@ -112,6 +121,7 @@ mod tests {
                 span: ParserSpan::new(0, 17),
             }),
             CssNode::Comment(Comment {
+                is_line: false,
                 text: "/* comment */".to_string(),
                 span: ParserSpan::new(comment_offset, 13),
             }),
@@ -121,9 +131,36 @@ mod tests {
     }
 
     #[test]
+    fn skips_scss_double_slash_comments() {
+        let src = "a { color: red; }\n// scss comment";
+        let comment_offset = src.find("//").unwrap();
+        let nodes = vec![
+            CssNode::Style(StyleRule {
+                selector: "a".to_string(),
+                declarations: vec![],
+                children: vec![],
+                span: ParserSpan::new(0, 17),
+            }),
+            CssNode::Comment(Comment {
+                is_line: true,
+                text: " scss comment".to_string(),
+                span: ParserSpan::new(comment_offset, 15),
+            }),
+        ];
+        let ctx = RuleContext {
+            file_path: "t.scss",
+            source: src,
+            syntax: Syntax::Scss,
+        };
+        let d = CommentEmptyLineBefore.check_root(&nodes, &ctx);
+        assert!(d.is_empty());
+    }
+
+    #[test]
     fn allows_first_nested_comment() {
         let src = "/* first comment */";
         let nodes = vec![CssNode::Comment(Comment {
+            is_line: false,
             text: "/* first comment */".to_string(),
             span: ParserSpan::new(0, src.len()),
         })];

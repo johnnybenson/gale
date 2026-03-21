@@ -19,7 +19,7 @@ impl Rule for PropertyNoUnknown {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
@@ -28,6 +28,16 @@ impl Rule for PropertyNoUnknown {
             let prop = &decl.property;
             // Skip custom properties and vendor-prefixed
             if prop.starts_with("--") || prop.starts_with('-') {
+                continue;
+            }
+            // Skip SCSS variable declarations ($var)
+            if matches!(ctx.syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass)
+                && prop.starts_with('$')
+            {
+                continue;
+            }
+            // Skip Less variable declarations (@var)
+            if ctx.syntax == gale_css_parser::Syntax::Less && prop.starts_with('@') {
                 continue;
             }
             if !is_known_property(prop) {

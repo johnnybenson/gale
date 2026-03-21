@@ -21,12 +21,18 @@ impl Rule for SelectorClassPattern {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
         let mut diags = Vec::new();
         for class in extract_class_names(&rule.selector) {
+            // Skip class names containing SCSS interpolation #{...}
+            if matches!(ctx.syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass)
+                && class.contains("#{")
+            {
+                continue;
+            }
             if !is_kebab_case(&class) {
                 diags.push(
                     Diagnostic::new(
@@ -55,13 +61,29 @@ fn extract_class_names(selector: &str) -> Vec<String> {
             i += 1;
             let start = i;
             // CSS class: ident chars (alphanum, hyphen, underscore, non-ASCII)
-            while i < len
-                && (chars[i].is_ascii_alphanumeric()
+            // Also consume SCSS interpolation #{...} within class names
+            while i < len {
+                if chars[i].is_ascii_alphanumeric()
                     || chars[i] == '-'
                     || chars[i] == '_'
-                    || !chars[i].is_ascii())
-            {
-                i += 1;
+                    || !chars[i].is_ascii()
+                {
+                    i += 1;
+                } else if chars[i] == '#' && i + 1 < len && chars[i + 1] == '{' {
+                    // Consume SCSS interpolation #{...}
+                    i += 2; // skip #{
+                    let mut depth = 1;
+                    while i < len && depth > 0 {
+                        if chars[i] == '{' {
+                            depth += 1;
+                        } else if chars[i] == '}' {
+                            depth -= 1;
+                        }
+                        i += 1;
+                    }
+                } else {
+                    break;
+                }
             }
             if i > start {
                 classes.push(chars[start..i].iter().collect());

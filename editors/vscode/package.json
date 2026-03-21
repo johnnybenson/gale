@@ -1,0 +1,59 @@
+{
+  "name": "gale-lint",
+  "displayName": "Gale CSS Linter",
+  "description": "An extremely fast CSS linter, written in Rust",
+  "version": "0.1.0",
+  "license": "MIT",
+  "publisher": "gale",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LyricalString/gale"
+  },
+  "categories": ["Linters"],
+  "keywords": ["css", "scss", "less", "sass", "linter"],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "activationEvents": [
+    "onLanguage:css",
+    "onLanguage:scss",
+    "onLanguage:less",
+    "onLanguage:sass"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Gale CSS Linter",
+      "properties": {
+        "gale.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable the Gale CSS linter."
+        },
+        "gale.configPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a Gale configuration file. If empty, Gale will auto-discover the config."
+        },
+        "gale.run": {
+          "type": "string",
+          "enum": ["onType", "onSave"],
+          "default": "onType",
+          "description": "When to run the linter: on every keystroke or only on save."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.2.2",
+    "typescript": "^5.7.0"
+  }
+}

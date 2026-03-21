@@ -97,6 +97,10 @@ pub struct AtRule {
 pub struct Comment {
     pub text: String,
     pub span: Span,
+    /// Whether this is a line comment (`//`) vs. block comment (`/* */`).
+    /// Always `false` for CSS files; may be `true` for SCSS/Less.
+    #[serde(default)]
+    pub is_line: bool,
 }
 
 /// A node in the simplified CSS tree.
@@ -671,6 +675,7 @@ fn parse_raffia(source: &str, syntax: Syntax) -> Result<ParseResult, ParseError>
         nodes.push(CssNode::Comment(Comment {
             text: c.content.to_owned(),
             span: raffia_span(&c.span),
+            is_line: matches!(c.kind, raffia::token::CommentKind::Line),
         }));
     }
 

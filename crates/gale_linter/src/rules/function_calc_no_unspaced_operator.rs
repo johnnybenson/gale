@@ -1,4 +1,4 @@
-use gale_css_parser::CssNode;
+use gale_css_parser::{CssNode, Syntax};
 use gale_diagnostics::{Diagnostic, Severity, Span};
 use regex::Regex;
 use std::sync::LazyLock;
@@ -102,7 +102,7 @@ impl Rule for FunctionCalcNoUnspacedOperator {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _context: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, context: &RuleContext) -> Vec<Diagnostic> {
         let style = match node {
             CssNode::Style(s) => s,
             _ => return vec![],
@@ -113,9 +113,15 @@ impl Rule for FunctionCalcNoUnspacedOperator {
         for decl in &style.declarations {
             let value = &decl.value;
 
+            let is_scss = matches!(context.syntax, Syntax::Scss | Syntax::Less | Syntax::Sass);
+
             for m in CALC_START.find_iter(value) {
                 let body_start = m.end();
                 if let Some(body) = extract_calc_body(value, body_start)
+                    // In SCSS/Less/Sass, skip calc() bodies that contain
+                    // interpolation (`#{...}`). The interpolated expressions
+                    // will be compiled to valid CSS by the preprocessor.
+                    && !(is_scss && body.contains("#{"))
                     && has_unspaced_operator(body)
                 {
                     diagnostics.push(
@@ -200,6 +206,29 @@ mod tests {
             span: ParserSpan::new(0, 30),
         });
         let diags = rule.check(&node, &make_context());
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn skips_scss_interpolation_in_calc() {
+        let rule = FunctionCalcNoUnspacedOperator;
+        let node = CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![Declaration {
+                property: "width".to_string(),
+                value: "calc(100%-#{$gap})".to_string(),
+                span: ParserSpan::new(4, 24),
+                important: false,
+            }],
+            children: vec![],
+            span: ParserSpan::new(0, 30),
+        });
+        let ctx = RuleContext {
+            file_path: "test.scss",
+            source: "",
+            syntax: Syntax::Scss,
+        };
+        let diags = rule.check(&node, &ctx);
         assert!(diags.is_empty());
     }
 

@@ -24,13 +24,20 @@ impl Rule for SelectorMaxCompoundSelectors {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+
+        let selector = if matches!(ctx.syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less) {
+            strip_scss_line_comments(&rule.selector)
+        } else {
+            rule.selector.clone()
+        };
+
         let mut diags = Vec::new();
         // Check each comma-separated selector
-        for sel in rule.selector.split(',') {
+        for sel in selector.split(',') {
             let sel = sel.trim();
             let count = count_compound_selectors(sel);
             if count > MAX_COMPOUND {
@@ -108,6 +115,15 @@ fn count_compound_selectors(selector: &str) -> usize {
     }
 
     count
+}
+
+/// Strip `//` line comments from a selector string (SCSS/Less).
+fn strip_scss_line_comments(selector: &str) -> String {
+    selector
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg(test)]

@@ -1,7 +1,7 @@
 use gale_css_parser::CssNode;
 use gale_diagnostics::{Diagnostic, Severity, Span};
 
-use crate::data::is_known_at_rule;
+use crate::data::is_known_at_rule_for_syntax;
 use crate::rule::{Rule, RuleContext};
 
 pub struct AtRuleNoUnknown;
@@ -19,7 +19,7 @@ impl Rule for AtRuleNoUnknown {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::AtRule(at) = node else {
             return vec![];
         };
@@ -27,7 +27,7 @@ impl Rule for AtRuleNoUnknown {
         if at.name.starts_with('-') {
             return vec![];
         }
-        if !is_known_at_rule(&at.name) {
+        if !is_known_at_rule_for_syntax(&at.name, ctx.syntax) {
             vec![
                 Diagnostic::new(self.name(), format!("Unexpected unknown at-rule \"@{}\"", at.name))
                     .severity(self.default_severity())
@@ -73,5 +73,47 @@ mod tests {
     #[test]
     fn skips_vendor_prefixed() {
         assert!(AtRuleNoUnknown.check(&at("-webkit-keyframes"), &ctx()).is_empty());
+    }
+
+    fn scss_ctx() -> RuleContext<'static> {
+        RuleContext { file_path: "t.scss", source: "", syntax: Syntax::Scss }
+    }
+
+    fn less_ctx() -> RuleContext<'static> {
+        RuleContext { file_path: "t.less", source: "", syntax: Syntax::Less }
+    }
+
+    #[test]
+    fn allows_scss_at_rules_in_scss() {
+        let ctx = scss_ctx();
+        assert!(AtRuleNoUnknown.check(&at("mixin"), &ctx).is_empty());
+        assert!(AtRuleNoUnknown.check(&at("include"), &ctx).is_empty());
+        assert!(AtRuleNoUnknown.check(&at("if"), &ctx).is_empty());
+        assert!(AtRuleNoUnknown.check(&at("each"), &ctx).is_empty());
+        assert!(AtRuleNoUnknown.check(&at("extend"), &ctx).is_empty());
+        assert!(AtRuleNoUnknown.check(&at("use"), &ctx).is_empty());
+        assert!(AtRuleNoUnknown.check(&at("forward"), &ctx).is_empty());
+        assert!(AtRuleNoUnknown.check(&at("at-root"), &ctx).is_empty());
+    }
+
+    #[test]
+    fn reports_scss_at_rules_in_css() {
+        let ctx = self::ctx();
+        assert_eq!(AtRuleNoUnknown.check(&at("mixin"), &ctx).len(), 1);
+        assert_eq!(AtRuleNoUnknown.check(&at("include"), &ctx).len(), 1);
+        assert_eq!(AtRuleNoUnknown.check(&at("if"), &ctx).len(), 1);
+    }
+
+    #[test]
+    fn allows_less_at_rules_in_less() {
+        let ctx = less_ctx();
+        assert!(AtRuleNoUnknown.check(&at("plugin"), &ctx).is_empty());
+        assert!(AtRuleNoUnknown.check(&at("detached-ruleset"), &ctx).is_empty());
+    }
+
+    #[test]
+    fn reports_less_at_rules_in_css() {
+        let ctx = self::ctx();
+        assert_eq!(AtRuleNoUnknown.check(&at("plugin"), &ctx).len(), 1);
     }
 }
