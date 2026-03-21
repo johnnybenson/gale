@@ -1,5 +1,5 @@
 use gale_css_parser::CssNode;
-use gale_diagnostics::{Diagnostic, Severity, Span};
+use gale_diagnostics::{Diagnostic, Edit, Fix, Severity, Span};
 
 use crate::rule::{Rule, RuleContext};
 
@@ -63,6 +63,7 @@ impl Rule for SelectorPseudoElementColonNotation {
                     end_idx >= lower_search.len() || !lower_search.as_bytes()[end_idx].is_ascii_alphanumeric();
 
                 if !is_double && at_boundary {
+                    let fix_offset = rule.span.offset + abs_idx;
                     diags.push(
                         Diagnostic::new(
                             self.name(),
@@ -71,7 +72,14 @@ impl Rule for SelectorPseudoElementColonNotation {
                             ),
                         )
                         .severity(self.default_severity())
-                        .span(Span::new(rule.span.offset, rule.span.length)),
+                        .span(Span::new(fix_offset, pattern.len()))
+                        .fix(Fix::new(
+                            format!("Replace :{pseudo} with ::{pseudo}"),
+                            vec![Edit::new(
+                                Span::new(fix_offset, pattern.len()),
+                                format!("::{pseudo}"),
+                            )],
+                        )),
                     );
                     break;
                 }

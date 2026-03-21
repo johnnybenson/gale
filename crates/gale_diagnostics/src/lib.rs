@@ -277,6 +277,55 @@ impl LintResult {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Fix application engine
+// ---------------------------------------------------------------------------
+
+/// Apply all fixes from the given diagnostics to the source text.
+/// Returns the fixed source and the count of applied fixes.
+/// Edits are applied from end to start to preserve earlier offsets.
+/// Overlapping edits are skipped.
+pub fn apply_fixes(source: &str, diagnostics: &[Diagnostic]) -> (String, usize) {
+    // Collect all edits from diagnostics that have fixes.
+    let mut edits: Vec<&Edit> = diagnostics
+        .iter()
+        .filter_map(|d| d.fix.as_ref())
+        .flat_map(|f| &f.edits)
+        .collect();
+
+    if edits.is_empty() {
+        return (source.to_string(), 0);
+    }
+
+    // Sort edits by offset descending so we apply from end to start.
+    edits.sort_by(|a, b| b.span.offset.cmp(&a.span.offset));
+
+    let mut result = source.to_string();
+    let mut applied = 0;
+    let mut last_offset = usize::MAX;
+
+    for edit in &edits {
+        let start = edit.span.offset;
+        let end = start + edit.span.length;
+
+        // Skip overlapping edits.
+        if end > last_offset {
+            continue;
+        }
+
+        // Bounds check.
+        if end > result.len() {
+            continue;
+        }
+
+        result.replace_range(start..end, &edit.new_text);
+        last_offset = start;
+        applied += 1;
+    }
+
+    (result, applied)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -328,5 +377,45 @@ mod tests {
         let result = LintResult::new("test.css", "body { color: red; }", vec![]);
         assert!(result.is_empty());
         assert_eq!(result.count_by_severity(Severity::Error), 0);
+    }
+
+    #[test]
+    fn apply_fixes_single_edit() {
+        let source = "a { color: #ffffff; }";
+        let diags = vec![
+            Diagnostic::new("color-hex-length", "shorten")
+                .span(Span::new(11, 7))
+                .fix(Fix::new("Shorten hex", vec![Edit::new(Span::new(11, 7), "#fff")])),
+        ];
+        let (fixed, count) = apply_fixes(source, &diags);
+        assert_eq!(fixed, "a { color: #fff; }");
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn apply_fixes_multiple_edits() {
+        let source = "a { margin: 0px; padding: 0em; }";
+        let diags = vec![
+            Diagnostic::new("length-zero-no-unit", "remove unit")
+                .span(Span::new(12, 3))
+                .fix(Fix::new("Remove unit", vec![Edit::new(Span::new(12, 3), "0")])),
+            Diagnostic::new("length-zero-no-unit", "remove unit")
+                .span(Span::new(26, 3))
+                .fix(Fix::new("Remove unit", vec![Edit::new(Span::new(26, 3), "0")])),
+        ];
+        let (fixed, count) = apply_fixes(source, &diags);
+        assert_eq!(fixed, "a { margin: 0; padding: 0; }");
+        assert_eq!(count, 2);
+    }
+
+    #[test]
+    fn apply_fixes_no_fixes() {
+        let source = "a { color: red; }";
+        let diags = vec![
+            Diagnostic::new("some-rule", "no fix available").span(Span::new(0, 1)),
+        ];
+        let (fixed, count) = apply_fixes(source, &diags);
+        assert_eq!(fixed, source);
+        assert_eq!(count, 0);
     }
 }

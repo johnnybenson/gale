@@ -1,5 +1,5 @@
 use gale_css_parser::CssNode;
-use gale_diagnostics::{Diagnostic, Severity, Span};
+use gale_diagnostics::{Diagnostic, Edit, Fix, Severity, Span};
 
 use crate::rule::{Rule, RuleContext};
 
@@ -27,7 +27,7 @@ impl Rule for LengthZeroNoUnit {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
@@ -37,17 +37,35 @@ impl Rule for LengthZeroNoUnit {
             if decl.property.starts_with("--") {
                 continue;
             }
-            if has_zero_with_unit(&decl.value) {
+
+            let decl_start = decl.span.offset;
+            let decl_end = decl_start + decl.span.length;
+            let search_area = if decl_end <= ctx.source.len() && decl_start < decl_end {
+                &ctx.source[decl_start..decl_end]
+            } else {
+                &decl.value
+            };
+
+            for (rel_offset, zero_unit_len) in find_zero_with_units(search_area) {
+                let abs_offset = if decl_end <= ctx.source.len() && decl_start < decl_end {
+                    decl_start + rel_offset
+                } else {
+                    decl_start
+                };
                 diags.push(
                     Diagnostic::new(
                         self.name(),
                         format!(
-                            "Unexpected unit on zero length in \"{}\"",
-                            decl.value
+                            "Unexpected unit on zero length \"{}\"",
+                            &search_area[rel_offset..rel_offset + zero_unit_len]
                         ),
                     )
                     .severity(self.default_severity())
-                    .span(Span::new(decl.span.offset, decl.span.length)),
+                    .span(Span::new(abs_offset, zero_unit_len))
+                    .fix(Fix::new(
+                        "Remove unit",
+                        vec![Edit::new(Span::new(abs_offset, zero_unit_len), "0")],
+                    )),
                 );
             }
         }
@@ -55,34 +73,35 @@ impl Rule for LengthZeroNoUnit {
     }
 }
 
-fn has_zero_with_unit(value: &str) -> bool {
-    let lower = value.to_ascii_lowercase();
-    let chars: Vec<char> = lower.chars().collect();
-    let len = chars.len();
+/// Find all `0<unit>` patterns and return (byte_offset, total_length_including_zero).
+fn find_zero_with_units(value: &str) -> Vec<(usize, usize)> {
+    let bytes = value.as_bytes();
+    let len = bytes.len();
+    let mut results = Vec::new();
     let mut i = 0;
 
     while i < len {
-        // Find a '0' that is a standalone number (not part of a larger number like 10px)
-        if chars[i] == '0' {
-            // Check it's not preceded by a digit or dot (i.e., it's the whole number)
-            let is_start_of_number = i == 0
-                || (!chars[i - 1].is_ascii_digit() && chars[i - 1] != '.');
+        if bytes[i] == b'0' {
+            // Check it's not preceded by a digit or dot
+            let is_start = i == 0
+                || (!bytes[i - 1].is_ascii_digit() && bytes[i - 1] != b'.');
 
-            if is_start_of_number {
-                // Check there's no dot or digit right after (0.5px is fine)
+            if is_start {
                 let after = i + 1;
-                if after < len && (chars[after] == '.' || chars[after].is_ascii_digit()) {
+                // Skip if followed by dot or digit (e.g. 0.5px)
+                if after < len && (bytes[after] == b'.' || bytes[after].is_ascii_digit()) {
                     i += 1;
                     continue;
                 }
                 // Check if followed by a length unit
-                let rest: String = chars[after..].iter().collect();
+                let rest = &value[after..].to_ascii_lowercase();
                 for unit in LENGTH_UNITS {
                     if rest.starts_with(unit) {
-                        // Make sure the unit isn't part of a longer word
                         let end = after + unit.len();
-                        if end >= len || !chars[end].is_ascii_alphabetic() {
-                            return true;
+                        if end >= len || !bytes[end].is_ascii_alphabetic() {
+                            results.push((i, 1 + unit.len())); // "0" + unit
+                            i = end;
+                            break;
                         }
                     }
                 }
@@ -90,7 +109,7 @@ fn has_zero_with_unit(value: &str) -> bool {
         }
         i += 1;
     }
-    false
+    results
 }
 
 #[cfg(test)]
@@ -120,6 +139,7 @@ mod tests {
     fn reports_zero_with_unit() {
         let d = LengthZeroNoUnit.check(&style_decl("margin", "0px"), &ctx());
         assert_eq!(d.len(), 1);
+        assert!(d[0].fix.is_some());
     }
 
     #[test]

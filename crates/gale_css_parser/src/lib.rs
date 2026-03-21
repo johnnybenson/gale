@@ -406,10 +406,12 @@ fn convert_rules(rules: &[LcssRule], source: &str, idx: &LineIndex) -> Vec<CssNo
 
             LcssRule::NestedDeclarations(nested_decls) => {
                 for decl in &nested_decls.declarations.declarations {
-                    nodes.push(CssNode::Declaration(convert_property(decl, false, source)));
+                    let (d, _) = convert_property(decl, false, source, 0, source.len());
+                    nodes.push(CssNode::Declaration(d));
                 }
                 for decl in &nested_decls.declarations.important_declarations {
-                    nodes.push(CssNode::Declaration(convert_property(decl, true, source)));
+                    let (d, _) = convert_property(decl, true, source, 0, source.len());
+                    nodes.push(CssNode::Declaration(d));
                 }
             }
 
@@ -475,13 +477,23 @@ fn convert_style_rule(
     idx: &LineIndex,
 ) -> StyleRule {
     let selector = style.selectors.to_css_string(po()).unwrap_or_default();
+    let rule_span = loc_to_span(style.loc, source, idx);
+
+    // Search area for finding declaration positions.
+    let search_start = rule_span.offset;
+    let search_end = (rule_span.offset + rule_span.length).min(source.len());
 
     let mut declarations = Vec::new();
+    let mut search_from = search_start;
     for decl in &style.declarations.declarations {
-        declarations.push(convert_property(decl, false, source));
+        let (d, next) = convert_property(decl, false, source, search_from, search_end);
+        search_from = next;
+        declarations.push(d);
     }
     for decl in &style.declarations.important_declarations {
-        declarations.push(convert_property(decl, true, source));
+        let (d, next) = convert_property(decl, true, source, search_from, search_end);
+        search_from = next;
+        declarations.push(d);
     }
 
     // Nested rules: extract only nested style rules as direct children.
@@ -495,7 +507,7 @@ fn convert_style_rule(
     StyleRule {
         selector,
         declarations,
-        span: loc_to_span(style.loc, source, idx),
+        span: rule_span,
         children,
     }
 }
@@ -504,20 +516,54 @@ fn convert_property(
     prop: &lightningcss::properties::Property,
     important: bool,
     source: &str,
-) -> Declaration {
+    search_from: usize,
+    search_end: usize,
+) -> (Declaration, usize) {
     let property_name = prop.property_id().name().to_owned();
     let value = prop.value_to_css_string(po()).unwrap_or_default();
 
-    // Try to find the property in the source text for a proper byte offset.
-    // Properties don't carry their own Location in lightningcss, so we use
-    // Span::empty() as a fallback.
-    let _ = source; // acknowledge the parameter; future improvement can search source
+    // Find the declaration in the source text for accurate byte offsets.
+    let span = find_declaration_span(source, search_from, search_end, &property_name);
+    let next_search = if span.length > 0 {
+        span.offset + span.length
+    } else {
+        search_from
+    };
 
-    Declaration {
-        property: property_name,
-        value,
-        span: Span::empty(),
-        important,
+    (
+        Declaration {
+            property: property_name,
+            value,
+            span,
+            important,
+        },
+        next_search,
+    )
+}
+
+/// Search for a CSS declaration (`property-name: ...;` or `property-name: ... }`)
+/// in the source text between `from` and `to`, returning its span.
+fn find_declaration_span(source: &str, from: usize, to: usize, property: &str) -> Span {
+    let area = &source[from..to.min(source.len())];
+    let lower_area = area.to_ascii_lowercase();
+    let lower_prop = property.to_ascii_lowercase();
+
+    if let Some(rel_idx) = lower_area.find(&lower_prop) {
+        let abs_start = from + rel_idx;
+        // Find the end: semicolon or closing brace.
+        let after_prop = abs_start + property.len();
+        let rest = &source[after_prop..to.min(source.len())];
+        let decl_end = rest
+            .find(';')
+            .map(|i| after_prop + i + 1) // include the semicolon
+            .unwrap_or_else(|| {
+                rest.find('}')
+                    .map(|i| after_prop + i)
+                    .unwrap_or(after_prop)
+            });
+        Span::new(abs_start, decl_end - abs_start)
+    } else {
+        Span::empty()
     }
 }
 
@@ -561,12 +607,32 @@ fn line_col_to_byte_offset(source: &str, line: u32, column: u32) -> usize {
 }
 
 /// Map a lightningcss `Location` (line/column) into our `Span` as a byte offset.
+/// Attempts to find the matching closing `}` to determine the span length.
 fn loc_to_span(loc: lightningcss::rules::Location, source: &str, idx: &LineIndex) -> Span {
     let offset = idx.line_col_to_offset(source, loc.line, loc.column);
-    Span {
-        offset,
-        length: 0,
-    }
+
+    // Find the matching closing brace to determine length.
+    let rest = &source[offset..];
+    let length = if let Some(open) = rest.find('{') {
+        let mut depth = 0i32;
+        let mut end = open;
+        for (i, b) in rest[open..].bytes().enumerate() {
+            if b == b'{' {
+                depth += 1;
+            } else if b == b'}' {
+                depth -= 1;
+                if depth == 0 {
+                    end = open + i + 1; // include the }
+                    break;
+                }
+            }
+        }
+        end
+    } else {
+        0
+    };
+
+    Span { offset, length }
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 use gale_css_parser::CssNode;
-use gale_diagnostics::{Diagnostic, Severity, Span};
+use gale_diagnostics::{Diagnostic, Edit, Fix, Severity, Span};
 
 use crate::rule::{Rule, RuleContext};
 
@@ -21,21 +21,40 @@ impl Rule for ColorHexLength {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
         let mut diags = Vec::new();
         for decl in &rule.declarations {
-            for hex in find_hex_colors(&decl.value) {
+            // Search the source within the declaration span for hex colors.
+            let decl_start = decl.span.offset;
+            let decl_end = decl_start + decl.span.length;
+            let search_area = if decl_end <= ctx.source.len() && decl_start < decl_end {
+                &ctx.source[decl_start..decl_end]
+            } else {
+                &decl.value
+            };
+
+            for (rel_offset, hex) in find_hex_colors_with_offset(search_area) {
                 if can_shorten(&hex) {
+                    let shortened = shorten(&hex);
+                    let abs_offset = if decl_end <= ctx.source.len() && decl_start < decl_end {
+                        decl_start + rel_offset
+                    } else {
+                        decl_start
+                    };
                     diags.push(
                         Diagnostic::new(
                             self.name(),
-                            format!("Expected \"{hex}\" to be \"{}\"", shorten(&hex)),
+                            format!("Expected \"{hex}\" to be \"{shortened}\""),
                         )
                         .severity(self.default_severity())
-                        .span(Span::new(decl.span.offset, decl.span.length)),
+                        .span(Span::new(abs_offset, hex.len()))
+                        .fix(Fix::new(
+                            format!("Shorten to \"{shortened}\""),
+                            vec![Edit::new(Span::new(abs_offset, hex.len()), &shortened)],
+                        )),
                     );
                 }
             }
@@ -44,21 +63,21 @@ impl Rule for ColorHexLength {
     }
 }
 
-fn find_hex_colors(value: &str) -> Vec<String> {
+/// Find hex colors and their byte offsets within the given string.
+fn find_hex_colors_with_offset(value: &str) -> Vec<(usize, String)> {
     let mut colors = Vec::new();
-    let chars: Vec<char> = value.chars().collect();
-    let len = chars.len();
+    let bytes = value.as_bytes();
+    let len = bytes.len();
     let mut i = 0;
     while i < len {
-        if chars[i] == '#' {
+        if bytes[i] == b'#' {
             let start = i;
             i += 1;
-            while i < len && chars[i].is_ascii_hexdigit() {
+            while i < len && (bytes[i] as char).is_ascii_hexdigit() {
                 i += 1;
             }
             if i > start + 1 {
-                let hex: String = chars[start..i].iter().collect();
-                colors.push(hex);
+                colors.push((start, value[start..i].to_string()));
             }
         } else {
             i += 1;

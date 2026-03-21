@@ -9,7 +9,7 @@ use tracing::debug;
 
 use gale_config::GaleConfig;
 use gale_css_parser::detect_syntax;
-use gale_diagnostics::{LintResult, Severity};
+use gale_diagnostics::{LintResult, Severity, apply_fixes};
 use gale_formatter::create_formatter;
 use gale_linter::{LintRunner, RuleRegistry};
 
@@ -35,6 +35,10 @@ pub struct Cli {
     /// Maximum number of warnings before erroring
     #[arg(long)]
     max_warnings: Option<usize>,
+
+    /// Automatically fix problems
+    #[arg(long)]
+    fix: bool,
 
     /// Only report errors
     #[arg(short, long)]
@@ -150,6 +154,27 @@ pub fn run() -> Result<()> {
             Some(runner.lint_source(&source, &file_path, syntax))
         })
         .collect();
+
+    // Apply fixes when --fix is set.
+    if cli.fix {
+        let mut total_fixed = 0usize;
+        for result in &mut results {
+            let (fixed_source, count) = apply_fixes(&result.source, &result.diagnostics);
+            if count > 0 {
+                if let Err(err) = std::fs::write(&result.file_path, &fixed_source) {
+                    eprintln!("Error writing {}: {err}", result.file_path);
+                } else {
+                    total_fixed += count;
+                    // Re-lint the fixed source to get remaining diagnostics.
+                    let syntax = detect_syntax(&result.file_path);
+                    *result = runner.lint_source(&fixed_source, &result.file_path, syntax);
+                }
+            }
+        }
+        if total_fixed > 0 {
+            eprintln!("Fixed {total_fixed} problem(s).");
+        }
+    }
 
     // Filter to errors-only when --quiet is set.
     if cli.quiet {
