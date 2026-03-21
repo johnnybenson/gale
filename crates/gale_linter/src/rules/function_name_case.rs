@@ -53,15 +53,36 @@ impl Rule for FunctionNameCase {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+        let is_scss = matches!(ctx.syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less);
+
         let mut diags = Vec::new();
         for decl in &rule.declarations {
+            // In SCSS/Less, skip values with interpolation or SCSS variables,
+            // since the actual function name may be dynamic.
+            if is_scss && (decl.value.contains("#{") || decl.value.contains('$')) {
+                continue;
+            }
+
             let decl_start = decl.span.offset;
             let decl_end = decl_start + decl.span.length;
             let has_source = decl_end <= ctx.source.len() && decl_start < decl_end;
 
+            // Read ignoreFunctions from options
+            let ignore_fns: Vec<String> = ctx
+                .options
+                .and_then(|v| v.get("ignoreFunctions"))
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+
             for func_name in extract_function_names(&decl.value) {
                 if func_name != func_name.to_ascii_lowercase()
                     && !is_camel_case_css_function(&func_name)
+                    && !ignore_fns.iter().any(|f| f == &func_name)
                 {
                     let lowered = func_name.to_ascii_lowercase();
 
@@ -138,7 +159,7 @@ mod tests {
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css }
+        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
     }
 
     fn style_decl(val: &str) -> CssNode {
@@ -177,7 +198,7 @@ mod tests {
     #[test]
     fn emits_fix_for_uppercase_function() {
         let source = "a { color: RGB(0, 0, 0); }";
-        let ctx = RuleContext { file_path: "t.css", source, syntax: Syntax::Css };
+        let ctx = RuleContext { file_path: "t.css", source, syntax: Syntax::Css, options: None };
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![Declaration {

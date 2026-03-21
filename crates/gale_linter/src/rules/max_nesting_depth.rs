@@ -24,17 +24,24 @@ impl Rule for MaxNestingDepth {
         Severity::Warning
     }
 
-    fn check_root(&self, nodes: &[CssNode], _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check_root(&self, nodes: &[CssNode], ctx: &RuleContext) -> Vec<Diagnostic> {
+        // Read configured max depth from options (primary option is a number).
+        let max = ctx
+            .options
+            .and_then(|v| v.as_u64())
+            .map(|n| n as usize)
+            .unwrap_or(MAX_DEPTH);
+
         let mut diags = Vec::new();
         for node in nodes {
             match node {
                 CssNode::Style(rule) => {
-                    check_style_depth(self, rule, 1, &mut diags);
+                    check_style_depth(self, rule, 1, max, &mut diags);
                 }
                 CssNode::AtRule(at_rule) => {
                     for child in &at_rule.children {
                         if let CssNode::Style(rule) = child {
-                            check_style_depth(self, rule, 1, &mut diags);
+                            check_style_depth(self, rule, 1, max, &mut diags);
                         }
                     }
                 }
@@ -49,22 +56,23 @@ fn check_style_depth(
     rule_impl: &MaxNestingDepth,
     style: &gale_css_parser::StyleRule,
     depth: usize,
+    max: usize,
     diags: &mut Vec<Diagnostic>,
 ) {
     for child in &style.children {
-        if depth > MAX_DEPTH {
+        if depth > max {
             diags.push(
                 Diagnostic::new(
                     rule_impl.name(),
                     format!(
-                        "Expected nesting depth to be no more than {MAX_DEPTH}, found {depth}"
+                        "Expected nesting depth to be no more than {max}, found {depth}"
                     ),
                 )
                 .severity(rule_impl.default_severity())
                 .span(Span::new(child.span.offset, child.span.length)),
             );
         }
-        check_style_depth(rule_impl, child, depth + 1, diags);
+        check_style_depth(rule_impl, child, depth + 1, max, diags);
     }
 }
 
@@ -77,8 +85,7 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css,
-        }
+            syntax: Syntax::Css, options: None }
     }
 
     fn make_decl() -> Declaration {

@@ -38,6 +38,19 @@ jobs:
       - name: Run clippy
         run: cargo clippy --workspace -- -D warnings
 
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --check
+
   benchmark:
     name: Benchmark
     runs-on: ubuntu-latest

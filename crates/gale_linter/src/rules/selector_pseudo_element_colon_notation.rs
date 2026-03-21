@@ -123,8 +123,7 @@ mod tests {
         let ctx = RuleContext {
             file_path: "t.css",
             source,
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None };
         (node, ctx)
     }
 

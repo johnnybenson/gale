@@ -45,7 +45,7 @@ mod tests {
     use gale_css_parser::{AtRule, CssNode, Span, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css }
+        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
     }
 
     fn at(name: &str) -> CssNode {
@@ -76,11 +76,11 @@ mod tests {
     }
 
     fn scss_ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.scss", source: "", syntax: Syntax::Scss }
+        RuleContext { file_path: "t.scss", source: "", syntax: Syntax::Scss, options: None }
     }
 
     fn less_ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.less", source: "", syntax: Syntax::Less }
+        RuleContext { file_path: "t.less", source: "", syntax: Syntax::Less, options: None }
     }
 
     #[test]

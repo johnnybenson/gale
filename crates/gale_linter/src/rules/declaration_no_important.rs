@@ -95,8 +95,7 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source,
-            syntax: Syntax::Css,
-        }
+            syntax: Syntax::Css, options: None }
     }
 
     fn style_node(prop: &str, val: &str, important: bool, offset: usize, len: usize) -> CssNode {

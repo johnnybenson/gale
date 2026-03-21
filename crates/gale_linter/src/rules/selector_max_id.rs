@@ -24,16 +24,24 @@ impl Rule for SelectorMaxId {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+
+        // Read configured max from options (primary option is a number).
+        let max = ctx
+            .options
+            .and_then(|v| v.as_u64())
+            .map(|n| n as usize)
+            .unwrap_or(MAX_ID);
+
         let count = count_id_selectors(&rule.selector);
-        if count > MAX_ID {
+        if count > max {
             vec![Diagnostic::new(
                 self.name(),
                 format!(
-                    "Expected selector \"{}\" to have no more than {MAX_ID} ID selector(s), found {count}",
+                    "Expected selector \"{}\" to have no more than {max} ID selector(s), found {count}",
                     rule.selector
                 ),
             )
@@ -73,8 +81,7 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css,
-        }
+            syntax: Syntax::Css, options: None }
     }
 
     fn style_with_selector(sel: &str) -> CssNode {

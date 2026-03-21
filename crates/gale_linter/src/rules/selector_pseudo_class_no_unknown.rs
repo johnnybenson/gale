@@ -53,6 +53,7 @@ impl Rule for SelectorPseudoClassNoUnknown {
 
 /// Extract pseudo-class names from a selector string.
 /// Finds `:name` patterns (single colon NOT followed by another colon).
+/// Skips content inside attribute selectors (`[…]`) and strings.
 fn extract_pseudo_classes(selector: &str) -> Vec<String> {
     let mut classes = Vec::new();
     let chars: Vec<char> = selector.chars().collect();
@@ -60,6 +61,33 @@ fn extract_pseudo_classes(selector: &str) -> Vec<String> {
     let mut i = 0;
 
     while i < len {
+        // Skip attribute selectors — they may contain colons in values
+        // (e.g. `[style*="writing-mode:vertical-rl"]`).
+        if chars[i] == '[' {
+            let mut depth = 1;
+            i += 1;
+            while i < len && depth > 0 {
+                match chars[i] {
+                    '[' => depth += 1,
+                    ']' => depth -= 1,
+                    '"' | '\'' => {
+                        // Skip string inside attribute selector
+                        let quote = chars[i];
+                        i += 1;
+                        while i < len && chars[i] != quote {
+                            if chars[i] == '\\' {
+                                i += 1; // skip escaped char
+                            }
+                            i += 1;
+                        }
+                        // i now points to closing quote (or end)
+                    }
+                    _ => {}
+                }
+                i += 1;
+            }
+            continue;
+        }
         // Skip pseudo-elements (::name)
         if i + 1 < len && chars[i] == ':' && chars[i + 1] == ':' {
             i += 2; // skip ::
@@ -105,7 +133,7 @@ mod tests {
     use gale_css_parser::{CssNode, Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css }
+        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
     }
 
     fn style_with_selector(sel: &str) -> CssNode {

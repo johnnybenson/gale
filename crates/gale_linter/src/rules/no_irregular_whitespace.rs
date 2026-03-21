@@ -76,8 +76,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source,
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None };
         let diags = rule.check_root(&[], &context);
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("U+00A0"));
@@ -90,8 +89,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source,
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None };
         let diags = rule.check_root(&[], &context);
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("U+200B"));
@@ -103,8 +101,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "a { color: red; }",
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None,        };
         let diags = rule.check_root(&[], &context);
         assert!(diags.is_empty());
     }

@@ -40,10 +40,6 @@ jobs:
             runner: windows-latest
             target: x86_64-pc-windows-msvc
             binary: gale.exe
-          - platform: win32-arm64
-            runner: windows-latest
-            target: aarch64-pc-windows-msvc
-            binary: gale.exe
 
     steps:
       - uses: actions/checkout@v4
@@ -70,13 +66,13 @@ jobs:
         shell: bash
         run: |
           cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" \
-             "npm/cli-${{ matrix.platform }}/${{ matrix.binary }}"
+             "npm/platforms/${{ matrix.platform }}/${{ matrix.binary }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cli-${{ matrix.platform }}
-          path: npm/cli-${{ matrix.platform }}/
+          name: platform-${{ matrix.platform }}
+          path: npm/platforms/${{ matrix.platform }}/
 
   publish:
     name: Publish to npm
@@ -97,25 +93,50 @@ jobs:
 
       - name: Copy binaries to npm packages
         run: |
-          for platform in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64 win32-arm64; do
-            cp -r "artifacts/cli-${platform}/"* "npm/cli-${platform}/"
+          for platform in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64; do
+            cp -r "artifacts/platform-${platform}/"* "npm/platforms/${platform}/"
           done
 
       - name: Set executable permissions
         run: |
           for platform in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
-            chmod +x "npm/cli-${platform}/gale"
+            chmod +x "npm/platforms/${platform}/gale"
           done
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Set package versions
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Update platform packages
+          for platform in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64; do
+            cd "npm/platforms/${platform}"
+            npm version "$VERSION" --no-git-tag-version --allow-same-version
+            cd ../../..
+          done
+          # Update main package and its optionalDependencies
+          cd npm/gale
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          node -e "
+            const pkg = require('./package.json');
+            for (const dep of Object.keys(pkg.optionalDependencies)) {
+              pkg.optionalDependencies[dep] = '$VERSION';
+            }
+            require('fs').writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          cd ../..
 
       - name: Publish platform packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          for platform in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64 win32-arm64; do
-            echo "Publishing @gale-lint/cli-${platform}..."
-            cd "npm/cli-${platform}"
+          for platform in darwin-arm64 darwin-x64 linux-x64 linux-arm64 win32-x64; do
+            echo "Publishing @aspect/gale-${platform}..."
+            cd "npm/platforms/${platform}"
             npm publish --access public
-            cd ../..
+            cd ../../..
           done
 
       - name: Publish main package
@@ -124,3 +145,8 @@ jobs:
         run: |
           cd npm/gale
           npm publish --access public
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true

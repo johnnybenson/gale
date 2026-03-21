@@ -53,8 +53,7 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css,
-        }
+            syntax: Syntax::Css, options: None }
     }
 
     fn style_with_selector(sel: &str) -> CssNode {

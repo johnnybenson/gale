@@ -238,14 +238,11 @@ impl RuleConfigValue {
             },
             RuleConfigValue::Number(n) => {
                 // Numeric value — store as the primary option.
-                // A value of 0 is treated as Off (common pattern for max-* rules).
-                let is_zero = n.as_u64() == Some(0);
+                // In Stylelint, a numeric primary option (e.g. `selector-max-id: 0`)
+                // means the rule is enabled with that numeric value as the max.
+                // 0 is a valid max (meaning "disallow entirely").
                 RuleConfig {
-                    severity: Some(if is_zero {
-                        Severity::Off
-                    } else {
-                        Severity::Error
-                    }),
+                    severity: Some(Severity::Error),
                     options: Some(serde_json::Value::Number(n.clone())),
                 }
             }
@@ -254,12 +251,39 @@ impl RuleConfigValue {
                 options: None,
             },
             RuleConfigValue::Array(items) => {
-                let severity = items
-                    .first()
+                let first = items.first();
+                // Check if the first element is a known severity string.
+                let is_severity_str = first
                     .and_then(|v| v.as_str())
-                    .map(parse_severity);
-                let options = items.get(1).cloned();
-                RuleConfig { severity, options }
+                    .map(|s| matches!(s.to_lowercase().as_str(), "error" | "warning" | "warn" | "off"))
+                    .unwrap_or(false);
+                let is_bool = first.map(|v| v.is_boolean()).unwrap_or(false);
+
+                if is_severity_str {
+                    // First element is a severity: ["error", { options }]
+                    let severity = first
+                        .and_then(|v| v.as_str())
+                        .map(parse_severity);
+                    let options = items.get(1).cloned();
+                    RuleConfig { severity, options }
+                } else if is_bool {
+                    // First element is a boolean: [true, { options }]
+                    let enabled = first.and_then(|v| v.as_bool()).unwrap_or(true);
+                    let severity = Some(if enabled { Severity::Error } else { Severity::Off });
+                    let options = items.get(1).cloned();
+                    RuleConfig { severity, options }
+                } else {
+                    // First element is a primary option (e.g. "always", 4):
+                    // ["always", { except: [...] }] or [4, { ... }]
+                    // Severity defaults to Error (enabled), and the entire
+                    // secondary options object is stored in options.
+                    // The primary option value is also stored so rules can read it.
+                    let options = items.get(1).cloned();
+                    RuleConfig {
+                        severity: Some(Severity::Error),
+                        options,
+                    }
+                }
             }
             RuleConfigValue::Object(map) => {
                 // A bare object is treated as error severity with the object as options.
@@ -324,8 +348,26 @@ const ALL_RULE_NAMES: &[&str] = &[
     "no-irregular-whitespace",
     "no-unknown-animations",
     "number-max-precision",
+    "order/properties-alphabetical-order",
+    "order/properties-order",
     "property-no-unknown",
     "property-no-vendor-prefix",
+    // SCSS-specific rules
+    "scss/at-extend-no-missing-placeholder",
+    "scss/at-if-no-null",
+    "scss/at-rule-no-unknown",
+    "scss/comment-no-empty",
+    "scss/declaration-nested-properties-no-divided-groups",
+    "scss/dollar-variable-no-missing-interpolation",
+    "scss/function-quote-no-quoted-strings-inside",
+    "scss/function-unquote-no-unquoted-strings-inside",
+    "scss/load-no-partial-leading-underscore",
+    "scss/load-partial-extension",
+    "scss/no-duplicate-mixins",
+    "scss/no-global-function-names",
+    "scss/operator-no-newline-after",
+    "scss/operator-no-newline-before",
+    "scss/operator-no-unspaced",
     "selector-class-pattern",
     "selector-pseudo-class-no-unknown",
     "selector-pseudo-element-colon-notation",
@@ -433,6 +475,25 @@ const STYLELINT_STANDARD_EXTRA_RULES: &[&str] = &[
     "value-no-vendor-prefix",
 ];
 
+/// SCSS-specific rules enabled by `stylelint-config-recommended-scss`.
+const SCSS_RECOMMENDED_RULES: &[&str] = &[
+    "scss/at-extend-no-missing-placeholder",
+    "scss/at-if-no-null",
+    "scss/at-rule-no-unknown",
+    "scss/comment-no-empty",
+    "scss/declaration-nested-properties-no-divided-groups",
+    "scss/dollar-variable-no-missing-interpolation",
+    "scss/function-quote-no-quoted-strings-inside",
+    "scss/function-unquote-no-unquoted-strings-inside",
+    "scss/load-no-partial-leading-underscore",
+    "scss/load-partial-extension",
+    "scss/no-duplicate-mixins",
+    "scss/no-global-function-names",
+    "scss/operator-no-newline-after",
+    "scss/operator-no-newline-before",
+    "scss/operator-no-unspaced",
+];
+
 /// Resolve a built-in preset name into a map of rule configurations.
 ///
 /// Returns `None` if the preset name is not recognised.
@@ -484,6 +545,27 @@ pub fn resolve_preset(name: &str) -> Option<HashMap<String, RuleConfig>> {
                     },
                 );
             }
+            // Match the real stylelint-config-recommended options:
+            // declaration-block-no-duplicate-properties: [true, { ignore: ["consecutive-duplicates-with-different-syntaxes"] }]
+            rules.insert(
+                "declaration-block-no-duplicate-properties".to_string(),
+                RuleConfig {
+                    severity: Some(Severity::Warning),
+                    options: Some(serde_json::json!({
+                        "ignore": ["consecutive-duplicates-with-different-syntaxes"]
+                    })),
+                },
+            );
+            // selector-type-no-unknown: [true, { ignore: ["custom-elements"] }]
+            rules.insert(
+                "selector-type-no-unknown".to_string(),
+                RuleConfig {
+                    severity: Some(Severity::Warning),
+                    options: Some(serde_json::json!({
+                        "ignore": ["custom-elements"]
+                    })),
+                },
+            );
             Some(rules)
         }
         "stylelint-config-recommended-scss" => {
@@ -513,6 +595,16 @@ pub fn resolve_preset(name: &str) -> Option<HashMap<String, RuleConfig>> {
                     },
                 );
             }
+            // Enable SCSS-specific rules from stylelint-config-recommended-scss
+            for &rule in SCSS_RECOMMENDED_RULES {
+                rules.insert(
+                    rule.to_string(),
+                    RuleConfig {
+                        severity: Some(Severity::Warning),
+                        options: None,
+                    },
+                );
+            }
             Some(rules)
         }
         "stylelint-config-standard" => {
@@ -536,6 +628,45 @@ pub fn resolve_preset(name: &str) -> Option<HashMap<String, RuleConfig>> {
                     },
                 );
             }
+            // Match the real stylelint-config-recommended options:
+            rules.insert(
+                "declaration-block-no-duplicate-properties".to_string(),
+                RuleConfig {
+                    severity: Some(Severity::Warning),
+                    options: Some(serde_json::json!({
+                        "ignore": ["consecutive-duplicates-with-different-syntaxes"]
+                    })),
+                },
+            );
+            rules.insert(
+                "selector-type-no-unknown".to_string(),
+                RuleConfig {
+                    severity: Some(Severity::Warning),
+                    options: Some(serde_json::json!({
+                        "ignore": ["custom-elements"]
+                    })),
+                },
+            );
+            // Match the real stylelint-config-standard options:
+            rules.insert(
+                "comment-empty-line-before".to_string(),
+                RuleConfig {
+                    severity: Some(Severity::Warning),
+                    options: Some(serde_json::json!({
+                        "except": ["first-nested"],
+                        "ignore": ["stylelint-commands"]
+                    })),
+                },
+            );
+            rules.insert(
+                "value-no-vendor-prefix".to_string(),
+                RuleConfig {
+                    severity: Some(Severity::Warning),
+                    options: Some(serde_json::json!({
+                        "ignoreValues": ["box", "inline-box"]
+                    })),
+                },
+            );
             Some(rules)
         }
         "stylelint-config-standard-scss" => {
@@ -559,6 +690,44 @@ pub fn resolve_preset(name: &str) -> Option<HashMap<String, RuleConfig>> {
                     },
                 );
             }
+            // Include options from recommended + standard presets
+            rules.insert(
+                "declaration-block-no-duplicate-properties".to_string(),
+                RuleConfig {
+                    severity: Some(Severity::Warning),
+                    options: Some(serde_json::json!({
+                        "ignore": ["consecutive-duplicates-with-different-syntaxes"]
+                    })),
+                },
+            );
+            rules.insert(
+                "selector-type-no-unknown".to_string(),
+                RuleConfig {
+                    severity: Some(Severity::Warning),
+                    options: Some(serde_json::json!({
+                        "ignore": ["custom-elements"]
+                    })),
+                },
+            );
+            rules.insert(
+                "comment-empty-line-before".to_string(),
+                RuleConfig {
+                    severity: Some(Severity::Warning),
+                    options: Some(serde_json::json!({
+                        "except": ["first-nested"],
+                        "ignore": ["stylelint-commands"]
+                    })),
+                },
+            );
+            rules.insert(
+                "value-no-vendor-prefix".to_string(),
+                RuleConfig {
+                    severity: Some(Severity::Warning),
+                    options: Some(serde_json::json!({
+                        "ignoreValues": ["box", "inline-box"]
+                    })),
+                },
+            );
             // Disable rules that conflict with SCSS (inherited from recommended-scss)
             for &rule in &[
                 "at-rule-no-unknown",
@@ -570,6 +739,16 @@ pub fn resolve_preset(name: &str) -> Option<HashMap<String, RuleConfig>> {
                     rule.to_string(),
                     RuleConfig {
                         severity: Some(Severity::Off),
+                        options: None,
+                    },
+                );
+            }
+            // Enable SCSS-specific rules (inherited from recommended-scss)
+            for &rule in SCSS_RECOMMENDED_RULES {
+                rules.insert(
+                    rule.to_string(),
+                    RuleConfig {
+                        severity: Some(Severity::Warning),
                         options: None,
                     },
                 );
@@ -628,7 +807,7 @@ pub fn load_config(path: &Path) -> Result<GaleConfig, ConfigError> {
         .unwrap_or_default();
 
     let base_dir = path.parent().unwrap_or(Path::new("."));
-    let raw = parse_config_file(file_name, &contents)?;
+    let raw = parse_config_file(file_name, &contents, Some(base_dir))?;
     Ok(resolve_raw(raw, base_dir))
 }
 
@@ -636,12 +815,354 @@ pub fn load_config(path: &Path) -> Result<GaleConfig, ConfigError> {
 // JavaScript config parsing (module.exports = { ... })
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// ESM / CJS import resolution
+// ---------------------------------------------------------------------------
+
+/// Extract import bindings from JS source.
+///
+/// Recognises:
+/// - `import <name> from '<path>'`  (ESM default import)
+/// - `const <name> = require('<path>')` (CJS require)
+///
+/// Returns `(variable_name, module_path)` pairs.
+fn extract_imports(source: &str) -> Vec<(String, String)> {
+    let mut imports = Vec::new();
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+
+        // ESM: import <name> from '<path>'
+        if trimmed.starts_with("import ") {
+            // Skip destructured imports like `import { foo } from ...`
+            let rest = trimmed["import ".len()..].trim_start();
+            if rest.starts_with('{') || rest.starts_with('*') {
+                continue;
+            }
+            // Extract: <name> from '<path>'
+            if let Some(from_idx) = rest.find(" from ") {
+                let var_name = rest[..from_idx].trim().to_string();
+                // Validate variable name (simple identifier)
+                if var_name.is_empty()
+                    || !var_name
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+                {
+                    continue;
+                }
+                let path_part = rest[from_idx + " from ".len()..].trim();
+                if let Some(path) = extract_string_literal(path_part) {
+                    imports.push((var_name, path));
+                }
+            }
+        }
+
+        // CJS: const <name> = require('<path>')
+        if trimmed.starts_with("const ") || trimmed.starts_with("let ") || trimmed.starts_with("var ") {
+            let rest = if trimmed.starts_with("const ") {
+                &trimmed["const ".len()..]
+            } else if trimmed.starts_with("let ") {
+                &trimmed["let ".len()..]
+            } else {
+                &trimmed["var ".len()..]
+            };
+            let rest = rest.trim_start();
+            // Skip destructured: const { foo } = require(...)
+            if rest.starts_with('{') || rest.starts_with('[') {
+                continue;
+            }
+            // Find `= require(`
+            if let Some(eq_idx) = rest.find('=') {
+                let var_name = rest[..eq_idx].trim().to_string();
+                if var_name.is_empty()
+                    || !var_name
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || c == '_' || c == '$')
+                {
+                    continue;
+                }
+                let after_eq = rest[eq_idx + 1..].trim();
+                if after_eq.starts_with("require(") {
+                    let inside = &after_eq["require(".len()..];
+                    if let Some(path) = extract_string_literal(inside) {
+                        imports.push((var_name, path));
+                    }
+                }
+            }
+        }
+    }
+
+    imports
+}
+
+/// Extract a string literal value from text that starts with `'`, `"`, or a
+/// backtick. Returns the content without quotes.
+fn extract_string_literal(s: &str) -> Option<String> {
+    let s = s.trim();
+    let quote = s.chars().next()?;
+    if quote != '\'' && quote != '"' {
+        return None;
+    }
+    let rest = &s[1..];
+    let end = rest.find(quote)?;
+    Some(rest[..end].to_string())
+}
+
+/// Try to resolve an import path to an actual file on disk.
+/// Tries the path as-is, then with `.js` and `.json` extensions, then as
+/// a directory with `index.js`.
+fn resolve_import_path(file_dir: &Path, rel_path: &str) -> Option<PathBuf> {
+    let base = file_dir.join(rel_path);
+
+    // Try as-is first
+    if base.is_file() {
+        return Some(base);
+    }
+
+    // Try with extensions
+    for ext in &[".js", ".mjs", ".cjs", ".json"] {
+        let with_ext = PathBuf::from(format!("{}{}", base.display(), ext));
+        if with_ext.is_file() {
+            return Some(with_ext);
+        }
+    }
+
+    // Try as directory with index.js
+    let index = base.join("index.js");
+    if index.is_file() {
+        return Some(index);
+    }
+
+    None
+}
+
+/// Extract the default export value from a JS source file.
+///
+/// Handles:
+/// - `export default <value>`
+/// - `module.exports = <value>`
+/// - `const X = <value>; export default X` (variable indirection)
+fn extract_default_export(source: &str) -> Option<String> {
+    // First try direct `export default <literal>` or `module.exports = <literal>`
+    let export_markers: &[&str] = &["export default ", "module.exports =", "module.exports="];
+
+    for marker in export_markers {
+        if let Some(pos) = source.find(marker) {
+            let after = source[pos + marker.len()..].trim_start();
+            // If it starts with a literal value (array or object), extract it
+            if after.starts_with('[') {
+                if let Some(val) = extract_balanced(after, '[', ']') {
+                    return Some(val);
+                }
+            }
+            if after.starts_with('{') {
+                if let Some(val) = extract_balanced(after, '{', '}') {
+                    return Some(val);
+                }
+            }
+            // Otherwise it might be a variable name: `export default X`
+            // Find the identifier
+            let ident_end = after
+                .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '$')
+                .unwrap_or(after.len());
+            let ident = after[..ident_end].trim();
+            if !ident.is_empty() {
+                // Look for `const <ident> = <value>` in the source
+                if let Some(val) = find_variable_value(source, ident) {
+                    return Some(val);
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Find the value assigned to a `const`/`let`/`var` variable in JS source.
+fn find_variable_value(source: &str, var_name: &str) -> Option<String> {
+    for keyword in &["const ", "let ", "var "] {
+        let pattern = format!("{}{}", keyword, var_name);
+        if let Some(pos) = source.find(&pattern) {
+            let after_name = &source[pos + pattern.len()..];
+            let after_name = after_name.trim_start();
+            if !after_name.starts_with('=') {
+                continue;
+            }
+            let after_eq = after_name[1..].trim_start();
+            if after_eq.starts_with('[') {
+                return extract_balanced(after_eq, '[', ']');
+            }
+            if after_eq.starts_with('{') {
+                return extract_balanced(after_eq, '{', '}');
+            }
+        }
+    }
+    None
+}
+
+/// Extract a balanced bracket/brace expression, respecting strings and nesting.
+fn extract_balanced(s: &str, open: char, close: char) -> Option<String> {
+    let mut depth = 0i32;
+    let mut result = String::new();
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut in_template = false;
+    let mut escape_next = false;
+
+    for c in s.chars() {
+        if escape_next {
+            result.push(c);
+            escape_next = false;
+            continue;
+        }
+        if c == '\\' && (in_single || in_double || in_template) {
+            result.push(c);
+            escape_next = true;
+            continue;
+        }
+        if !in_double && !in_template && c == '\'' {
+            in_single = !in_single;
+        } else if !in_single && !in_template && c == '"' {
+            in_double = !in_double;
+        } else if !in_single && !in_double && c == '`' {
+            in_template = !in_template;
+        }
+
+        if !in_single && !in_double && !in_template {
+            if c == open {
+                depth += 1;
+            } else if c == close {
+                depth -= 1;
+            }
+        }
+
+        result.push(c);
+
+        if depth == 0 {
+            return Some(result);
+        }
+    }
+
+    None
+}
+
+/// Resolve relative imports in JS source by reading imported files and
+/// substituting variable references with the literal exported values.
+fn resolve_js_imports(source: &str, file_dir: Option<&Path>) -> String {
+    let file_dir = match file_dir {
+        Some(d) => d,
+        None => return source.to_string(),
+    };
+
+    let imports = extract_imports(source);
+    if imports.is_empty() {
+        return source.to_string();
+    }
+
+    let mut result = source.to_string();
+
+    for (var_name, rel_path) in &imports {
+        // Only resolve relative imports (not npm packages)
+        if !rel_path.starts_with("./") && !rel_path.starts_with("../") {
+            continue;
+        }
+
+        let import_path = match resolve_import_path(file_dir, rel_path) {
+            Some(p) => p,
+            None => continue,
+        };
+
+        let imported_source = match std::fs::read_to_string(&import_path) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+
+        if let Some(value) = extract_default_export(&imported_source) {
+            // Replace occurrences of the variable name with the literal value.
+            // We need to be careful to only replace whole-word occurrences
+            // (not substrings of other identifiers).
+            result = replace_whole_word(&result, var_name, &value);
+        }
+    }
+
+    result
+}
+
+/// Replace whole-word occurrences of `word` with `replacement` in `source`.
+/// A word boundary is a position where the adjacent character is not
+/// alphanumeric or `_` or `$`.
+fn replace_whole_word(source: &str, word: &str, replacement: &str) -> String {
+    if word.is_empty() {
+        return source.to_string();
+    }
+    let mut result = String::with_capacity(source.len());
+    let mut remaining = source;
+
+    while let Some(pos) = remaining.find(word) {
+        // Check character before the match
+        let before_ok = if pos == 0 {
+            true
+        } else {
+            let ch = remaining.as_bytes()[pos - 1] as char;
+            !ch.is_alphanumeric() && ch != '_' && ch != '$'
+        };
+        // Check character after the match
+        let after_pos = pos + word.len();
+        let after_ok = if after_pos >= remaining.len() {
+            true
+        } else {
+            let ch = remaining.as_bytes()[after_pos] as char;
+            !ch.is_alphanumeric() && ch != '_' && ch != '$'
+        };
+
+        if before_ok && after_ok {
+            result.push_str(&remaining[..pos]);
+            result.push_str(replacement);
+            remaining = &remaining[after_pos..];
+        } else {
+            result.push_str(&remaining[..after_pos]);
+            remaining = &remaining[after_pos..];
+        }
+    }
+    result.push_str(remaining);
+    result
+}
+
+/// Strip `import ... from ...` and `const/let/var ... = require(...)` lines
+/// from the source so they don't confuse the JS-to-JSON converter.
+fn strip_import_lines(source: &str) -> String {
+    let mut lines: Vec<&str> = Vec::new();
+    for line in source.lines() {
+        let trimmed = line.trim();
+        // Skip ESM import lines
+        if trimmed.starts_with("import ") && trimmed.contains(" from ") {
+            continue;
+        }
+        // Skip CJS require lines
+        if (trimmed.starts_with("const ") || trimmed.starts_with("let ") || trimmed.starts_with("var "))
+            && trimmed.contains("require(")
+        {
+            continue;
+        }
+        lines.push(line);
+    }
+    lines.join("\n")
+}
+
 /// Parse a JavaScript config file that uses `module.exports = { ... }`,
 /// `exports = { ... }`, or `export default { ... }` with a static object literal.
 ///
 /// This does NOT execute JavaScript — it extracts the object literal and converts
 /// JS object syntax into valid JSON before deserializing.
-fn parse_js_config(source: &str) -> Result<ConfigFile, ConfigError> {
+///
+/// When `file_dir` is provided, relative imports (`./` or `../`) are resolved
+/// by reading the imported file and inlining the exported value.
+fn parse_js_config(source: &str, file_dir: Option<&Path>) -> Result<ConfigFile, ConfigError> {
+    // Pre-process: resolve relative imports and inline their exported values.
+    let source = resolve_js_imports(source, file_dir);
+    // Strip remaining import/require lines that would confuse the JSON converter.
+    let source = strip_import_lines(&source);
+
     // Find the start of the exported object literal.
     let markers = [
         "module.exports",
@@ -667,6 +1188,40 @@ fn parse_js_config(source: &str) -> Result<ConfigFile, ConfigError> {
                     continue;
                 }
             };
+
+            let trimmed = brace_search.trim_start();
+
+            // Check if the export is a variable reference (e.g. `export default config`)
+            // rather than a direct object literal.
+            if !trimmed.starts_with('{') && trimmed.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_' || c == '$') {
+                let ident_end = trimmed
+                    .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '$')
+                    .unwrap_or(trimmed.len());
+                let var_name = &trimmed[..ident_end];
+                // Look for `const <var_name> = {` in the source
+                if let Some(value) = find_variable_value(&source, var_name) {
+                    if value.starts_with('{') {
+                        // Replace the variable reference with the inlined object
+                        let source = format!(
+                            "{}{}{}",
+                            &source[..pos],
+                            if *marker == "export default" { "export default " } else { "module.exports = " },
+                            &value
+                        );
+                        let new_marker_pos = pos;
+                        let new_after = new_marker_pos + if *marker == "export default" { "export default ".len() } else { "module.exports = ".len() };
+                        if let Some(brace_offset) = source[new_after..].find('{') {
+                            // We need to use the modified source for extraction
+                            let extracted = extract_braced_object(&source[new_after + brace_offset..]).ok_or_else(|| {
+                                ConfigError::UnsupportedFormat("failed to extract object literal from JS config".to_string())
+                            })?;
+                            let json = js_object_to_json(&extracted);
+                            return serde_json::from_str::<ConfigFile>(&json).map_err(ConfigError::from);
+                        }
+                    }
+                }
+            }
+
             // Find the opening `{`
             if let Some(brace_offset) = brace_search.find('{') {
                 let absolute_offset = source.len() - brace_search.len() + brace_offset;
@@ -788,13 +1343,21 @@ fn extract_braced_object(s: &str) -> Option<String> {
 /// Convert a JS object literal string to valid JSON.
 ///
 /// Handles:
+/// - Arrow function values → replaced with `null`
 /// - Single-quoted strings → double-quoted
 /// - Unquoted keys → double-quoted
 /// - Trailing commas → removed
 /// - Spread operator entries (`...foo`) → skipped
 fn js_object_to_json(js: &str) -> String {
+    // Step 0a: Replace arrow function expressions with null (before quote
+    // conversion so we can still distinguish template literals).
+    let s = replace_arrow_functions(js);
+
+    // Step 0b: Remove method calls on arrays/values (e.g. `.map( require.resolve )`).
+    let s = remove_method_calls(&s);
+
     // Step 1: Replace single-quoted strings with double-quoted strings.
-    let s = convert_single_to_double_quotes(js);
+    let s = convert_single_to_double_quotes(&s);
 
     // Step 2: Quote unquoted keys.
     let s = quote_unquoted_keys(&s);
@@ -804,6 +1367,340 @@ fn js_object_to_json(js: &str) -> String {
 
     // Step 4: Remove spread entries.
     remove_spread_entries(&s)
+}
+
+/// Replace arrow function expressions with `null`.
+///
+/// Detects `=>` outside of strings and backtracks to remove the entire
+/// parameter list, then skips the function body (which may be a template
+/// literal, string, block `{…}`, or other expression up to the next `,` or
+/// `}` at the same brace depth).
+fn replace_arrow_functions(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
+    let mut result = String::with_capacity(len);
+    let mut i = 0;
+
+    // Track whether we're inside a string so we don't match `=>` in strings.
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut in_template = false;
+    let mut escape_next = false;
+
+    while i < len {
+        let c = chars[i];
+
+        if escape_next {
+            result.push(c);
+            escape_next = false;
+            i += 1;
+            continue;
+        }
+
+        if c == '\\' && (in_single || in_double || in_template) {
+            result.push(c);
+            escape_next = true;
+            i += 1;
+            continue;
+        }
+
+        // String state tracking
+        if !in_double && !in_template && c == '\'' {
+            in_single = !in_single;
+            result.push(c);
+            i += 1;
+            continue;
+        }
+        if !in_single && !in_template && c == '"' {
+            in_double = !in_double;
+            result.push(c);
+            i += 1;
+            continue;
+        }
+        if !in_single && !in_double && c == '`' {
+            in_template = !in_template;
+            result.push(c);
+            i += 1;
+            continue;
+        }
+        if in_single || in_double || in_template {
+            result.push(c);
+            i += 1;
+            continue;
+        }
+
+        // Detect `=>` outside of strings
+        if c == '=' && i + 1 < len && chars[i + 1] == '>' {
+            // Backtrack in `result` to remove the arrow function parameter list.
+            // The params end with `)` (possibly with whitespace before `=>`),
+            // or it's a bare identifier.
+            // Remove trailing whitespace first.
+            let trimmed = result.trim_end().len();
+            result.truncate(trimmed);
+
+            if result.ends_with(')') {
+                // Remove the parenthesized parameter list by finding the matching `(`.
+                let mut depth = 0i32;
+                while let Some(ch) = result.pop() {
+                    if ch == ')' {
+                        depth += 1;
+                    } else if ch == '(' {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                }
+            } else {
+                // Bare identifier: remove word characters
+                while result.ends_with(|c: char| c.is_ascii_alphanumeric() || c == '_' || c == '$')
+                {
+                    result.pop();
+                }
+            }
+
+            // Skip past `=>`
+            i += 2;
+
+            // Skip whitespace
+            while i < len && chars[i].is_ascii_whitespace() {
+                i += 1;
+            }
+
+            // Skip the arrow function body.
+            if i < len {
+                i = skip_js_expression(&chars, i);
+            }
+
+            // Emit `null` in place of the arrow function.
+            result.push_str("null");
+            continue;
+        }
+
+        result.push(c);
+        i += 1;
+    }
+
+    result
+}
+
+/// Skip a single JS expression starting at position `i`.
+/// Returns the index just past the expression.
+/// Handles:
+/// - Template literals (`` ` ... ` ``)
+/// - String literals (`'...'` or `"..."`)
+/// - Block bodies (`{ ... }`)
+/// - Array literals (`[ ... ]`)
+/// - Parenthesized expressions (`( ... )`)
+/// - Simple expressions (until `,`, `}`, `]` at depth 0, or newline
+///   followed by a key-like pattern)
+fn skip_js_expression(chars: &[char], start: usize) -> usize {
+    let len = chars.len();
+    let mut i = start;
+
+    if i >= len {
+        return i;
+    }
+
+    match chars[i] {
+        '`' => {
+            // Template literal — skip to matching backtick, handling `${…}`.
+            i += 1;
+            let mut tmpl_depth = 0i32; // for nested `${…}`
+            while i < len {
+                if chars[i] == '\\' {
+                    i += 2; // skip escaped char
+                    continue;
+                }
+                if chars[i] == '$' && i + 1 < len && chars[i + 1] == '{' {
+                    tmpl_depth += 1;
+                    i += 2;
+                    continue;
+                }
+                if chars[i] == '}' && tmpl_depth > 0 {
+                    tmpl_depth -= 1;
+                    i += 1;
+                    continue;
+                }
+                if chars[i] == '`' && tmpl_depth == 0 {
+                    i += 1; // past closing backtick
+                    break;
+                }
+                i += 1;
+            }
+        }
+        '\'' | '"' => {
+            let quote = chars[i];
+            i += 1;
+            while i < len {
+                if chars[i] == '\\' {
+                    i += 2;
+                    continue;
+                }
+                if chars[i] == quote {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+        }
+        '{' => {
+            i = skip_balanced(chars, i, '{', '}');
+        }
+        '(' => {
+            i = skip_balanced(chars, i, '(', ')');
+        }
+        '[' => {
+            i = skip_balanced(chars, i, '[', ']');
+        }
+        _ => {
+            // Simple expression — advance until `,`, `}`, `]` at depth 0.
+            let mut depth = 0i32;
+            while i < len {
+                match chars[i] {
+                    '(' | '[' | '{' => depth += 1,
+                    ')' | ']' | '}' => {
+                        if depth == 0 {
+                            break;
+                        }
+                        depth -= 1;
+                    }
+                    ',' if depth == 0 => break,
+                    _ => {}
+                }
+                i += 1;
+            }
+        }
+    }
+
+    i
+}
+
+/// Skip a balanced pair of delimiters (e.g. `{…}`, `(…)`, `[…]`),
+/// respecting strings and nesting. Returns the index just past the
+/// closing delimiter.
+fn skip_balanced(chars: &[char], start: usize, open: char, close: char) -> usize {
+    let len = chars.len();
+    let mut i = start;
+    let mut depth = 0i32;
+    let mut in_sq = false;
+    let mut in_dq = false;
+    let mut in_tmpl = false;
+    let mut esc = false;
+
+    while i < len {
+        let c = chars[i];
+        if esc {
+            esc = false;
+            i += 1;
+            continue;
+        }
+        if c == '\\' && (in_sq || in_dq || in_tmpl) {
+            esc = true;
+            i += 1;
+            continue;
+        }
+        if !in_dq && !in_tmpl && c == '\'' {
+            in_sq = !in_sq;
+        } else if !in_sq && !in_tmpl && c == '"' {
+            in_dq = !in_dq;
+        } else if !in_sq && !in_dq && c == '`' {
+            in_tmpl = !in_tmpl;
+        }
+        if !in_sq && !in_dq && !in_tmpl {
+            if c == open {
+                depth += 1;
+            } else if c == close {
+                depth -= 1;
+                if depth == 0 {
+                    return i + 1;
+                }
+            }
+        }
+        i += 1;
+    }
+    i
+}
+
+/// Remove method calls like `.map(…)` or `.filter(…)` that appear after `]`
+/// (array literals) or after identifiers. These are JS-only constructs that
+/// have no JSON equivalent. The method call and its argument are simply
+/// dropped so the preceding array value remains intact.
+fn remove_method_calls(s: &str) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    let len = chars.len();
+    let mut result = String::with_capacity(len);
+    let mut i = 0;
+    let mut in_single = false;
+    let mut in_double = false;
+    let mut in_template = false;
+    let mut escape_next = false;
+
+    while i < len {
+        let c = chars[i];
+
+        if escape_next {
+            result.push(c);
+            escape_next = false;
+            i += 1;
+            continue;
+        }
+        if c == '\\' && (in_single || in_double || in_template) {
+            result.push(c);
+            escape_next = true;
+            i += 1;
+            continue;
+        }
+        if !in_double && !in_template && c == '\'' {
+            in_single = !in_single;
+            result.push(c);
+            i += 1;
+            continue;
+        }
+        if !in_single && !in_template && c == '"' {
+            in_double = !in_double;
+            result.push(c);
+            i += 1;
+            continue;
+        }
+        if !in_single && !in_double && c == '`' {
+            in_template = !in_template;
+            result.push(c);
+            i += 1;
+            continue;
+        }
+        if in_single || in_double || in_template {
+            result.push(c);
+            i += 1;
+            continue;
+        }
+
+        // Detect `.identifier(` pattern — a method call.
+        if c == '.' && i + 1 < len && chars[i + 1].is_ascii_alphabetic() {
+            // Check if this looks like a method call by scanning for an identifier
+            // followed by `(`.
+            let mut j = i + 1;
+            while j < len && (chars[j].is_ascii_alphanumeric() || chars[j] == '_') {
+                j += 1;
+            }
+            // Skip whitespace between identifier and `(`
+            let mut k = j;
+            while k < len && chars[k].is_ascii_whitespace() {
+                k += 1;
+            }
+            if k < len && chars[k] == '(' {
+                // This is a method call — skip `.identifier(…)`
+                let end = skip_balanced(&chars, k, '(', ')');
+                i = end;
+                continue;
+            }
+        }
+
+        result.push(c);
+        i += 1;
+    }
+
+    result
 }
 
 /// Convert single-quoted strings to double-quoted strings.
@@ -1123,7 +2020,7 @@ fn remove_spread_entries(s: &str) -> String {
     result
 }
 
-fn parse_config_file(file_name: &str, contents: &str) -> Result<ConfigFile, ConfigError> {
+fn parse_config_file(file_name: &str, contents: &str, file_dir: Option<&Path>) -> Result<ConfigFile, ConfigError> {
     if file_name.ends_with(".json") || file_name == "gale.json" {
         Ok(serde_json::from_str(contents)?)
     } else if file_name.ends_with(".toml") || file_name == "gale.toml" {
@@ -1134,7 +2031,7 @@ fn parse_config_file(file_name: &str, contents: &str) -> Result<ConfigFile, Conf
         || file_name.ends_with(".mjs")
         || file_name.ends_with(".cjs")
     {
-        parse_js_config(contents)
+        parse_js_config(contents, file_dir)
     } else if file_name == ".stylelintrc" {
         // Try JSON first, fall back to YAML.
         serde_json::from_str(contents)
@@ -1152,6 +2049,7 @@ fn load_config_file(path: &Path) -> Result<ConfigFile, ConfigError> {
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or_default();
+    let file_dir = path.parent();
 
     // For files without a recognised extension (e.g. bare `.stylelintrc`),
     // or JSON files, try JSON first then YAML as a fallback.
@@ -1165,7 +2063,7 @@ fn load_config_file(path: &Path) -> Result<ConfigFile, ConfigError> {
         || file_name.ends_with(".mjs")
         || file_name.ends_with(".cjs")
     {
-        parse_js_config(&contents)
+        parse_js_config(&contents, file_dir)
     } else {
         // Unknown extension — try JSON, then YAML.
         serde_json::from_str(&contents)
@@ -1193,11 +2091,35 @@ fn find_node_modules(start_dir: &Path) -> Option<PathBuf> {
 }
 
 /// Try to load a [`ConfigFile`] from an npm package installed in `node_modules`.
+///
+/// Supports subpath imports like `@scope/package/subpath` which resolves to
+/// `node_modules/@scope/package/subpath.js` (or `.json`).
 fn resolve_npm_config(package_name: &str, base_dir: &Path) -> Option<ConfigFile> {
     let node_modules = find_node_modules(base_dir)?;
-    let pkg_dir = node_modules.join(package_name);
 
+    // Split scoped packages with subpaths:
+    // "@scope/pkg/sub" → package = "@scope/pkg", subpath = Some("sub")
+    // "@scope/pkg"     → package = "@scope/pkg", subpath = None
+    // "pkg/sub"        → package = "pkg",        subpath = Some("sub")
+    // "pkg"            → package = "pkg",        subpath = None
+    let (pkg_name, subpath) = split_npm_package_subpath(package_name);
+
+    let pkg_dir = node_modules.join(pkg_name);
     if !pkg_dir.is_dir() {
+        return None;
+    }
+
+    // If there's a subpath, resolve it directly as a file within the package.
+    if let Some(sub) = subpath {
+        // Try with common extensions
+        for ext in &["", ".js", ".json", ".cjs", ".mjs"] {
+            let path = pkg_dir.join(format!("{sub}{ext}"));
+            if path.is_file() {
+                if let Ok(config) = load_config_file(&path) {
+                    return Some(config);
+                }
+            }
+        }
         return None;
     }
 
@@ -1224,10 +2146,69 @@ fn resolve_npm_config(package_name: &str, base_dir: &Path) -> Option<ConfigFile>
     None
 }
 
+/// Split an npm package name into the package name and optional subpath.
+///
+/// Examples:
+/// - `"@scope/pkg/sub/path"` → `("@scope/pkg", Some("sub/path"))`
+/// - `"@scope/pkg"` → `("@scope/pkg", None)`
+/// - `"pkg/sub"` → `("pkg", Some("sub"))`
+/// - `"pkg"` → `("pkg", None)`
+fn split_npm_package_subpath(name: &str) -> (&str, Option<&str>) {
+    if let Some(rest) = name.strip_prefix('@') {
+        // Scoped package: @scope/pkg[/subpath]
+        // Find the second `/` (after the scope)
+        if let Some(slash1) = rest.find('/') {
+            let after_scope = &rest[slash1 + 1..];
+            if let Some(slash2) = after_scope.find('/') {
+                let pkg_end = 1 + slash1 + 1 + slash2; // "@" + "scope/" + "pkg"
+                return (&name[..pkg_end], Some(&name[pkg_end + 1..]));
+            }
+        }
+        (name, None)
+    } else {
+        // Unscoped package: pkg[/subpath]
+        if let Some(slash) = name.find('/') {
+            (&name[..slash], Some(&name[slash + 1..]))
+        } else {
+            (name, None)
+        }
+    }
+}
+
 /// Resolve a relative path (starting with `./` or `../`) to a [`ConfigFile`].
+///
+/// If the exact path doesn't exist, tries adding common config file extensions
+/// (`.js`, `.json`, `.cjs`, `.mjs`). Also checks for `index.js` if the path
+/// resolves to a directory.
 fn resolve_relative_config(rel_path: &str, base_dir: &Path) -> Option<ConfigFile> {
     let path = base_dir.join(rel_path);
-    load_config_file(&path).ok()
+
+    // Try exact path first.
+    if let Ok(config) = load_config_file(&path) {
+        return Some(config);
+    }
+
+    // Try with common extensions.
+    for ext in &[".js", ".json", ".cjs", ".mjs"] {
+        let with_ext = base_dir.join(format!("{rel_path}{ext}"));
+        if with_ext.is_file() {
+            if let Ok(config) = load_config_file(&with_ext) {
+                return Some(config);
+            }
+        }
+    }
+
+    // If the path is a directory, try index files.
+    if path.is_dir() {
+        for name in &["index.js", "index.json"] {
+            let index_path = path.join(name);
+            if let Ok(config) = load_config_file(&index_path) {
+                return Some(config);
+            }
+        }
+    }
+
+    None
 }
 
 /// Recursively collect rules from a list of `extends` entries, with cycle detection.
@@ -1245,14 +2226,17 @@ fn collect_rules_from_extends(
         }
         visited.insert(preset_name.clone());
 
-        // Try built-in presets first (gale:*, stylelint-config-*, etc.)
-        if let Some(preset_rules) = resolve_preset(preset_name) {
-            rules.extend(preset_rules);
-        } else if preset_name.starts_with("gale:") {
-            // Unknown gale: preset — warn and skip.
-            eprintln!("warning: unknown preset '{preset_name}', skipping");
+        if preset_name.starts_with("gale:") {
+            // gale: presets are always built-in.
+            if let Some(preset_rules) = resolve_preset(preset_name) {
+                rules.extend(preset_rules);
+            } else {
+                eprintln!("warning: unknown preset '{preset_name}', skipping");
+            }
         } else {
-            // Resolve as relative path or npm package
+            // For non-gale presets: try npm/file first, fall back to built-in.
+            // This ensures the real npm package (with exact options) wins over
+            // our approximate built-in presets.
             let config = if preset_name.starts_with("./") || preset_name.starts_with("../") {
                 resolve_relative_config(preset_name, base_dir)
             } else {
@@ -1269,8 +2253,11 @@ fn collect_rules_from_extends(
                         .unwrap_or(base_dir)
                         .to_path_buf()
                 } else {
+                    // For npm packages, use the package root directory as the
+                    // base for resolving relative extends within the package.
+                    let (pkg_name, _) = split_npm_package_subpath(preset_name);
                     find_node_modules(base_dir)
-                        .map(|nm| nm.join(preset_name))
+                        .map(|nm| nm.join(pkg_name))
                         .unwrap_or_else(|| base_dir.to_path_buf())
                 };
 
@@ -1282,22 +2269,55 @@ fn collect_rules_from_extends(
                     overrides.extend(sub_overrides);
                 }
                 // Then apply this config's own rules (later configs win)
-                for (name, value) in config.rules.unwrap_or_default() {
+                let config_rules_raw = config.rules.unwrap_or_default();
+                for (name, value) in &config_rules_raw {
                     let resolved = value.resolve();
                     if resolved.severity == Some(Severity::Off) {
-                        rules.remove(&name);
+                        rules.remove(name);
                     } else {
-                        rules.insert(name, resolved);
+                        rules.insert(name.clone(), resolved);
                     }
                 }
+                // Collect rules explicitly set to null/Off by this config.
+                // These "nullified" rules must remain off even when an
+                // override from the same config re-enables them via extends.
+                let null_rules: HashSet<String> = config_rules_raw
+                    .iter()
+                    .filter(|(_, v)| v.resolve().severity == Some(Severity::Off))
+                    .map(|(k, _)| k.clone())
+                    .collect();
+
                 // Collect this config's overrides (extended configs' overrides
                 // come before the user's own overrides).
-                if let Some(config_overrides) = config.overrides {
-                    // Overrides within the extended config may themselves have
-                    // extends that need resolving, but that resolution happens
-                    // later in resolve_raw when we process these overrides.
+                if let Some(mut config_overrides) = config.overrides {
+                    // Inject the parent config's null rules into each override
+                    // so they take precedence over the override's extends.
+                    // Only inject if the override doesn't explicitly set that
+                    // rule itself (explicit override rules still win).
+                    if !null_rules.is_empty() {
+                        for ov in &mut config_overrides {
+                            let ov_explicit: HashSet<String> = ov
+                                .rules
+                                .as_ref()
+                                .map(|r| r.keys().cloned().collect())
+                                .unwrap_or_default();
+                            let rules_map =
+                                ov.rules.get_or_insert_with(HashMap::new);
+                            for null_rule in &null_rules {
+                                if !ov_explicit.contains(null_rule) {
+                                    rules_map.insert(
+                                        null_rule.clone(),
+                                        RuleConfigValue::Null(None),
+                                    );
+                                }
+                            }
+                        }
+                    }
                     overrides.extend(config_overrides);
                 }
+            } else if let Some(preset_rules) = resolve_preset(preset_name) {
+                // npm/file not found — use built-in preset as fallback.
+                rules.extend(preset_rules);
             } else {
                 eprintln!("warning: could not resolve config '{preset_name}', skipping");
             }
@@ -1709,7 +2729,7 @@ module.exports = {
   }
 };
 "#;
-        let raw = parse_js_config(js).unwrap();
+        let raw = parse_js_config(js, None).unwrap();
         assert_eq!(
             raw.extends,
             Some(vec!["stylelint-config-standard".to_string()])
@@ -1728,7 +2748,7 @@ module.exports = {
   },
 };
 "#;
-        let raw = parse_js_config(js).unwrap();
+        let raw = parse_js_config(js, None).unwrap();
         let rules = raw.rules.unwrap();
         assert_eq!(rules.len(), 2);
         assert!(rules.contains_key("block-no-empty"));
@@ -1745,7 +2765,7 @@ module.exports = {
   }
 };
 "#;
-        let raw = parse_js_config(js).unwrap();
+        let raw = parse_js_config(js, None).unwrap();
         let rules = raw.rules.unwrap();
         assert_eq!(rules.len(), 2);
     }
@@ -1760,7 +2780,7 @@ module.exports = {
   }
 };
 "#;
-        let raw = parse_js_config(js).unwrap();
+        let raw = parse_js_config(js, None).unwrap();
         let rules = raw.rules.unwrap();
         assert!(rules.contains_key("font-weight-notation"));
         assert!(rules.contains_key("selector-max-id"));
@@ -1776,7 +2796,7 @@ module.exports = {
   }
 };
 "#;
-        let raw = parse_js_config(js).unwrap();
+        let raw = parse_js_config(js, None).unwrap();
         let rules = raw.rules.unwrap();
         assert_eq!(rules.len(), 2);
     }
@@ -1791,7 +2811,7 @@ export default {
   }
 };
 "#;
-        let raw = parse_js_config(js).unwrap();
+        let raw = parse_js_config(js, None).unwrap();
         assert_eq!(
             raw.extends,
             Some(vec!["stylelint-config-standard".to_string()])
@@ -1810,7 +2830,7 @@ module.exports = {
   }
 };
 "#;
-        let raw = parse_js_config(js).unwrap();
+        let raw = parse_js_config(js, None).unwrap();
         assert_eq!(
             raw.extends,
             Some(vec!["stylelint-config-standard".to_string()])
@@ -1830,7 +2850,7 @@ module.exports = {
   }
 };
 "#;
-        let raw = parse_js_config(js).unwrap();
+        let raw = parse_js_config(js, None).unwrap();
         assert!(raw.extends.is_some());
     }
 
@@ -1844,7 +2864,7 @@ module.exports = {
   }
 };
 "#;
-        let raw = parse_js_config(js).unwrap();
+        let raw = parse_js_config(js, None).unwrap();
         let rules = raw.rules.unwrap();
         assert!(rules.contains_key("block-no-empty"));
     }
@@ -1856,7 +2876,7 @@ const config = {
   rules: { 'block-no-empty': true }
 };
 "#;
-        assert!(parse_js_config(js).is_err());
+        assert!(parse_js_config(js, None).is_err());
     }
 
     #[test]
@@ -1868,16 +2888,16 @@ module.exports = {
   }
 };
 "#;
-        let raw = parse_config_file("stylelint.config.js", js).unwrap();
+        let raw = parse_config_file("stylelint.config.js", js, None).unwrap();
         let rules = raw.rules.unwrap();
         assert!(rules.contains_key("block-no-empty"));
 
         // Also works for .mjs
-        let raw2 = parse_config_file("stylelint.config.mjs", js).unwrap();
+        let raw2 = parse_config_file("stylelint.config.mjs", js, None).unwrap();
         assert!(raw2.rules.is_some());
 
         // Also works for .cjs
-        let raw3 = parse_config_file("stylelint.config.cjs", js).unwrap();
+        let raw3 = parse_config_file("stylelint.config.cjs", js, None).unwrap();
         assert!(raw3.rules.is_some());
     }
 
@@ -1897,7 +2917,7 @@ module.exports = {
   }
 };
 "#;
-        let raw = parse_js_config(js).unwrap();
+        let raw = parse_js_config(js, None).unwrap();
         // Verify parsing succeeded and extracted the right structure.
         assert_eq!(
             raw.extends,
@@ -1910,6 +2930,264 @@ module.exports = {
         assert!(rules.contains_key("declaration-no-important"));
         assert!(rules.contains_key("font-weight-notation"));
         assert!(rules.contains_key("selector-max-id"));
+    }
+
+    // -----------------------------------------------------------------------
+    // ESM/CJS import resolution tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn extract_imports_esm_default() {
+        let src = r#"
+import propertyGroups from './groups.js'
+import something from 'not-relative'
+const config = {}
+"#;
+        let imports = extract_imports(src);
+        assert_eq!(imports.len(), 2);
+        assert_eq!(imports[0], ("propertyGroups".to_string(), "./groups.js".to_string()));
+        assert_eq!(imports[1], ("something".to_string(), "not-relative".to_string()));
+    }
+
+    #[test]
+    fn extract_imports_cjs_require() {
+        let src = r#"
+const groups = require('./groups')
+const stylelint = require('stylelint')
+"#;
+        let imports = extract_imports(src);
+        assert_eq!(imports.len(), 2);
+        assert_eq!(imports[0], ("groups".to_string(), "./groups".to_string()));
+        assert_eq!(imports[1], ("stylelint".to_string(), "stylelint".to_string()));
+    }
+
+    #[test]
+    fn extract_imports_skips_destructured() {
+        let src = r#"
+import { foo } from './bar'
+const { baz } = require('./qux')
+"#;
+        let imports = extract_imports(src);
+        assert!(imports.is_empty());
+    }
+
+    #[test]
+    fn extract_default_export_direct_array() {
+        let src = r#"
+const foo = 'bar'
+export default [1, 2, 3]
+"#;
+        let val = extract_default_export(src).unwrap();
+        assert_eq!(val, "[1, 2, 3]");
+    }
+
+    #[test]
+    fn extract_default_export_via_variable() {
+        let src = r#"
+const myArray = [
+    { "properties": ["a", "b"] },
+    { "properties": ["c", "d"] }
+]
+export default myArray
+"#;
+        let val = extract_default_export(src).unwrap();
+        assert!(val.starts_with('['));
+        assert!(val.contains("\"properties\""));
+        assert!(val.ends_with(']'));
+    }
+
+    #[test]
+    fn extract_default_export_module_exports() {
+        let src = r#"
+const data = [1, 2, 3]
+module.exports = data
+"#;
+        let val = extract_default_export(src).unwrap();
+        assert_eq!(val, "[1, 2, 3]");
+    }
+
+    #[test]
+    fn strip_import_lines_removes_imports() {
+        let src = "import foo from './bar'\nconst x = require('./baz')\nexport default {}";
+        let stripped = strip_import_lines(src);
+        assert!(!stripped.contains("import foo"));
+        assert!(!stripped.contains("require"));
+        assert!(stripped.contains("export default {}"));
+    }
+
+    #[test]
+    fn replace_whole_word_basic() {
+        let src = "foo + foobar + foo";
+        let result = replace_whole_word(src, "foo", "42");
+        assert_eq!(result, "42 + foobar + 42");
+    }
+
+    #[test]
+    fn js_config_with_esm_import_resolution() {
+        // Create a temporary directory with a mock file structure
+        let tmp = std::env::temp_dir().join("gale_test_esm_import");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // Write the imported file: groups.js
+        std::fs::write(
+            tmp.join("groups.js"),
+            r#"
+const propertyGroups = [
+    { "properties": ["position", "top", "right"] },
+    { "properties": ["display", "flex"] }
+]
+
+export default propertyGroups
+"#,
+        )
+        .unwrap();
+
+        // Write the main config file (uses the common pattern:
+        // const config = {...}; export default config)
+        let config_src = r#"
+import propertyGroups from './groups.js'
+
+const config = {
+    plugins: ['stylelint-order'],
+    rules: {
+        'order/properties-order': propertyGroups,
+    },
+}
+
+export default config
+"#;
+
+        let raw = parse_js_config(config_src, Some(tmp.as_path())).unwrap();
+        let rules = raw.rules.unwrap();
+        assert!(rules.contains_key("order/properties-order"));
+
+        // The value should be an array with the property groups
+        let val = rules.get("order/properties-order").unwrap();
+        match val {
+            RuleConfigValue::Array(arr) => {
+                assert_eq!(arr.len(), 2);
+                // Verify first group has the right properties
+                assert!(arr[0].is_object());
+            }
+            _ => panic!("Expected array value for order/properties-order, got {:?}", val),
+        }
+
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn js_config_with_cjs_import_resolution() {
+        let tmp = std::env::temp_dir().join("gale_test_cjs_import");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        // Write imported file
+        std::fs::write(
+            tmp.join("groups.js"),
+            r#"
+module.exports = [
+    { "properties": ["color", "background"] }
+]
+"#,
+        )
+        .unwrap();
+
+        let config_src = r#"
+const groups = require('./groups')
+
+module.exports = {
+    rules: {
+        'order/properties-order': groups,
+    },
+}
+"#;
+
+        let raw = parse_js_config(config_src, Some(tmp.as_path())).unwrap();
+        let rules = raw.rules.unwrap();
+        assert!(rules.contains_key("order/properties-order"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn js_config_import_missing_file_graceful() {
+        // When the imported file doesn't exist, parsing should still work
+        // (the variable just won't be replaced, and parsing continues)
+        let config_src = r#"
+import stuff from './nonexistent.js'
+
+export default {
+    rules: {
+        'block-no-empty': true,
+    },
+}
+"#;
+        let tmp = std::env::temp_dir().join("gale_test_missing_import");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        let raw = parse_js_config(config_src, Some(tmp.as_path())).unwrap();
+        let rules = raw.rules.unwrap();
+        assert!(rules.contains_key("block-no-empty"));
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn js_config_npm_import_not_resolved() {
+        // npm package imports should not be resolved (no relative path).
+        // The import line is stripped, and string plugin names work fine.
+        let config_src = r#"
+import something from 'stylelint-order'
+
+export default {
+    plugins: ['stylelint-order'],
+    rules: {
+        'block-no-empty': true,
+    },
+}
+"#;
+        let raw = parse_js_config(config_src, None).unwrap();
+        let rules = raw.rules.unwrap();
+        assert!(rules.contains_key("block-no-empty"));
+    }
+
+    #[test]
+    fn js_config_import_with_extension_resolution() {
+        // Test that we try adding .js extension when path has no extension
+        let tmp = std::env::temp_dir().join("gale_test_ext_resolution");
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+
+        std::fs::write(
+            tmp.join("data.js"),
+            "export default [\"a\", \"b\"]\n",
+        )
+        .unwrap();
+
+        let config_src = r#"
+import items from './data'
+
+export default {
+    rules: {
+        'my-rule': items,
+    },
+}
+"#;
+
+        let raw = parse_js_config(config_src, Some(tmp.as_path())).unwrap();
+        let rules = raw.rules.unwrap();
+        assert!(rules.contains_key("my-rule"));
+        match rules.get("my-rule").unwrap() {
+            RuleConfigValue::Array(arr) => {
+                assert_eq!(arr.len(), 2);
+            }
+            other => panic!("Expected array, got {:?}", other),
+        }
+
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 
     // -----------------------------------------------------------------------

@@ -55,9 +55,16 @@ impl Rule for FontFamilyNoMissingGenericFamilyKeyword {
                 continue;
             }
 
+            // Skip CSS-wide keywords (inherit, initial, unset, revert, revert-layer)
+            let lower = value.to_ascii_lowercase();
+            if matches!(lower.as_str(), "inherit" | "initial" | "unset" | "revert" | "revert-layer") {
+                continue;
+            }
+
             // Skip if the value contains var() — the custom property may
             // resolve to a value that includes a generic family.
-            if value.contains("var(") {
+            // Also match SCSS interpolation like var(--#{$prefix}...)
+            if value.contains("var(") || value.contains("#{") || value.contains('$') {
                 continue;
             }
 
@@ -102,8 +109,7 @@ mod tests {
         RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css,
-        }
+            syntax: Syntax::Css, options: None }
     }
 
     #[test]

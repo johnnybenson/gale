@@ -43,8 +43,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "   \n  ",
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None };
         let diags = rule.check_root(&[], &context);
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].message, "Unexpected empty source");
@@ -56,8 +55,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "a { color: red; }",
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None,        };
         let nodes = vec![CssNode::Style(gale_css_parser::StyleRule {
             selector: "a".to_string(),
             declarations: vec![gale_css_parser::Declaration {

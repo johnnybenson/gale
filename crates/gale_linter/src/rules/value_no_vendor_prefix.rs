@@ -10,6 +10,35 @@ pub struct ValueNoVendorPrefix;
 
 const VENDOR_PREFIXES: &[&str] = &["-webkit-", "-moz-", "-ms-", "-o-"];
 
+/// Known CSS values that have standard unprefixed equivalents (from Autoprefixer data).
+/// Only vendor-prefixed versions of these values should be flagged.
+const KNOWN_PREFIXABLE_VALUES: &[&str] = &[
+    "box",            // display: -webkit-box
+    "calc",           // -webkit-calc()
+    "cross-fade",     // -webkit-cross-fade()
+    "element",        // -moz-element()
+    "fill-available", // -webkit-fill-available
+    "fit-content",    // -webkit-fit-content
+    "flex",           // display: -webkit-flex
+    "flexbox",        // display: -ms-flexbox (old IE syntax)
+    "grab",           // cursor: -webkit-grab
+    "grabbing",       // cursor: -webkit-grabbing
+    "image-set",      // -webkit-image-set()
+    "inline-box",     // display: -webkit-inline-box
+    "inline-flex",    // display: -webkit-inline-flex
+    "isolate",        // unicode-bidi: -moz-isolate
+    "linear-gradient",
+    "max-content",    // width: -webkit-max-content
+    "min-content",    // width: -webkit-min-content
+    "plaintext",      // unicode-bidi: -moz-plaintext
+    "radial-gradient",
+    "repeating-linear-gradient",
+    "repeating-radial-gradient",
+    "sticky",         // position: -webkit-sticky
+    "zoom-in",        // cursor: -webkit-zoom-in
+    "zoom-out",       // cursor: -webkit-zoom-out
+];
+
 impl Rule for ValueNoVendorPrefix {
     fn name(&self) -> &'static str {
         "value-no-vendor-prefix"
@@ -27,11 +56,36 @@ impl Rule for ValueNoVendorPrefix {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+
+        // Read ignoreValues from options (secondary option object).
+        let ignore_values: Vec<String> = ctx
+            .options
+            .and_then(|v| v.get("ignoreValues"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| item.as_str().map(|s| s.to_ascii_lowercase()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let mut diags = Vec::new();
         for decl in &rule.declarations {
             let lower = decl.value.to_ascii_lowercase();
             for prefix in VENDOR_PREFIXES {
                 if lower.contains(prefix) {
+                    // Extract the unprefixed value part
+                    let unprefixed = extract_unprefixed_value(&lower, prefix);
+
+                    // Only flag known autoprefixable values
+                    if !KNOWN_PREFIXABLE_VALUES.iter().any(|v| *v == unprefixed) {
+                        continue;
+                    }
+
+                    // Check if the unprefixed value is in the ignore list
+                    if ignore_values.iter().any(|v| v == &unprefixed) {
+                        continue;
+                    }
                     // Try to build a fix by finding the prefixed value in source
                     let decl_start = decl.span.offset;
                     let decl_end = decl_start + decl.span.length;
@@ -76,13 +130,28 @@ impl Rule for ValueNoVendorPrefix {
     }
 }
 
+/// Extract the unprefixed value identifier from a CSS value containing a vendor prefix.
+/// E.g. "-webkit-flex" -> "flex", "-webkit-match-parent" -> "match-parent"
+fn extract_unprefixed_value(lower_value: &str, prefix: &str) -> String {
+    // Find the prefix in the value and return what follows it
+    if let Some(pos) = lower_value.find(prefix) {
+        let after = &lower_value[pos + prefix.len()..];
+        // Take until whitespace, comma, or paren
+        let end = after.find(|c: char| c.is_ascii_whitespace() || c == ',' || c == ')' || c == '(')
+            .unwrap_or(after.len());
+        after[..end].to_string()
+    } else {
+        lower_value.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css }
+        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
     }
 
     fn style_decl(val: &str) -> CssNode {
@@ -120,7 +189,7 @@ mod tests {
     #[test]
     fn emits_fix_for_vendor_prefixed_value() {
         let source = "a { display: -webkit-flex; }";
-        let ctx = RuleContext { file_path: "t.css", source, syntax: Syntax::Css };
+        let ctx = RuleContext { file_path: "t.css", source, syntax: Syntax::Css, options: None };
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![Declaration {

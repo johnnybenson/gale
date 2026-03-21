@@ -1,13 +1,13 @@
 {
-  "name": "@gale-lint/cli-win32-arm64",
+  "name": "@aspect/gale-darwin-arm64",
   "version": "0.1.0",
-  "description": "Gale CSS linter binary for Windows ARM64",
+  "description": "Gale CSS linter binary for macOS ARM64",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/LyricalString/gale"
   },
-  "os": ["win32"],
+  "os": ["darwin"],
   "cpu": ["arm64"],
-  "files": ["gale.exe"]
+  "files": ["gale"]
 }

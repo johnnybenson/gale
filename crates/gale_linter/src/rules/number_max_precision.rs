@@ -23,18 +23,26 @@ impl Rule for NumberMaxPrecision {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+
+        // Read configured max precision from options (primary option is a number).
+        let max = ctx
+            .options
+            .and_then(|v| v.as_u64())
+            .map(|n| n as usize)
+            .unwrap_or(MAX_PRECISION);
+
         let mut diags = Vec::new();
         for decl in &rule.declarations {
-            if exceeds_precision(&decl.value) {
+            if exceeds_precision(&decl.value, max) {
                 diags.push(
                     Diagnostic::new(
                         self.name(),
                         format!(
-                            "Expected number to have no more than {MAX_PRECISION} decimal places in \"{}\"",
+                            "Expected number to have no more than {max} decimal places in \"{}\"",
                             decl.value,
                         ),
                     )
@@ -47,7 +55,7 @@ impl Rule for NumberMaxPrecision {
     }
 }
 
-fn exceeds_precision(value: &str) -> bool {
+fn exceeds_precision(value: &str, max: usize) -> bool {
     let chars: Vec<char> = value.chars().collect();
     let len = chars.len();
     let mut i = 0;
@@ -61,7 +69,7 @@ fn exceeds_precision(value: &str) -> bool {
                 decimal_digits += 1;
                 j += 1;
             }
-            if decimal_digits > MAX_PRECISION {
+            if decimal_digits > max {
                 return true;
             }
         }
@@ -76,7 +84,7 @@ mod tests {
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css }
+        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
     }
 
     fn style_decl(val: &str) -> CssNode {

@@ -46,6 +46,13 @@ impl Rule for UnitNoUnknown {
 
 /// Extract units from a CSS value string.
 /// Finds patterns like `10px`, `2.5em`, `.5rem`, etc.
+///
+/// Skips:
+/// - Hex colors (`#fff`)
+/// - Content inside `var(…)` (custom property references may contain
+///   number-letter sequences like `--spacing-2xl` that aren't units)
+/// - Custom property names (starting with `--`)
+/// - SCSS variables (`$var-2x`)
 fn extract_units(value: &str) -> Vec<String> {
     let mut units = Vec::new();
     let chars: Vec<char> = value.chars().collect();
@@ -53,6 +60,48 @@ fn extract_units(value: &str) -> Vec<String> {
     let mut i = 0;
 
     while i < len {
+        // Skip content inside var(…) — custom property names can contain
+        // number+letter sequences that aren't actual CSS units.
+        // Also skip url(…) — data URLs contain embedded content.
+        if i + 3 < len
+            && ((chars[i] == 'v' && chars[i + 1] == 'a' && chars[i + 2] == 'r' && chars[i + 3] == '(')
+                || (chars[i] == 'u' && chars[i + 1] == 'r' && chars[i + 2] == 'l' && chars[i + 3] == '('))
+        {
+            i += 4;
+            let mut depth = 1;
+            while i < len && depth > 0 {
+                match chars[i] {
+                    '(' => depth += 1,
+                    ')' => depth -= 1,
+                    _ => {}
+                }
+                i += 1;
+            }
+            continue;
+        }
+
+        // Skip custom property names (--name-2xl etc.)
+        if i + 1 < len && chars[i] == '-' && chars[i + 1] == '-' {
+            i += 2;
+            while i < len
+                && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
+            {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Skip SCSS variables ($var-name)
+        if chars[i] == '$' {
+            i += 1;
+            while i < len
+                && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
+            {
+                i += 1;
+            }
+            continue;
+        }
+
         // Skip hex colors (#fff, #ff00ff, etc.)
         if chars[i] == '#' {
             i += 1;
@@ -61,14 +110,38 @@ fn extract_units(value: &str) -> Vec<String> {
             }
             continue;
         }
+
         // Skip to a digit or decimal point followed by digit
-        if chars[i].is_ascii_digit() || (chars[i] == '.' && i + 1 < len && chars[i + 1].is_ascii_digit()) {
+        if chars[i].is_ascii_digit()
+            || (chars[i] == '.' && i + 1 < len && chars[i + 1].is_ascii_digit())
+        {
+            // If the digit is preceded by `-` which is preceded by an
+            // alphabetic char, this is part of a hyphenated identifier
+            // (e.g. `preserve-3d`), not a number with a unit.
+            if i > 1
+                && chars[i - 1] == '-'
+                && (chars[i - 2].is_ascii_alphanumeric()
+                    || chars[i - 2] == '-'
+                    || chars[i - 2] == '_')
+            {
+                // Skip the rest of this identifier
+                while i < len
+                    && (chars[i].is_ascii_alphanumeric()
+                        || chars[i] == '-'
+                        || chars[i] == '_')
+                {
+                    i += 1;
+                }
+                continue;
+            }
             // Skip the number
             while i < len && (chars[i].is_ascii_digit() || chars[i] == '.') {
                 i += 1;
             }
             // Now extract the unit (alphabetic chars or %)
             if i < len && (chars[i].is_ascii_alphabetic() || chars[i] == '%') {
+                // But first, check if the char after the unit is `-` or `_`
+                // which would mean this is an identifier, not a unit.
                 let start = i;
                 if chars[i] == '%' {
                     i += 1;
@@ -76,6 +149,21 @@ fn extract_units(value: &str) -> Vec<String> {
                     while i < len && chars[i].is_ascii_alphabetic() {
                         i += 1;
                     }
+                }
+                // If the next char is `-`, `_`, or alphanumeric, this is part
+                // of an identifier (e.g. a CSS custom ident), not a unit.
+                if i < len
+                    && (chars[i] == '-' || chars[i] == '_' || chars[i].is_ascii_alphanumeric())
+                {
+                    // Skip rest of identifier
+                    while i < len
+                        && (chars[i].is_ascii_alphanumeric()
+                            || chars[i] == '-'
+                            || chars[i] == '_')
+                    {
+                        i += 1;
+                    }
+                    continue;
                 }
                 let unit: String = chars[start..i].iter().collect();
                 units.push(unit);
@@ -94,7 +182,7 @@ mod tests {
     use gale_css_parser::{CssNode, Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css }
+        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
     }
 
     fn style_with_value(val: &str) -> CssNode {

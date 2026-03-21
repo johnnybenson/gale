@@ -9,6 +9,8 @@ pub struct RuleContext<'a> {
     pub source: &'a str,
     /// The CSS syntax variant.
     pub syntax: Syntax,
+    /// Per-rule options from the config (e.g. max value, ignore lists).
+    pub options: Option<&'a serde_json::Value>,
 }
 
 /// A single lint rule that can inspect CSS AST nodes and emit diagnostics.

@@ -39,6 +39,10 @@ impl Rule for ColorNoInvalidHex {
 }
 
 /// Find hex color candidates in a value string (# followed by hex-like chars).
+/// Skips:
+/// - Content inside `url(…)` (URLs may contain `#fragment` references)
+/// - Content after `//` (SCSS line comments that may leak into the value)
+/// - `#{}` SCSS interpolation
 fn find_hex_colors(value: &str) -> Vec<String> {
     let mut colors = Vec::new();
     let chars: Vec<char> = value.chars().collect();
@@ -46,7 +50,50 @@ fn find_hex_colors(value: &str) -> Vec<String> {
 
     let mut i = 0;
     while i < len {
+        // Skip SCSS line comments (// to end of line)
+        if i + 1 < len && chars[i] == '/' && chars[i + 1] == '/' {
+            while i < len && chars[i] != '\n' {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Skip url(…)
+        if i + 3 < len
+            && chars[i] == 'u'
+            && chars[i + 1] == 'r'
+            && chars[i + 2] == 'l'
+            && chars[i + 3] == '('
+        {
+            i += 4;
+            let mut depth = 1;
+            while i < len && depth > 0 {
+                match chars[i] {
+                    '(' => depth += 1,
+                    ')' => depth -= 1,
+                    _ => {}
+                }
+                i += 1;
+            }
+            continue;
+        }
+
         if chars[i] == '#' {
+            // Skip SCSS interpolation #{…}
+            if i + 1 < len && chars[i + 1] == '{' {
+                i += 2;
+                let mut depth = 1;
+                while i < len && depth > 0 {
+                    match chars[i] {
+                        '{' => depth += 1,
+                        '}' => depth -= 1,
+                        _ => {}
+                    }
+                    i += 1;
+                }
+                continue;
+            }
+
             let start = i;
             i += 1;
             while i < len && chars[i].is_ascii_alphanumeric() {
@@ -78,7 +125,7 @@ mod tests {
     use gale_css_parser::{CssNode, Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css }
+        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
     }
 
     fn style_with_value(val: &str) -> CssNode {

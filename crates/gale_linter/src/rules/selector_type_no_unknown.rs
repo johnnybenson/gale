@@ -41,6 +41,10 @@ impl Rule for SelectorTypeNoUnknown {
             if name.contains('-') {
                 continue;
             }
+            // Skip keyframe selectors (`from`, `to`).
+            if name.eq_ignore_ascii_case("from") || name.eq_ignore_ascii_case("to") {
+                continue;
+            }
             if !is_known_html_element(&name) {
                 diags.push(
                     Diagnostic::new(
@@ -185,10 +189,29 @@ fn extract_type_selectors(selector: &str) -> Vec<String> {
 }
 
 /// Strip `//` line comments from a selector string (SCSS/Less).
+/// Handles both full-line comments and inline trailing comments.
 fn strip_scss_line_comments(selector: &str) -> String {
     selector
         .lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
+        .map(|line| {
+            // Find `//` that's not inside a string
+            let mut in_single = false;
+            let mut in_double = false;
+            let bytes = line.as_bytes();
+            let mut i = 0;
+            while i < bytes.len() {
+                match bytes[i] {
+                    b'\'' if !in_double => in_single = !in_single,
+                    b'"' if !in_single => in_double = !in_double,
+                    b'/' if !in_single && !in_double && i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                        return &line[..i];
+                    }
+                    _ => {}
+                }
+                i += 1;
+            }
+            line
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -199,7 +222,7 @@ mod tests {
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css }
+        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
     }
 
     fn style(sel: &str) -> CssNode {

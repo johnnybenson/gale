@@ -139,6 +139,9 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
             // Automatically respect .galeignore files found in traversed dirs.
             builder.add_custom_ignore_filename(".galeignore");
 
+            // Respect .stylelintignore files (Stylelint compatibility).
+            builder.add_custom_ignore_filename(".stylelintignore");
+
             // Load a user-supplied custom ignore file.
             if let Some(ignore_file) = opts.ignore_path {
                 if ignore_file.exists() {
@@ -306,7 +309,16 @@ pub fn run() -> Result<()> {
         LintCache::default()
     };
 
-    let runner = LintRunner::new(registry, enabled_rules.clone());
+    // Extract per-rule options from the config.
+    let rule_options: std::collections::HashMap<String, serde_json::Value> = config
+        .rules
+        .iter()
+        .filter_map(|(name, cfg)| {
+            cfg.options.as_ref().map(|opts| (name.clone(), opts.clone()))
+        })
+        .collect();
+
+    let runner = LintRunner::with_options(registry, enabled_rules.clone(), rule_options);
     let has_overrides = config.has_overrides();
 
     /// Lint a single file, computing the effective rules from overrides if needed.
@@ -331,7 +343,14 @@ pub fn run() -> Result<()> {
                 .filter(|(name, _)| runner.has_rule(name))
                 .map(|(name, _)| name.clone())
                 .collect();
-            runner.lint_source_with_rules(source, file_path, syntax, &file_enabled)
+            // Collect per-rule options from overrides
+            let override_options: std::collections::HashMap<String, serde_json::Value> = effective_rules
+                .iter()
+                .filter_map(|(name, cfg)| {
+                    cfg.options.as_ref().map(|opts| (name.clone(), opts.clone()))
+                })
+                .collect();
+            runner.lint_source_with_rules(source, file_path, syntax, &file_enabled, &override_options)
         } else {
             runner.lint_source(source, file_path, syntax)
         }

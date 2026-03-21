@@ -1,13 +1,13 @@
 {
-  "name": "@gale-lint/cli-win32-x64",
+  "name": "@aspect/gale-linux-x64",
   "version": "0.1.0",
-  "description": "Gale CSS linter binary for Windows x64",
+  "description": "Gale CSS linter binary for Linux x64",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/LyricalString/gale"
   },
-  "os": ["win32"],
+  "os": ["linux"],
   "cpu": ["x64"],
-  "files": ["gale.exe"]
+  "files": ["gale"]
 }

@@ -24,24 +24,46 @@ impl Rule for SelectorMaxType {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
-        let count = count_type_selectors(&rule.selector);
-        if count > MAX_TYPE {
-            vec![Diagnostic::new(
-                self.name(),
-                format!(
-                    "Expected selector \"{}\" to have no more than {MAX_TYPE} type selector(s), found {count}",
-                    rule.selector
-                ),
-            )
-            .severity(self.default_severity())
-            .span(Span::new(rule.span.offset, rule.span.length))]
+
+        // Read configured max from options (primary option is a number).
+        let max = ctx
+            .options
+            .and_then(|v| v.as_u64())
+            .map(|n| n as usize)
+            .unwrap_or(MAX_TYPE);
+
+        let selector = if matches!(ctx.syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less) {
+            strip_scss_constructs(&rule.selector)
         } else {
-            vec![]
+            rule.selector.clone()
+        };
+
+        let mut diags = Vec::new();
+        // Check each comma-separated selector individually
+        for sel in selector.split(',') {
+            let sel = sel.trim();
+            if sel.is_empty() {
+                continue;
+            }
+            let count = count_type_selectors(sel);
+            if count > max {
+                diags.push(
+                    Diagnostic::new(
+                        self.name(),
+                        format!(
+                            "Expected selector \"{sel}\" to have no more than {max} type selector(s), found {count}",
+                        ),
+                    )
+                    .severity(self.default_severity())
+                    .span(Span::new(rule.span.offset, rule.span.length)),
+                );
+            }
         }
+        diags
     }
 }
 
@@ -131,6 +153,44 @@ fn is_ident_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '-' || c == '_' || !c.is_ascii()
 }
 
+/// Strip SCSS-specific constructs from a selector string:
+/// - `//` line comments
+/// - `#{...}` interpolation (replaced with empty string)
+fn strip_scss_constructs(selector: &str) -> String {
+    // First strip line comments
+    let no_comments: String = selector
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Then strip #{...} interpolation
+    let mut result = String::with_capacity(no_comments.len());
+    let chars: Vec<char> = no_comments.chars().collect();
+    let len = chars.len();
+    let mut i = 0;
+
+    while i < len {
+        if i + 1 < len && chars[i] == '#' && chars[i + 1] == '{' {
+            // Skip #{...}
+            let mut depth = 1;
+            i += 2;
+            while i < len && depth > 0 {
+                if chars[i] == '{' {
+                    depth += 1;
+                } else if chars[i] == '}' {
+                    depth -= 1;
+                }
+                i += 1;
+            }
+        } else {
+            result.push(chars[i]);
+            i += 1;
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,8 +200,7 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css,
-        }
+            syntax: Syntax::Css, options: None }
     }
 
     fn style_with_selector(sel: &str) -> CssNode {

@@ -1,5 +1,5 @@
 {
-  "name": "@gale-lint/cli-linux-arm64",
+  "name": "@aspect/gale-linux-arm64",
   "version": "0.1.0",
   "description": "Gale CSS linter binary for Linux ARM64",
   "license": "MIT",

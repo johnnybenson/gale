@@ -62,8 +62,7 @@ mod tests {
         RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css,
-        }
+            syntax: Syntax::Css, options: None }
     }
 
     #[test]
@@ -111,8 +110,7 @@ mod tests {
         let ctx = RuleContext {
             file_path: "test.scss",
             source,
-            syntax: Syntax::Scss,
-        };
+            syntax: Syntax::Scss, options: None };
         let diags = rule.check(&node, &ctx);
         assert!(diags.is_empty());
     }
@@ -130,8 +128,7 @@ mod tests {
         let ctx = RuleContext {
             file_path: "test.scss",
             source,
-            syntax: Syntax::Scss,
-        };
+            syntax: Syntax::Scss, options: None };
         let diags = rule.check(&node, &ctx);
         assert_eq!(diags.len(), 1);
     }

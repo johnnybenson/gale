@@ -2,16 +2,15 @@
 
 "use strict";
 
-const { execFileSync } = require("child_process");
-const { resolve } = require("path");
+const { spawnSync } = require("child_process");
+const os = require("os");
 
 const PLATFORMS = {
-  "darwin arm64": "@gale-lint/cli-darwin-arm64/gale",
-  "darwin x64": "@gale-lint/cli-darwin-x64/gale",
-  "linux x64": "@gale-lint/cli-linux-x64/gale",
-  "linux arm64": "@gale-lint/cli-linux-arm64/gale",
-  "win32 x64": "@gale-lint/cli-win32-x64/gale.exe",
-  "win32 arm64": "@gale-lint/cli-win32-arm64/gale.exe",
+  "darwin-arm64": "@aspect/gale-darwin-arm64/gale",
+  "darwin-x64": "@aspect/gale-darwin-x64/gale",
+  "linux-x64": "@aspect/gale-linux-x64/gale",
+  "linux-arm64": "@aspect/gale-linux-arm64/gale",
+  "win32-x64": "@aspect/gale-win32-x64/gale.exe",
 };
 
 function getGaleBinary() {
@@ -21,12 +20,12 @@ function getGaleBinary() {
     return envBinary;
   }
 
-  const platformKey = `${process.platform} ${process.arch}`;
-  const packagePath = PLATFORMS[platformKey];
+  const platform = `${os.platform()}-${os.arch()}`;
+  const packagePath = PLATFORMS[platform];
 
   if (!packagePath) {
     console.error(
-      `Gale does not support your platform yet: ${process.platform} ${process.arch}.\n` +
+      `Gale does not support your platform yet: ${platform}.\n` +
         "You can set the GALE_BINARY environment variable to point to a Gale binary."
     );
     process.exit(1);
@@ -36,10 +35,10 @@ function getGaleBinary() {
     return require.resolve(packagePath);
   } catch {
     console.error(
-      `Could not find the Gale binary for your platform (${platformKey}).\n` +
+      `Could not find the Gale binary for your platform (${platform}).\n` +
         "This likely means the optional dependency was not installed.\n\n" +
         "Try reinstalling with:\n" +
-        "  npm install gale-lint\n\n" +
+        "  bun install gale-lint\n\n" +
         "Or set the GALE_BINARY environment variable to point to a Gale binary."
     );
     process.exit(1);
@@ -47,14 +46,11 @@ function getGaleBinary() {
 }
 
 const binaryPath = getGaleBinary();
+const args = process.argv.slice(2);
+const result = spawnSync(binaryPath, args, { stdio: "inherit" });
 
-try {
-  execFileSync(binaryPath, process.argv.slice(2), {
-    stdio: "inherit",
-  });
-} catch (error) {
-  if (error.status !== undefined) {
-    process.exit(error.status);
-  }
-  throw error;
+if (result.error) {
+  throw result.error;
 }
+
+process.exit(result.status ?? 1);

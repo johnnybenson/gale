@@ -84,8 +84,7 @@ mod tests {
         RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css,
-        }
+            syntax: Syntax::Css, options: None }
     }
 
     #[test]
@@ -131,8 +130,7 @@ mod tests {
         let ctx = RuleContext {
             file_path: "test.scss",
             source: "//\n// \n",
-            syntax: Syntax::Scss,
-        };
+            syntax: Syntax::Scss, options: None };
         // Empty double-slash comment
         let node = CssNode::Comment(gale_css_parser::Comment {
             is_line: true,
@@ -159,8 +157,7 @@ mod tests {
         let ctx = RuleContext {
             file_path: "test.css",
             source,
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None };
         let node = CssNode::Comment(Comment {
             is_line: false,
             text: "/* */".to_string(),

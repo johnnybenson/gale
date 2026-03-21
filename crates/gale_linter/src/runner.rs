@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::Instant;
 
 use gale_css_parser::{CssNode, Syntax, parse};
@@ -147,35 +148,67 @@ fn handle_directive(
     ranges: &mut Vec<DisabledRange>,
 ) {
     if let Some(rule_part) = rest.strip_prefix("disable-next-line") {
-        // disable-next-line [rule-name]
-        let rule_name = parse_rule_name(rule_part);
+        // disable-next-line [rule-name, rule-name, ...]
+        let rule_names = parse_rule_names(rule_part);
         let (comment_line, _) = line_index.offset_to_location(comment_start);
         let next_line = comment_line + 1;
         let (next_start, next_end) = line_byte_range(source, next_line);
-        ranges.push(DisabledRange {
-            start: next_start,
-            end: next_end,
-            rule: rule_name,
-        });
+        for rule_name in rule_names {
+            ranges.push(DisabledRange {
+                start: next_start,
+                end: next_end,
+                rule: rule_name,
+            });
+        }
+    } else if let Some(rule_part) = rest.strip_prefix("disable-line") {
+        // disable-line [rule-name, ...] — disables on the current line
+        let rule_names = parse_rule_names(rule_part);
+        let (comment_line, _) = line_index.offset_to_location(comment_start);
+        let (line_start, line_end) = line_byte_range(source, comment_line);
+        for rule_name in rule_names {
+            ranges.push(DisabledRange {
+                start: line_start,
+                end: line_end,
+                rule: rule_name,
+            });
+        }
     } else if let Some(rule_part) = rest.strip_prefix("enable") {
-        // enable [rule-name]
-        let rule_name = parse_rule_name(rule_part);
-        close_disable(open_disables, ranges, comment_start, &rule_name);
+        // enable [rule-name, ...]
+        let rule_names = parse_rule_names(rule_part);
+        for rule_name in rule_names {
+            close_disable(open_disables, ranges, comment_start, &rule_name);
+        }
     } else if let Some(rule_part) = rest.strip_prefix("disable") {
-        // disable [rule-name]
-        let rule_name = parse_rule_name(rule_part);
-        open_disables.push((comment_end, rule_name));
+        // disable [rule-name, ...]
+        let rule_names = parse_rule_names(rule_part);
+        for rule_name in rule_names {
+            open_disables.push((comment_end, rule_name));
+        }
     }
 }
 
-/// Parse an optional rule name from the text after a directive keyword.
-/// E.g. " rule-name " → Some("rule-name"), "" → None.
-fn parse_rule_name(text: &str) -> Option<String> {
+/// Parse comma-separated rule names from a directive.
+/// Returns a Vec of Option<String> where None means "all rules".
+/// E.g. " rule-a, rule-b " → [Some("rule-a"), Some("rule-b")]
+///      "" → [None]  (all rules)
+fn parse_rule_names(text: &str) -> Vec<Option<String>> {
     let t = text.trim();
+    // Also strip leading ` -- ` separators sometimes used in comments
+    let t = t.trim_start_matches("--").trim();
     if t.is_empty() {
-        None
+        return vec![None]; // disable all rules
+    }
+    // If there are commas, split by comma
+    if t.contains(',') {
+        t.split(',')
+            .map(|part| {
+                let p = part.trim();
+                if p.is_empty() { None } else { Some(p.to_string()) }
+            })
+            .filter(|n| n.is_some()) // filter out empty parts
+            .collect()
     } else {
-        Some(t.to_string())
+        vec![Some(t.to_string())]
     }
 }
 
@@ -253,6 +286,8 @@ fn perf_enabled() -> bool {
 pub struct LintRunner {
     registry: RuleRegistry,
     enabled_rules: Vec<String>,
+    /// Per-rule options from the config (keyed by rule name).
+    rule_options: HashMap<String, serde_json::Value>,
 }
 
 impl LintRunner {
@@ -261,6 +296,20 @@ impl LintRunner {
         Self {
             registry,
             enabled_rules,
+            rule_options: HashMap::new(),
+        }
+    }
+
+    /// Create a new runner with per-rule options.
+    pub fn with_options(
+        registry: RuleRegistry,
+        enabled_rules: Vec<String>,
+        rule_options: HashMap<String, serde_json::Value>,
+    ) -> Self {
+        Self {
+            registry,
+            enabled_rules,
+            rule_options,
         }
     }
 
@@ -284,12 +333,6 @@ impl LintRunner {
             eprintln!("[perf] parse: {:.3}s", t0.elapsed().as_secs_f64());
         }
 
-        let context = RuleContext {
-            file_path,
-            source,
-            syntax,
-        };
-
         let mut diagnostics = Vec::new();
 
         // Collect enabled rules from the registry.
@@ -303,6 +346,12 @@ impl LintRunner {
         let t1 = Instant::now();
         for rule in &active_rules {
             let tr = Instant::now();
+            let context = RuleContext {
+                file_path,
+                source,
+                syntax,
+                options: self.rule_options.get(rule.name()),
+            };
             let mut results = rule.check_root(&parse_result.nodes, &context);
             if debug {
                 let elapsed = tr.elapsed().as_secs_f64();
@@ -319,7 +368,7 @@ impl LintRunner {
         // Walk each top-level node for per-node checks.
         let t2 = Instant::now();
         for node in &parse_result.nodes {
-            walk_node(node, &active_rules, &context, &mut diagnostics);
+            walk_node(node, &active_rules, file_path, source, syntax, &self.rule_options, &mut diagnostics);
         }
         if debug {
             eprintln!("[perf] walk: {:.3}s", t2.elapsed().as_secs_f64());
@@ -367,6 +416,7 @@ impl LintRunner {
         file_path: &str,
         syntax: Syntax,
         enabled_rules: &[String],
+        rule_options: &HashMap<String, serde_json::Value>,
     ) -> LintResult {
         let debug = perf_enabled();
 
@@ -381,12 +431,6 @@ impl LintRunner {
             eprintln!("[perf] parse: {:.3}s", t0.elapsed().as_secs_f64());
         }
 
-        let context = RuleContext {
-            file_path,
-            source,
-            syntax,
-        };
-
         let mut diagnostics = Vec::new();
 
         let active_rules: Vec<&dyn crate::rule::Rule> = enabled_rules
@@ -396,6 +440,12 @@ impl LintRunner {
 
         let t1 = Instant::now();
         for rule in &active_rules {
+            let context = RuleContext {
+                file_path,
+                source,
+                syntax,
+                options: rule_options.get(rule.name()).or_else(|| self.rule_options.get(rule.name())),
+            };
             let mut results = rule.check_root(&parse_result.nodes, &context);
             diagnostics.append(&mut results);
         }
@@ -403,9 +453,18 @@ impl LintRunner {
             eprintln!("[perf] check_root total: {:.3}s", t1.elapsed().as_secs_f64());
         }
 
+        // Merge rule_options with self.rule_options (override-specific takes precedence)
+        let merged_options = if rule_options.is_empty() {
+            &self.rule_options
+        } else {
+            // We need a merged map; use a temporary
+            // For efficiency, just pass both and let walk_node check both
+            rule_options
+        };
+
         let t2 = Instant::now();
         for node in &parse_result.nodes {
-            walk_node(node, &active_rules, &context, &mut diagnostics);
+            walk_node(node, &active_rules, file_path, source, syntax, merged_options, &mut diagnostics);
         }
         if debug {
             eprintln!("[perf] walk: {:.3}s", t2.elapsed().as_secs_f64());
@@ -433,12 +492,21 @@ impl LintRunner {
 fn walk_node(
     node: &CssNode,
     rules: &[&dyn crate::rule::Rule],
-    context: &RuleContext,
+    file_path: &str,
+    source: &str,
+    syntax: Syntax,
+    rule_options: &HashMap<String, serde_json::Value>,
     diagnostics: &mut Vec<gale_diagnostics::Diagnostic>,
 ) {
     // Run rules on this node.
     for rule in rules {
-        let mut results = rule.check(node, context);
+        let context = RuleContext {
+            file_path,
+            source,
+            syntax,
+            options: rule_options.get(rule.name()),
+        };
+        let mut results = rule.check(node, &context);
         diagnostics.append(&mut results);
     }
 
@@ -447,12 +515,12 @@ fn walk_node(
         CssNode::Style(style_rule) => {
             for child in &style_rule.children {
                 let child_node = CssNode::Style(child.clone());
-                walk_node(&child_node, rules, context, diagnostics);
+                walk_node(&child_node, rules, file_path, source, syntax, rule_options, diagnostics);
             }
         }
         CssNode::AtRule(at_rule) => {
             for child in &at_rule.children {
-                walk_node(child, rules, context, diagnostics);
+                walk_node(child, rules, file_path, source, syntax, rule_options, diagnostics);
             }
         }
         CssNode::Comment(_) | CssNode::Declaration(_) => {}

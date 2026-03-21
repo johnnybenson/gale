@@ -88,7 +88,7 @@ mod tests {
     use gale_css_parser::{AtRule as CssAtRule, Span as ParserSpan, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css }
+        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
     }
 
     fn at_rule(name: &str) -> CssNode {
@@ -116,7 +116,7 @@ mod tests {
     #[test]
     fn emits_fix_for_vendor_prefixed_at_rule() {
         let source = "@-webkit-keyframes fade { }";
-        let ctx = RuleContext { file_path: "t.css", source, syntax: Syntax::Css };
+        let ctx = RuleContext { file_path: "t.css", source, syntax: Syntax::Css, options: None };
         let node = CssNode::AtRule(CssAtRule {
             name: "-webkit-keyframes".to_string(),
             params: "fade".to_string(),

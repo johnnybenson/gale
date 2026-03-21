@@ -29,6 +29,13 @@ impl Rule for SelectorMaxCompoundSelectors {
             return vec![];
         };
 
+        // Read configured max from options (primary option is a number).
+        let max = ctx
+            .options
+            .and_then(|v| v.as_u64())
+            .map(|n| n as usize)
+            .unwrap_or(MAX_COMPOUND);
+
         let selector = if matches!(ctx.syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less) {
             strip_scss_line_comments(&rule.selector)
         } else {
@@ -40,12 +47,12 @@ impl Rule for SelectorMaxCompoundSelectors {
         for sel in selector.split(',') {
             let sel = sel.trim();
             let count = count_compound_selectors(sel);
-            if count > MAX_COMPOUND {
+            if count > max {
                 diags.push(
                     Diagnostic::new(
                         self.name(),
                         format!(
-                            "Expected selector \"{sel}\" to have no more than {MAX_COMPOUND} compound selector(s), found {count}"
+                            "Expected selector \"{sel}\" to have no more than {max} compound selector(s), found {count}"
                         ),
                     )
                     .severity(self.default_severity())
@@ -135,8 +142,7 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css,
-        }
+            syntax: Syntax::Css, options: None }
     }
 
     fn style_with_selector(sel: &str) -> CssNode {

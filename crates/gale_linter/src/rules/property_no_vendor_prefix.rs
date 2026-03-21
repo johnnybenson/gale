@@ -25,9 +25,27 @@ impl Rule for PropertyNoVendorPrefix {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+
+        // Read ignoreProperties from options (secondary option object).
+        let ignore_props: Vec<String> = ctx
+            .options
+            .and_then(|v| v.get("ignoreProperties"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| item.as_str().map(|s| s.to_ascii_lowercase()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let mut diags = Vec::new();
         for decl in &rule.declarations {
             if is_vendor_prefixed(&decl.property) {
+                // Skip properties in the ignore list
+                let prop_lower = decl.property.to_ascii_lowercase();
+                if ignore_props.iter().any(|p| p == &prop_lower) {
+                    continue;
+                }
                 let unprefixed = strip_vendor_prefix(&decl.property);
 
                 // Try to find the property in the source to build a fix
@@ -83,16 +101,78 @@ fn strip_vendor_prefix(property: &str) -> String {
     property.to_string()
 }
 
+/// Known CSS properties that have standard unprefixed equivalents.
+/// Only these should be flagged when vendor-prefixed. Properties like
+/// `-webkit-tap-highlight-color` or `-webkit-overflow-scrolling` that
+/// have NO standard equivalent are not autoprefixable and should not
+/// be flagged (matching Stylelint's behavior).
+const KNOWN_PREFIXABLE_PROPERTIES: &[&str] = &[
+    "align-content", "align-items", "align-self",
+    "animation", "animation-delay", "animation-direction", "animation-duration",
+    "animation-fill-mode", "animation-iteration-count", "animation-name",
+    "animation-play-state", "animation-timing-function",
+    "appearance", "backdrop-filter", "backface-visibility",
+    "background-clip", "background-origin", "background-size",
+    "border-image", "border-radius",
+    "border-top-left-radius", "border-top-right-radius",
+    "border-bottom-left-radius", "border-bottom-right-radius",
+    "box-decoration-break", "box-shadow", "box-sizing",
+    "clip-path", "column-count", "column-fill", "column-gap",
+    "column-rule", "column-rule-color", "column-rule-style", "column-rule-width",
+    "column-span", "column-width", "columns",
+    "filter", "flex", "flex-basis", "flex-direction", "flex-flow",
+    "flex-grow", "flex-shrink", "flex-wrap",
+    "font-feature-settings", "font-kerning", "font-variant-ligatures",
+    "grid", "grid-area", "grid-auto-columns", "grid-auto-flow",
+    "grid-auto-rows", "grid-column", "grid-column-end", "grid-column-gap",
+    "grid-column-start", "grid-gap", "grid-row", "grid-row-end",
+    "grid-row-gap", "grid-row-start", "grid-template",
+    "grid-template-areas", "grid-template-columns", "grid-template-rows",
+    "hyphens", "image-rendering",
+    "justify-content", "mask", "mask-image", "object-fit", "object-position",
+    "opacity", "order", "overscroll-behavior",
+    "perspective", "perspective-origin",
+    "scroll-snap-type",
+    "shape-image-threshold", "shape-margin", "shape-outside",
+    "tab-size", "text-decoration", "text-decoration-color",
+    "text-decoration-line", "text-decoration-skip", "text-decoration-style",
+    "text-emphasis", "text-emphasis-color", "text-emphasis-position",
+    "text-emphasis-style", "text-orientation", "text-overflow",
+    "touch-action",
+    "transform", "transform-origin", "transform-style",
+    "transition", "transition-delay", "transition-duration",
+    "transition-property", "transition-timing-function",
+    "user-select", "will-change", "writing-mode",
+];
+
 fn is_vendor_prefixed(property: &str) -> bool {
     let p = property.to_ascii_lowercase();
     // Custom properties (--) are not vendor prefixes
     if p.starts_with("--") {
         return false;
     }
-    p.starts_with("-webkit-")
-        || p.starts_with("-moz-")
-        || p.starts_with("-ms-")
-        || p.starts_with("-o-")
+    if !p.starts_with("-webkit-")
+        && !p.starts_with("-moz-")
+        && !p.starts_with("-ms-")
+        && !p.starts_with("-o-")
+    {
+        return false;
+    }
+
+    // Only flag if the unprefixed property is a known standard property.
+    let unprefixed = strip_vendor_prefix_lower(&p);
+    KNOWN_PREFIXABLE_PROPERTIES
+        .binary_search(&unprefixed.as_str())
+        .is_ok()
+}
+
+fn strip_vendor_prefix_lower(property: &str) -> String {
+    for prefix in &["-webkit-", "-moz-", "-ms-", "-o-"] {
+        if property.starts_with(prefix) {
+            return property[prefix.len()..].to_string();
+        }
+    }
+    property.to_string()
 }
 
 #[cfg(test)]
@@ -101,7 +181,7 @@ mod tests {
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css }
+        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
     }
 
     fn style_decl(prop: &str) -> CssNode {
@@ -138,7 +218,7 @@ mod tests {
     #[test]
     fn emits_fix_for_vendor_prefixed_property() {
         let source = "a { -webkit-transform: none; }";
-        let ctx = RuleContext { file_path: "t.css", source, syntax: Syntax::Css };
+        let ctx = RuleContext { file_path: "t.css", source, syntax: Syntax::Css, options: None };
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![Declaration {

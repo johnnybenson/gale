@@ -193,17 +193,25 @@ def run_stylelint(clone_dir: Path, files: list[str]) -> list[dict] | None:
         cmd = [str(stylelint_bin), "--formatter", "json", "--no-color"] + batch
         result = run_cmd(cmd, cwd=str(clone_dir), timeout=120)
 
-        if result.returncode == 2:
-            print(f"  [error] Stylelint config error: {result.stderr.strip()[:200]}")
+        # Stylelint 16+ outputs JSON to stderr instead of stdout.
+        # Try stdout first, then fall back to stderr.
+        output = result.stdout.strip()
+        if not output:
+            output = result.stderr.strip()
+
+        if result.returncode == 2 and not output:
+            print(f"  [error] Stylelint config error (exit 2, no output)")
             return None
 
-        stdout = result.stdout.strip()
-        if not stdout:
+        if not output:
             continue
 
         try:
-            all_results.extend(json.loads(stdout))
+            all_results.extend(json.loads(output))
         except json.JSONDecodeError as e:
+            if result.returncode == 2:
+                print(f"  [error] Stylelint config error: {output[:200]}")
+                return None
             print(f"  [error] Stylelint JSON parse error: {e}")
             return None
 

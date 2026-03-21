@@ -47,28 +47,42 @@ fn extract_calc_body(s: &str, start: usize) -> Option<&str> {
 /// Check if a calc body contains unspaced `+` or `-` operators.
 /// Rules: `+` and `-` must be preceded and followed by whitespace.
 /// Exception: `-` at the very start (unary minus) or after `(` is fine.
+/// Only checks at the top-level nesting depth (depth 0); operators inside
+/// nested function calls like `var(--prop)` or `min(…)` are ignored.
 fn has_unspaced_operator(body: &str) -> bool {
     let bytes = body.as_bytes();
     let len = bytes.len();
+    let mut depth = 0i32; // parenthesis nesting depth
 
     for i in 0..len {
         let ch = bytes[i];
+
+        if ch == b'(' {
+            depth += 1;
+            continue;
+        }
+        if ch == b')' {
+            depth -= 1;
+            continue;
+        }
+
+        // Only check operators at the top level of the calc body.
+        if depth > 0 {
+            continue;
+        }
+
         if ch == b'+' || ch == b'-' {
-            // Skip if this is a unary operator:
-            // - at start of body
-            // - after '('
-            // - part of scientific notation (e.g. `1e-2`)
-            if ch == b'-' || ch == b'+' {
-                // Check if preceded by 'e' or 'E' (scientific notation)
-                if i > 0 && (bytes[i - 1] == b'e' || bytes[i - 1] == b'E') {
-                    continue;
-                }
+            // Check if preceded by 'e' or 'E' (scientific notation)
+            if i > 0 && (bytes[i - 1] == b'e' || bytes[i - 1] == b'E') {
+                continue;
             }
 
-            // Check for whitespace before
-            let has_space_before = i > 0 && bytes[i - 1] == b' ';
+            // Check for whitespace before (space, tab, newline)
+            let has_space_before =
+                i > 0 && bytes[i - 1].is_ascii_whitespace();
             // Check for whitespace after
-            let has_space_after = i + 1 < len && bytes[i + 1] == b' ';
+            let has_space_after =
+                i + 1 < len && bytes[i + 1].is_ascii_whitespace();
 
             // Skip unary cases: after `(` or at start
             if i == 0 {
@@ -76,6 +90,27 @@ fn has_unspaced_operator(body: &str) -> bool {
             }
             if bytes[i - 1] == b'(' {
                 continue;
+            }
+
+            // Skip unary `-` or `+` after another operator (`*`, `/`, `+`, `-`).
+            // This handles patterns like `expr * -1` where `-` is unary.
+            {
+                let mut j = i;
+                while j > 0 && bytes[j - 1].is_ascii_whitespace() {
+                    j -= 1;
+                }
+                if j > 0
+                    && (bytes[j - 1] == b'*'
+                        || bytes[j - 1] == b'/'
+                        || bytes[j - 1] == b'+'
+                        || bytes[j - 1] == b'-'
+                        || bytes[j - 1] == b',')
+                {
+                    continue;
+                }
+                // Also after `)` followed by an operator  — `var(…) * -1`
+                // The `)` itself is not an operator, but the preceding
+                // operator (handled above via whitespace scan) covers this.
             }
 
             // For `+`, it should always be a binary operator in calc
@@ -119,9 +154,9 @@ impl Rule for FunctionCalcNoUnspacedOperator {
                 let body_start = m.end();
                 if let Some(body) = extract_calc_body(value, body_start)
                     // In SCSS/Less/Sass, skip calc() bodies that contain
-                    // interpolation (`#{...}`). The interpolated expressions
-                    // will be compiled to valid CSS by the preprocessor.
-                    && !(is_scss && body.contains("#{"))
+                    // interpolation (`#{...}`) or SCSS variables (`$var`).
+                    // These will be compiled to valid CSS by the preprocessor.
+                    && !(is_scss && (body.contains("#{") || body.contains('$')))
                     && has_unspaced_operator(body)
                 {
                     diagnostics.push(
@@ -150,8 +185,7 @@ mod tests {
         RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css,
-        }
+            syntax: Syntax::Css, options: None }
     }
 
     #[test]
@@ -226,8 +260,7 @@ mod tests {
         let ctx = RuleContext {
             file_path: "test.scss",
             source: "",
-            syntax: Syntax::Scss,
-        };
+            syntax: Syntax::Scss, options: None };
         let diags = rule.check(&node, &ctx);
         assert!(diags.is_empty());
     }

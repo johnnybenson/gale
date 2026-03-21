@@ -152,7 +152,7 @@ mod tests {
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css }
+        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
     }
 
     fn style_decl(prop: &str, val: &str) -> CssNode {
@@ -223,8 +223,7 @@ mod tests {
         let context = RuleContext {
             file_path: "t.css",
             source,
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None };
         let diags = rule.check(&node, &context);
         assert_eq!(diags.len(), 1);
         let fix = diags[0].fix.as_ref().expect("should have a fix");
@@ -255,8 +254,7 @@ mod tests {
         let context = RuleContext {
             file_path: "t.css",
             source,
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None };
         let diags = ShorthandPropertyNoRedundantValues.check(&node, &context);
         assert_eq!(diags.len(), 1);
         let (fixed, count) = gale_diagnostics::apply_fixes(source, &diags);

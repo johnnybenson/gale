@@ -29,6 +29,13 @@ impl Rule for DeclarationBlockSingleLineMaxDeclarations {
             return vec![];
         };
 
+        // Read configured max from options (primary option is a number).
+        let max = ctx
+            .options
+            .and_then(|v| v.as_u64())
+            .map(|n| n as usize)
+            .unwrap_or(MAX_DECLARATIONS);
+
         // Determine if this rule block is single-line by checking the source span.
         let is_single_line = is_single_line_block(rule.span.offset, rule.span.length, ctx.source);
 
@@ -37,11 +44,11 @@ impl Rule for DeclarationBlockSingleLineMaxDeclarations {
         }
 
         let count = rule.declarations.len();
-        if count > MAX_DECLARATIONS {
+        if count > max {
             vec![Diagnostic::new(
                 self.name(),
                 format!(
-                    "Expected no more than {MAX_DECLARATIONS} declaration(s) in a single-line block, found {count}"
+                    "Expected no more than {max} declaration(s) in a single-line block, found {count}"
                 ),
             )
             .severity(self.default_severity())
@@ -72,8 +79,7 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source,
-            syntax: Syntax::Css,
-        }
+            syntax: Syntax::Css, options: None }
     }
 
     fn style_with_decls(decls: Vec<(&str, &str)>, span_offset: usize, span_len: usize) -> CssNode {

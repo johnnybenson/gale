@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 
 # Detect current platform
 OS="$(uname -s)"
@@ -36,7 +36,7 @@ case "$ARCH" in
     ;;
 esac
 
-PLATFORM_DIR="cli-${PLATFORM_OS}-${PLATFORM_ARCH}"
+PLATFORM_DIR="platforms/${PLATFORM_OS}-${PLATFORM_ARCH}"
 BINARY_NAME="gale"
 if [ "$PLATFORM_OS" = "win32" ]; then
   BINARY_NAME="gale.exe"
@@ -57,17 +57,17 @@ echo "  cargo install cross"
 echo ""
 echo "  # Build for Linux x64"
 echo "  cross build --release --target x86_64-unknown-linux-gnu"
-echo "  cp target/x86_64-unknown-linux-gnu/release/gale npm/cli-linux-x64/gale"
+echo "  cp target/x86_64-unknown-linux-gnu/release/gale npm/platforms/linux-x64/gale"
 echo ""
 echo "  # Build for Linux ARM64"
 echo "  cross build --release --target aarch64-unknown-linux-gnu"
-echo "  cp target/aarch64-unknown-linux-gnu/release/gale npm/cli-linux-arm64/gale"
+echo "  cp target/aarch64-unknown-linux-gnu/release/gale npm/platforms/linux-arm64/gale"
 echo ""
 echo "  # Build for macOS x64 (from macOS ARM64)"
 echo "  rustup target add x86_64-apple-darwin"
 echo "  cargo build --release --target x86_64-apple-darwin"
-echo "  cp target/x86_64-apple-darwin/release/gale npm/cli-darwin-x64/gale"
+echo "  cp target/x86_64-apple-darwin/release/gale npm/platforms/darwin-x64/gale"
 echo ""
 echo "  # Build for Windows x64"
 echo "  cross build --release --target x86_64-pc-windows-msvc"
-echo "  cp target/x86_64-pc-windows-msvc/release/gale.exe npm/cli-win32-x64/gale.exe"
+echo "  cp target/x86_64-pc-windows-msvc/release/gale.exe npm/platforms/win32-x64/gale.exe"

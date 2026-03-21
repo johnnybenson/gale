@@ -107,8 +107,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "a { color: red; } // bad comment",
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None,        };
         let diags = rule.check_root(&[], &context);
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].message, "Unexpected double-slash CSS comment");
@@ -120,8 +119,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.scss",
             source: "// this is fine in SCSS",
-            syntax: Syntax::Scss,
-        };
+            syntax: Syntax::Scss, options: None };
         let diags = rule.check_root(&[], &context);
         assert!(diags.is_empty());
     }
@@ -132,8 +130,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "/* this is fine */ a { color: red; }",
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None,        };
         let diags = rule.check_root(&[], &context);
         assert!(diags.is_empty());
     }
@@ -144,8 +141,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "a { content: \"//not-a-comment\"; }",
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None,        };
         let diags = rule.check_root(&[], &context);
         assert!(diags.is_empty());
     }
@@ -156,8 +152,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "/* // inside block */ a { color: red; }",
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None,        };
         let diags = rule.check_root(&[], &context);
         assert!(diags.is_empty());
     }

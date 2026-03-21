@@ -24,25 +24,57 @@ impl Rule for SelectorMaxClass {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
-        let count = count_class_selectors(&rule.selector);
-        if count > MAX_CLASS {
-            vec![Diagnostic::new(
-                self.name(),
-                format!(
-                    "Expected selector \"{}\" to have no more than {MAX_CLASS} class selector(s), found {count}",
-                    rule.selector
-                ),
-            )
-            .severity(self.default_severity())
-            .span(Span::new(rule.span.offset, rule.span.length))]
+
+        // Read configured max from options (primary option is a number).
+        let max = ctx
+            .options
+            .and_then(|v| v.as_u64())
+            .map(|n| n as usize)
+            .unwrap_or(MAX_CLASS);
+
+        // Strip SCSS line comments from the selector text
+        let selector = if matches!(ctx.syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less) {
+            strip_scss_line_comments(&rule.selector)
         } else {
-            vec![]
+            rule.selector.clone()
+        };
+
+        let mut diags = Vec::new();
+        // Check each comma-separated selector individually
+        for sel in selector.split(',') {
+            let sel = sel.trim();
+            if sel.is_empty() {
+                continue;
+            }
+            let count = count_class_selectors(sel);
+            if count > max {
+                diags.push(
+                    Diagnostic::new(
+                        self.name(),
+                        format!(
+                            "Expected selector \"{sel}\" to have no more than {max} class selector(s), found {count}",
+                        ),
+                    )
+                    .severity(self.default_severity())
+                    .span(Span::new(rule.span.offset, rule.span.length)),
+                );
+            }
         }
+        diags
     }
+}
+
+/// Strip `//` line comments from a selector string (SCSS/Less).
+fn strip_scss_line_comments(selector: &str) -> String {
+    selector
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("//"))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Count `.` characters that are class selectors (followed by a CSS ident start character).
@@ -69,8 +101,7 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css,
-        }
+            syntax: Syntax::Css, options: None }
     }
 
     fn style_with_selector(sel: &str) -> CssNode {

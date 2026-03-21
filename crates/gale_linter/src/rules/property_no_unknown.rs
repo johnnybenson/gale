@@ -23,6 +23,19 @@ impl Rule for PropertyNoUnknown {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+
+        // Check for `ignoreProperties` option.
+        let ignore_properties: Vec<String> = ctx
+            .options
+            .and_then(|v| v.get("ignoreProperties"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| item.as_str().map(|s| s.to_ascii_lowercase()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let mut diags = Vec::new();
         for decl in &rule.declarations {
             let prop = &decl.property;
@@ -38,6 +51,10 @@ impl Rule for PropertyNoUnknown {
             }
             // Skip Less variable declarations (@var)
             if ctx.syntax == gale_css_parser::Syntax::Less && prop.starts_with('@') {
+                continue;
+            }
+            // Skip explicitly ignored properties
+            if ignore_properties.contains(&prop.to_ascii_lowercase()) {
                 continue;
             }
             if !is_known_property(prop) {
@@ -59,7 +76,7 @@ mod tests {
     use gale_linter_test_helper::*;
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css }
+        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
     }
 
     #[test]

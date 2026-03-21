@@ -127,8 +127,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None };
         let diags = rule.check_root(&nodes, &context);
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("@import"));
@@ -154,8 +153,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None };
         let diags = rule.check_root(&nodes, &context);
         assert!(diags.is_empty());
     }
@@ -187,8 +185,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.scss",
             source: "",
-            syntax: Syntax::Scss,
-        };
+            syntax: Syntax::Scss, options: None };
         let diags = rule.check_root(&nodes, &context);
         assert!(diags.is_empty());
     }
@@ -214,8 +211,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.scss",
             source: "",
-            syntax: Syntax::Scss,
-        };
+            syntax: Syntax::Scss, options: None };
         let diags = rule.check_root(&nodes, &context);
         assert!(diags.is_empty());
     }
@@ -240,8 +236,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.scss",
             source: "",
-            syntax: Syntax::Scss,
-        };
+            syntax: Syntax::Scss, options: None };
         let diags = rule.check_root(&nodes, &context);
         assert!(diags.is_empty(), "SCSS files should skip this rule entirely");
     }
@@ -272,8 +267,7 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css,
-        };
+            syntax: Syntax::Css, options: None };
         let diags = rule.check_root(&nodes, &context);
         assert!(diags.is_empty());
     }
