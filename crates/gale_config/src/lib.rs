@@ -218,6 +218,10 @@ pub enum RuleConfigValue {
     Severity(String),
     /// Array form: `["error", { ...options }]`.
     Array(Vec<serde_json::Value>),
+    /// Object form: a bare object used as the primary option (e.g.
+    /// `{ "border": "none" }` for `declaration-property-value-disallowed-list`).
+    /// Treated as error severity with the object as options.
+    Object(serde_json::Map<String, serde_json::Value>),
 }
 
 impl RuleConfigValue {
@@ -256,6 +260,13 @@ impl RuleConfigValue {
                     .map(parse_severity);
                 let options = items.get(1).cloned();
                 RuleConfig { severity, options }
+            }
+            RuleConfigValue::Object(map) => {
+                // A bare object is treated as error severity with the object as options.
+                RuleConfig {
+                    severity: Some(Severity::Error),
+                    options: Some(serde_json::Value::Object(map.clone())),
+                }
             }
         }
     }
@@ -1224,8 +1235,9 @@ fn collect_rules_from_extends(
     extends: &[String],
     base_dir: &Path,
     visited: &mut HashSet<String>,
-) -> HashMap<String, RuleConfig> {
+) -> (HashMap<String, RuleConfig>, Vec<ConfigOverride>) {
     let mut rules = HashMap::new();
+    let mut overrides: Vec<ConfigOverride> = Vec::new();
 
     for preset_name in extends {
         if visited.contains(preset_name) {
@@ -1248,24 +1260,26 @@ fn collect_rules_from_extends(
             };
 
             if let Some(config) = config {
+                let sub_base = if preset_name.starts_with("./")
+                    || preset_name.starts_with("../")
+                {
+                    base_dir
+                        .join(preset_name)
+                        .parent()
+                        .unwrap_or(base_dir)
+                        .to_path_buf()
+                } else {
+                    find_node_modules(base_dir)
+                        .map(|nm| nm.join(preset_name))
+                        .unwrap_or_else(|| base_dir.to_path_buf())
+                };
+
                 // Recursively resolve this config's extends first
                 if let Some(ref sub_extends) = config.extends {
-                    let sub_base = if preset_name.starts_with("./")
-                        || preset_name.starts_with("../")
-                    {
-                        base_dir
-                            .join(preset_name)
-                            .parent()
-                            .unwrap_or(base_dir)
-                            .to_path_buf()
-                    } else {
-                        find_node_modules(base_dir)
-                            .map(|nm| nm.join(preset_name))
-                            .unwrap_or_else(|| base_dir.to_path_buf())
-                    };
-                    let sub_rules =
+                    let (sub_rules, sub_overrides) =
                         collect_rules_from_extends(sub_extends, &sub_base, visited);
                     rules.extend(sub_rules);
+                    overrides.extend(sub_overrides);
                 }
                 // Then apply this config's own rules (later configs win)
                 for (name, value) in config.rules.unwrap_or_default() {
@@ -1276,13 +1290,21 @@ fn collect_rules_from_extends(
                         rules.insert(name, resolved);
                     }
                 }
+                // Collect this config's overrides (extended configs' overrides
+                // come before the user's own overrides).
+                if let Some(config_overrides) = config.overrides {
+                    // Overrides within the extended config may themselves have
+                    // extends that need resolving, but that resolution happens
+                    // later in resolve_raw when we process these overrides.
+                    overrides.extend(config_overrides);
+                }
             } else {
                 eprintln!("warning: could not resolve config '{preset_name}', skipping");
             }
         }
     }
 
-    rules
+    (rules, overrides)
 }
 
 /// Convert a raw [`ConfigFile`] into the resolved [`GaleConfig`].
@@ -1291,10 +1313,15 @@ fn collect_rules_from_extends(
 /// relative paths.
 fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
     // 1. Start with rules from extended presets / npm configs (in order).
+    //    Also collect any overrides defined in extended configs.
     let mut rules: HashMap<String, RuleConfig> = HashMap::new();
+    let mut extended_overrides: Vec<ConfigOverride> = Vec::new();
     if let Some(ref extends) = raw.extends {
         let mut visited = HashSet::new();
-        rules = collect_rules_from_extends(extends, base_dir, &mut visited);
+        let (ext_rules, ext_overrides) =
+            collect_rules_from_extends(extends, base_dir, &mut visited);
+        rules = ext_rules;
+        extended_overrides = ext_overrides;
     }
 
     // 2. Overlay user rules on top — user always wins.
@@ -1322,40 +1349,49 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
         .unwrap_or_default();
 
     // 3. Resolve overrides.
-    let overrides = if let Some(raw_overrides) = raw.overrides {
-        raw_overrides
-            .into_iter()
-            .filter_map(|ov| {
-                let file_patterns = ov.files.unwrap_or_default();
-                if file_patterns.is_empty() {
-                    return None;
-                }
+    //    Extended configs' overrides come first, then the user's own overrides.
+    let resolve_override = |ov: ConfigOverride| -> Option<ResolvedOverride> {
+        let file_patterns = ov.files.unwrap_or_default();
+        if file_patterns.is_empty() {
+            return None;
+        }
 
-                // Start with rules from the override's extends.
-                let mut ov_rules: HashMap<String, RuleConfig> = HashMap::new();
-                if let Some(ref extends) = ov.extends {
-                    let mut visited = HashSet::new();
-                    ov_rules = collect_rules_from_extends(extends, base_dir, &mut visited);
-                }
+        // Start with rules from the override's extends.
+        let mut ov_rules: HashMap<String, RuleConfig> = HashMap::new();
+        if let Some(ref extends) = ov.extends {
+            let mut visited = HashSet::new();
+            let (ext_rules, _ext_overrides) =
+                collect_rules_from_extends(extends, base_dir, &mut visited);
+            ov_rules = ext_rules;
+            // Note: nested overrides within an override's extends are not
+            // propagated (matching Stylelint behavior).
+        }
 
-                // Overlay the override's own rules on top.
-                for (name, value) in ov.rules.unwrap_or_default() {
-                    let resolved = value.resolve();
-                    if resolved.severity == Some(Severity::Off) {
-                        // For overrides, keep Off entries so they can remove
-                        // base rules when applied per-file.
-                        ov_rules.insert(name, resolved);
-                    } else {
-                        ov_rules.insert(name, resolved);
-                    }
-                }
+        // Overlay the override's own rules on top.
+        for (name, value) in ov.rules.unwrap_or_default() {
+            let resolved = value.resolve();
+            if resolved.severity == Some(Severity::Off) {
+                // For overrides, keep Off entries so they can remove
+                // base rules when applied per-file.
+                ov_rules.insert(name, resolved);
+            } else {
+                ov_rules.insert(name, resolved);
+            }
+        }
 
-                Some(ResolvedOverride::new(file_patterns, ov_rules))
-            })
-            .collect()
-    } else {
-        Vec::new()
+        Some(ResolvedOverride::new(file_patterns, ov_rules))
     };
+
+    // Combine: extended overrides first, then user overrides.
+    let mut all_raw_overrides = extended_overrides;
+    if let Some(user_overrides) = raw.overrides {
+        all_raw_overrides.extend(user_overrides);
+    }
+
+    let overrides: Vec<ResolvedOverride> = all_raw_overrides
+        .into_iter()
+        .filter_map(resolve_override)
+        .collect();
 
     GaleConfig {
         rules,
@@ -1372,7 +1408,10 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
 /// Find a config file starting from `start_dir`, load it, or return defaults.
 pub fn resolve_config(start_dir: &Path) -> GaleConfig {
     match find_config(start_dir) {
-        Some(path) => load_config(&path).unwrap_or_default(),
+        Some(path) => load_config(&path).unwrap_or_else(|err| {
+            eprintln!("Warning: failed to load config {}: {err}", path.display());
+            GaleConfig::default()
+        }),
         None => GaleConfig::default(),
     }
 }
