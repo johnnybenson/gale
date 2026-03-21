@@ -1,6 +1,9 @@
+mod cache;
+
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process;
+use std::sync::Mutex;
 
 use anyhow::{Result, bail};
 use clap::Parser;
@@ -14,6 +17,8 @@ use gale_diagnostics::{LintResult, Severity, apply_fixes};
 use gale_formatter::create_formatter;
 use gale_linter::{LintRunner, RuleRegistry};
 
+use crate::cache::{LintCache, compute_config_hash, compute_hash, resolve_cache_path};
+
 // ---------------------------------------------------------------------------
 // CLI definition
 // ---------------------------------------------------------------------------
@@ -22,8 +27,12 @@ use gale_linter::{LintRunner, RuleRegistry};
 #[command(name = "gale", about = "An extremely fast CSS linter, written in Rust")]
 pub struct Cli {
     /// Files or glob patterns to lint
-    #[arg(required_unless_present_any = ["stdin", "init"])]
+    #[arg(required_unless_present_any = ["stdin", "init", "lsp"])]
     files: Vec<String>,
+
+    /// Start the LSP server (for editor integration)
+    #[arg(long)]
+    lsp: bool,
 
     /// Generate a starter gale.json config file in the current directory
     #[arg(long)]
@@ -64,6 +73,14 @@ pub struct Cli {
     /// Disable all ignore file processing (gitignore, .galeignore, custom)
     #[arg(long)]
     no_ignore: bool,
+
+    /// Enable file-based caching to skip unchanged files
+    #[arg(long)]
+    cache: bool,
+
+    /// Override the cache file location (default: .gale_cache in the current directory)
+    #[arg(long, value_name = "PATH")]
+    cache_location: Option<PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
@@ -210,6 +227,13 @@ pub fn run() -> Result<()> {
         )
         .init();
 
+    // Handle --lsp: start the LSP server and exit early.
+    if cli.lsp {
+        let rt = tokio::runtime::Runtime::new()?;
+        rt.block_on(gale_lsp::run_server());
+        return Ok(());
+    }
+
     // Handle --init: generate a starter config file and exit early.
     if cli.init {
         return generate_init_config();
@@ -246,6 +270,16 @@ pub fn run() -> Result<()> {
             .collect()
     };
 
+    // Set up caching if --cache is enabled.
+    let cache_path = resolve_cache_path(cli.cache_location.as_deref());
+    let config_hash = compute_config_hash(&enabled_rules);
+    let mut lint_cache = if cli.cache {
+        debug!("Loading cache from {}", cache_path.display());
+        LintCache::load(&cache_path)
+    } else {
+        LintCache::default()
+    };
+
     let runner = LintRunner::new(registry, enabled_rules);
 
     // Lint: either from stdin or from discovered files.
@@ -274,16 +308,54 @@ pub fn run() -> Result<()> {
             return Ok(());
         }
 
-        // Lint each file in parallel.
-        files
-            .par_iter()
-            .filter_map(|file| {
-                let source = std::fs::read_to_string(file).ok()?;
-                let file_path = file.display().to_string();
-                let syntax = detect_syntax(&file_path);
-                Some(runner.lint_source(&source, &file_path, syntax))
-            })
-            .collect()
+        if cli.cache {
+            // With caching: read files, check cache, skip clean ones.
+            let cache_mutex = Mutex::new(&mut lint_cache);
+            let results: Vec<LintResult> = files
+                .par_iter()
+                .filter_map(|file| {
+                    let source = std::fs::read_to_string(file).ok()?;
+                    let file_path = file.display().to_string();
+                    let content_hash = compute_hash(&source, config_hash);
+
+                    // Check cache: skip only files that were clean (0 diagnostics).
+                    {
+                        let cache = cache_mutex.lock().unwrap();
+                        if cache.is_clean(&file_path, content_hash) {
+                            debug!("Cache hit (clean): {file_path}");
+                            return None;
+                        }
+                    }
+
+                    let syntax = detect_syntax(&file_path);
+                    let result = runner.lint_source(&source, &file_path, syntax);
+
+                    // Update cache with the new result.
+                    {
+                        let mut cache = cache_mutex.lock().unwrap();
+                        cache.record(
+                            file_path,
+                            content_hash,
+                            result.diagnostics.len(),
+                        );
+                    }
+
+                    Some(result)
+                })
+                .collect();
+            results
+        } else {
+            // Without caching: lint each file in parallel.
+            files
+                .par_iter()
+                .filter_map(|file| {
+                    let source = std::fs::read_to_string(file).ok()?;
+                    let file_path = file.display().to_string();
+                    let syntax = detect_syntax(&file_path);
+                    Some(runner.lint_source(&source, &file_path, syntax))
+                })
+                .collect()
+        }
     };
 
     // Apply fixes when --fix is set.
@@ -321,6 +393,12 @@ pub fn run() -> Result<()> {
                 .diagnostics
                 .retain(|d| d.severity == Severity::Error);
         }
+    }
+
+    // Save cache if --cache is enabled.
+    if cli.cache {
+        debug!("Saving cache to {}", cache_path.display());
+        lint_cache.save(&cache_path);
     }
 
     // Format & print.

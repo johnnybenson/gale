@@ -17,3 +17,7 @@ ignore = { workspace = true }
 rayon = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+gale_lsp = { workspace = true }
+tokio = { version = "1", features = ["full"] }

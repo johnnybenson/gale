@@ -7,6 +7,7 @@ members = [
     "crates/gale_cli",
     "crates/gale_formatter",
     "crates/gale_diagnostics",
+    "crates/gale_lsp",
 ]
 
 [workspace.package]
@@ -53,6 +54,7 @@ gale_config = { path = "crates/gale_config" }
 gale_cli = { path = "crates/gale_cli" }
 gale_formatter = { path = "crates/gale_formatter" }
 gale_diagnostics = { path = "crates/gale_diagnostics" }
+gale_lsp = { path = "crates/gale_lsp" }
 
 [package]
 name = "gale"
