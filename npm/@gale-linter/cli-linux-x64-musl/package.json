@@ -1,0 +1,28 @@
+{
+  "name": "@gale-linter/cli-linux-x64-musl",
+  "version": "0.1.0",
+  "description": "Gale CSS linter binary for Linux x64 (musl)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LyricalString/gale.git",
+    "directory": "npm/@gale-linter/cli-linux-x64-musl"
+  },
+  "homepage": "https://github.com/LyricalString/gale",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "gale"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

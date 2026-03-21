@@ -8,6 +8,19 @@ use crate::rule::{Rule, RuleContext};
 /// Equivalent to stylelint-order's `order/properties-alphabetical-order` rule.
 pub struct OrderPropertiesAlphabeticalOrder;
 
+/// Strip vendor prefix from a property name for sort comparison.
+///
+/// E.g. `-webkit-transform` -> `transform`, `-moz-appearance` -> `appearance`.
+fn strip_vendor_prefix(prop: &str) -> &str {
+    if prop.starts_with('-') {
+        // Find the second '-' after the vendor prefix
+        if let Some(idx) = prop[1..].find('-') {
+            return &prop[idx + 2..];
+        }
+    }
+    prop
+}
+
 impl Rule for OrderPropertiesAlphabeticalOrder {
     fn name(&self) -> &'static str {
         "order/properties-alphabetical-order"
@@ -27,7 +40,8 @@ impl Rule for OrderPropertiesAlphabeticalOrder {
         };
 
         let mut diagnostics = Vec::new();
-        let mut prev_property: Option<String> = None;
+        let mut prev_sort_key: Option<String> = None;
+        let mut prev_original: Option<String> = None;
 
         for decl in &rule.declarations {
             let prop = &decl.property;
@@ -42,17 +56,19 @@ impl Rule for OrderPropertiesAlphabeticalOrder {
                 continue;
             }
 
-            let prop_lower = prop.to_ascii_lowercase();
+            // Strip vendor prefix and lowercase for comparison
+            let unprefixed = strip_vendor_prefix(prop);
+            let sort_key = unprefixed.to_ascii_lowercase();
 
-            if let Some(ref prev) = prev_property
-                && prop_lower < *prev
+            if let Some(ref prev) = prev_sort_key
+                && sort_key < *prev
             {
                 diagnostics.push(
                     Diagnostic::new(
                         self.name(),
                         format!(
                             "Expected \"{prop}\" to come before \"{}\"",
-                            find_original_prev(rule, prev)
+                            prev_original.as_deref().unwrap_or(prev)
                         ),
                     )
                     .severity(self.default_severity())
@@ -60,22 +76,12 @@ impl Rule for OrderPropertiesAlphabeticalOrder {
                 );
             }
 
-            prev_property = Some(prop_lower);
+            prev_sort_key = Some(sort_key);
+            prev_original = Some(prop.clone());
         }
 
         diagnostics
     }
-}
-
-/// Find the original (non-lowered) property name that corresponds to the
-/// lowercased previous property, for a nicer diagnostic message.
-fn find_original_prev(rule: &gale_css_parser::StyleRule, lower: &str) -> String {
-    for decl in rule.declarations.iter().rev() {
-        if decl.property.to_ascii_lowercase() == *lower {
-            return decl.property.clone();
-        }
-    }
-    lower.to_string()
 }
 
 #[cfg(test)]
@@ -92,30 +98,24 @@ mod tests {
         }
     }
 
+    fn make_decl(property: &str, value: &str, offset: usize, length: usize) -> Declaration {
+        Declaration {
+            property: property.to_string(),
+            value: value.to_string(),
+            span: ParserSpan::new(offset, length),
+            important: false,
+        }
+    }
+
     #[test]
     fn accepts_alphabetical_order() {
         let rule = OrderPropertiesAlphabeticalOrder;
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![
-                Declaration {
-                    property: "color".to_string(),
-                    value: "red".to_string(),
-                    span: ParserSpan::new(4, 10),
-                    important: false,
-                },
-                Declaration {
-                    property: "display".to_string(),
-                    value: "block".to_string(),
-                    span: ParserSpan::new(15, 14),
-                    important: false,
-                },
-                Declaration {
-                    property: "font-size".to_string(),
-                    value: "12px".to_string(),
-                    span: ParserSpan::new(30, 15),
-                    important: false,
-                },
+                make_decl("color", "red", 4, 10),
+                make_decl("display", "block", 15, 14),
+                make_decl("font-size", "12px", 30, 15),
             ],
             children: vec![],
             span: ParserSpan::new(0, 50),
@@ -130,18 +130,8 @@ mod tests {
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![
-                Declaration {
-                    property: "display".to_string(),
-                    value: "block".to_string(),
-                    span: ParserSpan::new(4, 14),
-                    important: false,
-                },
-                Declaration {
-                    property: "color".to_string(),
-                    value: "red".to_string(),
-                    span: ParserSpan::new(19, 10),
-                    important: false,
-                },
+                make_decl("display", "block", 4, 14),
+                make_decl("color", "red", 19, 10),
             ],
             children: vec![],
             span: ParserSpan::new(0, 35),
@@ -158,24 +148,9 @@ mod tests {
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![
-                Declaration {
-                    property: "display".to_string(),
-                    value: "block".to_string(),
-                    span: ParserSpan::new(4, 14),
-                    important: false,
-                },
-                Declaration {
-                    property: "$my-var".to_string(),
-                    value: "10px".to_string(),
-                    span: ParserSpan::new(19, 14),
-                    important: false,
-                },
-                Declaration {
-                    property: "color".to_string(),
-                    value: "red".to_string(),
-                    span: ParserSpan::new(34, 10),
-                    important: false,
-                },
+                make_decl("display", "block", 4, 14),
+                make_decl("$my-var", "10px", 19, 14),
+                make_decl("color", "red", 34, 10),
             ],
             children: vec![],
             span: ParserSpan::new(0, 50),
@@ -191,18 +166,8 @@ mod tests {
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![
-                Declaration {
-                    property: "Color".to_string(),
-                    value: "red".to_string(),
-                    span: ParserSpan::new(4, 10),
-                    important: false,
-                },
-                Declaration {
-                    property: "display".to_string(),
-                    value: "block".to_string(),
-                    span: ParserSpan::new(15, 14),
-                    important: false,
-                },
+                make_decl("Color", "red", 4, 10),
+                make_decl("display", "block", 15, 14),
             ],
             children: vec![],
             span: ParserSpan::new(0, 35),
@@ -217,29 +182,58 @@ mod tests {
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![
-                Declaration {
-                    property: "display".to_string(),
-                    value: "block".to_string(),
-                    span: ParserSpan::new(4, 14),
-                    important: false,
-                },
-                Declaration {
-                    property: "--my-var".to_string(),
-                    value: "10px".to_string(),
-                    span: ParserSpan::new(19, 16),
-                    important: false,
-                },
-                Declaration {
-                    property: "font-size".to_string(),
-                    value: "12px".to_string(),
-                    span: ParserSpan::new(36, 15),
-                    important: false,
-                },
+                make_decl("display", "block", 4, 14),
+                make_decl("--my-var", "10px", 19, 16),
+                make_decl("font-size", "12px", 36, 15),
             ],
             children: vec![],
             span: ParserSpan::new(0, 55),
         });
         let diags = rule.check(&node, &ctx());
         assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn vendor_prefixed_sorts_as_unprefixed() {
+        let rule = OrderPropertiesAlphabeticalOrder;
+        // -webkit-transform should sort as "transform", which comes after "display"
+        let node = CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![
+                make_decl("display", "block", 4, 14),
+                make_decl("-webkit-transform", "scale(1)", 19, 28),
+                make_decl("transform", "scale(1)", 48, 21),
+            ],
+            children: vec![],
+            span: ParserSpan::new(0, 70),
+        });
+        let diags = rule.check(&node, &ctx());
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn vendor_prefixed_out_of_order() {
+        let rule = OrderPropertiesAlphabeticalOrder;
+        // -webkit-transform sorts as "transform", which should come after "appearance"
+        let node = CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![
+                make_decl("-webkit-transform", "scale(1)", 4, 28),
+                make_decl("appearance", "none", 33, 17),
+            ],
+            children: vec![],
+            span: ParserSpan::new(0, 55),
+        });
+        let diags = rule.check(&node, &ctx());
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].message.contains("appearance"));
+    }
+
+    #[test]
+    fn strip_vendor_prefix_works() {
+        assert_eq!(strip_vendor_prefix("-webkit-transform"), "transform");
+        assert_eq!(strip_vendor_prefix("-moz-appearance"), "appearance");
+        assert_eq!(strip_vendor_prefix("-ms-flex"), "flex");
+        assert_eq!(strip_vendor_prefix("transform"), "transform");
     }
 }

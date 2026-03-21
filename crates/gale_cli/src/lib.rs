@@ -3,7 +3,7 @@ mod cache;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{Result, bail};
 use clap::Parser;
@@ -258,46 +258,69 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
                 }
             }
 
-            for entry in builder.build().flatten() {
-                let entry_path = entry.path();
-                if entry_path.is_file() && is_css_file(entry_path) {
+            // Use parallel walk for faster directory traversal on large repos.
+            let matched_files = std::sync::Mutex::new(Vec::new());
+            let glob_ref = &glob_matcher;
+            let cwd_ref = &cwd;
+            let explicit_ignore_ref = &explicit_ignore;
+            let config_ignore_ref = &config_ignore_matchers;
+            builder.build_parallel().run(|| {
+                Box::new(|entry_result| {
+                    let entry = match entry_result {
+                        Ok(e) => e,
+                        Err(_) => return ignore::WalkState::Continue,
+                    };
+                    let is_file = entry
+                        .file_type()
+                        .map(|ft| ft.is_file())
+                        .unwrap_or(false);
+                    if !is_file {
+                        return ignore::WalkState::Continue;
+                    }
+                    let entry_path = entry.path();
+                    if !is_css_file(entry_path) {
+                        return ignore::WalkState::Continue;
+                    }
                     // Check the glob pattern against the path.
-                    // Check the glob pattern against the path.
-                    if !glob_matcher.is_match(entry_path) {
-                        // Also try matching the relative path from cwd.
+                    if !glob_ref.is_match(entry_path) {
                         let rel = entry_path
-                            .strip_prefix(&cwd)
+                            .strip_prefix(cwd_ref)
                             .unwrap_or(entry_path);
-                        if !glob_matcher.is_match(rel) {
-                            continue;
+                        if !glob_ref.is_match(rel) {
+                            return ignore::WalkState::Continue;
                         }
                     }
 
                     // Respect .stylelintignore / .galeignore for explicitly
-                    // matched files (belt-and-suspenders with WalkBuilder).
-                    if let Some(ref gi) = explicit_ignore {
+                    // matched files.
+                    if let Some(ref gi) = *explicit_ignore_ref {
                         if gi
                             .matched_path_or_any_parents(entry_path, false)
                             .is_ignore()
                         {
-                            continue;
+                            return ignore::WalkState::Continue;
                         }
                     }
 
                     // Check config ignore patterns.
-                    if !config_ignore_matchers.is_empty() {
+                    if !config_ignore_ref.is_empty() {
                         let abs = entry_path
                             .canonicalize()
                             .unwrap_or_else(|_| entry_path.to_path_buf());
-                        let rel = abs.strip_prefix(&cwd).unwrap_or(&abs);
-                        if config_ignore_matchers.iter().any(|m| m.is_match(rel)) {
-                            continue;
+                        let rel = abs.strip_prefix(cwd_ref).unwrap_or(&abs);
+                        if config_ignore_ref.iter().any(|m| m.is_match(rel)) {
+                            return ignore::WalkState::Continue;
                         }
                     }
 
-                    files.push(entry_path.to_path_buf());
-                }
-            }
+                    matched_files
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .push(entry_path.to_path_buf());
+                    ignore::WalkState::Continue
+                })
+            });
+            files.extend(matched_files.into_inner().unwrap_or_default());
             continue;
         }
 
@@ -379,14 +402,28 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
             }
         }
 
-        let walker = builder.build();
-
-        for entry in walker.flatten() {
-            let entry_path = entry.path();
-            if entry_path.is_file() && is_css_file(entry_path) {
-                files.push(entry_path.to_path_buf());
-            }
-        }
+        // Use parallel walk for faster directory traversal.
+        let dir_matched = std::sync::Mutex::new(Vec::new());
+        builder.build_parallel().run(|| {
+            Box::new(|entry_result| {
+                let entry = match entry_result {
+                    Ok(e) => e,
+                    Err(_) => return ignore::WalkState::Continue,
+                };
+                let is_file = entry
+                    .file_type()
+                    .map(|ft| ft.is_file())
+                    .unwrap_or(false);
+                if is_file && is_css_file(entry.path()) {
+                    dir_matched
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .push(entry.path().to_path_buf());
+                }
+                ignore::WalkState::Continue
+            })
+        });
+        files.extend(dir_matched.into_inner().unwrap_or_default());
     }
 
     files
@@ -459,7 +496,6 @@ pub fn run() -> Result<()> {
     // config lookup (matching Stylelint's cosmiconfig behaviour where each file
     // is linted with the closest config in the directory hierarchy).
     let use_per_file_config = cli.config.is_none();
-    let resolver = Mutex::new(ConfigResolver::new());
 
     let (config, has_config_file) = if let Some(ref cfg_path) = cli.config {
         debug!("Using config file: {}", cfg_path.display());
@@ -478,6 +514,28 @@ pub fn run() -> Result<()> {
 
     // Build rule registry and determine enabled rules.
     let registry = RuleRegistry::default();
+
+    // Validate plugins declared in the config.
+    for plugin in &config.plugins {
+        if !gale_config::is_known_plugin(plugin) {
+            eprintln!(
+                "warning: Plugin \"{plugin}\" is not supported by Gale and will be ignored. \
+                 Rules from this plugin will have no effect."
+            );
+        }
+    }
+
+    // Warn about rules from known plugins that Gale hasn't implemented yet.
+    if has_config_file {
+        for rule_name in config.rules.keys() {
+            if gale_config::is_known_plugin_rule(rule_name) && registry.get(rule_name).is_none() {
+                eprintln!(
+                    "warning: Rule \"{rule_name}\" is not yet supported by Gale and will be skipped."
+                );
+            }
+        }
+    }
+
     let enabled_rules: Vec<String> = if config.rules.is_empty() && !has_config_file {
         // No config file found at all — enable all registered rules as a
         // sensible default so `gale .` works out-of-the-box.
@@ -586,7 +644,75 @@ pub fn run() -> Result<()> {
     );
     let has_overrides = config.has_overrides();
 
-    /// Lint a single file using a fully resolved config.
+    /// Pre-computed lint parameters for a resolved config.
+    ///
+    /// When multiple files share the same config (same directory or same config
+    /// file in the hierarchy), we compute the enabled rules, options, and
+    /// severities once and share them via `Arc` to avoid redundant allocations
+    /// in the parallel linting loop.
+    struct ResolvedLintParams {
+        config: Arc<GaleConfig>,
+        enabled_rules: Vec<String>,
+        rule_options: std::collections::HashMap<String, serde_json::Value>,
+        rule_severities: std::collections::HashMap<String, gale_diagnostics::Severity>,
+        has_overrides: bool,
+    }
+
+    /// Build `ResolvedLintParams` from a `GaleConfig`, pre-computing enabled
+    /// rules, options, and severities so the parallel loop avoids per-file
+    /// allocation.
+    fn build_lint_params(
+        config: Arc<GaleConfig>,
+        runner: &LintRunner,
+    ) -> Arc<ResolvedLintParams> {
+        let has_overrides = config.has_overrides();
+        let enabled_rules: Vec<String> = config
+            .rules
+            .iter()
+            .filter(|(_, cfg)| {
+                cfg.severity
+                    .as_ref()
+                    .map(|s| !matches!(s, gale_config::Severity::Off))
+                    .unwrap_or(true)
+            })
+            .filter(|(name, _)| runner.has_rule(name))
+            .map(|(name, _)| name.clone())
+            .collect();
+        let rule_options: std::collections::HashMap<String, serde_json::Value> = config
+            .rules
+            .iter()
+            .filter_map(|(name, cfg)| {
+                cfg.options
+                    .as_ref()
+                    .map(|opts| (name.clone(), opts.clone()))
+            })
+            .collect();
+        let rule_severities: std::collections::HashMap<String, gale_diagnostics::Severity> =
+            config
+                .rules
+                .iter()
+                .filter_map(|(name, cfg)| {
+                    cfg.severity.as_ref().and_then(|s| match s {
+                        gale_config::Severity::Error => {
+                            Some((name.clone(), gale_diagnostics::Severity::Error))
+                        }
+                        gale_config::Severity::Warning => {
+                            Some((name.clone(), gale_diagnostics::Severity::Warning))
+                        }
+                        gale_config::Severity::Off => None,
+                    })
+                })
+                .collect();
+        Arc::new(ResolvedLintParams {
+            config,
+            enabled_rules,
+            rule_options,
+            rule_severities,
+            has_overrides,
+        })
+    }
+
+    /// Lint a single file using a fully resolved config (with overrides).
     ///
     /// Extracts enabled rules, options, and severities from the config (applying
     /// per-file overrides) and runs the linter.
@@ -645,6 +771,29 @@ pub fn run() -> Result<()> {
         )
     }
 
+    /// Lint a single file using pre-computed params, falling back to override
+    /// resolution only when the config has overrides.
+    fn lint_file_with_params(
+        runner: &LintRunner,
+        source: &str,
+        file_path: &str,
+        syntax: gale_css_parser::Syntax,
+        params: &ResolvedLintParams,
+    ) -> LintResult {
+        if params.has_overrides {
+            lint_file_with_resolved_config(runner, source, file_path, syntax, &params.config)
+        } else {
+            runner.lint_source_with_rules(
+                source,
+                file_path,
+                syntax,
+                &params.enabled_rules,
+                &params.rule_options,
+                &params.rule_severities,
+            )
+        }
+    }
+
     /// Lint a single file, computing the effective rules from overrides if needed.
     fn lint_file(
         runner: &LintRunner,
@@ -685,6 +834,61 @@ pub fn run() -> Result<()> {
             return Ok(());
         }
 
+        // -----------------------------------------------------------------
+        // Pre-resolve configs for all files (lock-free parallel linting).
+        //
+        // When `--config` is not specified, Gale uses per-file config
+        // resolution (walking up directories to find the nearest config).
+        // Previously this was done inside the parallel loop behind a Mutex,
+        // causing severe contention.  Now we resolve all configs upfront
+        // (single-threaded, ~100 unique directories even for huge repos)
+        // and store them as `Arc<ResolvedLintParams>` keyed by parent dir.
+        // The parallel loop does a simple HashMap lookup — no locking.
+        // -----------------------------------------------------------------
+        let cwd = std::env::current_dir().unwrap_or_default();
+        let dir_params: Option<std::collections::HashMap<PathBuf, Arc<ResolvedLintParams>>> =
+            if use_per_file_config {
+                let mut resolver = ConfigResolver::new();
+                // Convert relative paths to absolute for the resolver.
+                let abs_files: Vec<PathBuf> = files
+                    .iter()
+                    .map(|f| {
+                        if f.is_absolute() {
+                            f.clone()
+                        } else {
+                            cwd.join(f)
+                        }
+                    })
+                    .collect();
+                let dir_to_config =
+                    resolver.resolve_all_for_files(&abs_files, &config);
+                // Build ResolvedLintParams per config (dedup by Arc pointer).
+                let mut params_by_ptr: std::collections::HashMap<
+                    usize,
+                    Arc<ResolvedLintParams>,
+                > = std::collections::HashMap::new();
+                let dir_params: std::collections::HashMap<PathBuf, Arc<ResolvedLintParams>> =
+                    dir_to_config
+                        .into_iter()
+                        .map(|(dir, cfg_arc)| {
+                            let ptr = Arc::as_ptr(&cfg_arc) as usize;
+                            let params = params_by_ptr
+                                .entry(ptr)
+                                .or_insert_with(|| build_lint_params(cfg_arc, &runner))
+                                .clone();
+                            (dir, params)
+                        })
+                        .collect();
+                debug!(
+                    "Pre-resolved {} directory configs ({} unique configs)",
+                    dir_params.len(),
+                    params_by_ptr.len()
+                );
+                Some(dir_params)
+            } else {
+                None
+            };
+
         if cli.cache {
             // With caching: read files, check cache, skip clean ones.
             let cache_mutex = Mutex::new(&mut lint_cache);
@@ -705,14 +909,18 @@ pub fn run() -> Result<()> {
                     }
 
                     let syntax = detect_syntax(&file_path);
-                    let result = if use_per_file_config {
-                        let abs = std::env::current_dir().unwrap_or_default().join(file);
-                        let mut res_guard = resolver.lock().unwrap_or_else(|e| e.into_inner());
-                        let file_cfg = res_guard.resolve_for_file(&abs)
-                            .cloned()
-                            .unwrap_or_else(|| config.clone());
-                        drop(res_guard);
-                        lint_file_with_resolved_config(&runner, &source, &file_path, syntax, &file_cfg)
+                    let result = if let Some(ref dp) = dir_params {
+                        let abs = if file.is_absolute() {
+                            file.clone()
+                        } else {
+                            cwd.join(file)
+                        };
+                        let dir = abs.parent().unwrap_or(Path::new("."));
+                        if let Some(params) = dp.get(dir) {
+                            lint_file_with_params(&runner, &source, &file_path, syntax, params)
+                        } else {
+                            lint_file(&runner, &source, &file_path, syntax, &config, has_overrides)
+                        }
                     } else {
                         lint_file(&runner, &source, &file_path, syntax, &config, has_overrides)
                     };
@@ -728,23 +936,29 @@ pub fn run() -> Result<()> {
                 .collect();
             results
         } else {
-            // Without caching: lint each file in parallel.
+            // Without caching: lint each file in parallel (lock-free).
             files
                 .par_iter()
                 .filter_map(|file| {
                     let source = std::fs::read_to_string(file).ok()?;
                     let file_path = file.display().to_string();
                     let syntax = detect_syntax(&file_path);
-                    if use_per_file_config {
-                        let abs = std::env::current_dir().unwrap_or_default().join(file);
-                        let mut res_guard = resolver.lock().unwrap_or_else(|e| e.into_inner());
-                        let file_cfg = res_guard.resolve_for_file(&abs)
-                            .cloned()
-                            .unwrap_or_else(|| config.clone());
-                        drop(res_guard);
-                        Some(lint_file_with_resolved_config(
-                            &runner, &source, &file_path, syntax, &file_cfg,
-                        ))
+                    if let Some(ref dp) = dir_params {
+                        let abs = if file.is_absolute() {
+                            file.clone()
+                        } else {
+                            cwd.join(file)
+                        };
+                        let dir = abs.parent().unwrap_or(Path::new("."));
+                        if let Some(params) = dp.get(dir) {
+                            Some(lint_file_with_params(
+                                &runner, &source, &file_path, syntax, params,
+                            ))
+                        } else {
+                            Some(lint_file(
+                                &runner, &source, &file_path, syntax, &config, has_overrides,
+                            ))
+                        }
                     } else {
                         Some(lint_file(
                             &runner,

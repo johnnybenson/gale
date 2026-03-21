@@ -1,0 +1,108 @@
+#!/usr/bin/env node
+
+"use strict";
+
+const { platform, arch, env, version } = process;
+const { execSync, spawnSync } = require("child_process");
+
+/**
+ * Detect whether the current Linux system uses musl libc.
+ */
+function isMusl() {
+  let stderr;
+  try {
+    stderr = execSync("ldd --version", {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  } catch (err) {
+    stderr = err.stderr;
+  }
+  if (stderr && stderr.indexOf("musl") > -1) {
+    return true;
+  }
+  return false;
+}
+
+const PLATFORMS = {
+  win32: {
+    x64: "@gale-linter/cli-win32-x64/gale.exe",
+  },
+  darwin: {
+    x64: "@gale-linter/cli-darwin-x64/gale",
+    arm64: "@gale-linter/cli-darwin-arm64/gale",
+  },
+  linux: {
+    x64: "@gale-linter/cli-linux-x64/gale",
+    arm64: "@gale-linter/cli-linux-arm64/gale",
+  },
+  "linux-musl": {
+    x64: "@gale-linter/cli-linux-x64-musl/gale",
+    arm64: "@gale-linter/cli-linux-arm64-musl/gale",
+  },
+};
+
+const binPath =
+  env.GALE_BINARY ||
+  (platform === "linux" && isMusl()
+    ? PLATFORMS?.["linux-musl"]?.[arch]
+    : PLATFORMS?.[platform]?.[arch]);
+
+if (binPath) {
+  let resolvedPath;
+  try {
+    resolvedPath = env.GALE_BINARY || require.resolve(binPath);
+  } catch {
+    console.error(
+      `Could not find the Gale binary for your platform (${platform}-${arch}).\n` +
+        "This likely means the optional dependency was not installed.\n\n" +
+        "Try reinstalling with:\n" +
+        "  bun install gale-linter\n\n" +
+        "Or set the GALE_BINARY environment variable to point to a Gale binary.",
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  const packageManager = detectPackageManager();
+  const result = spawnSync(resolvedPath, process.argv.slice(2), {
+    shell: false,
+    stdio: "inherit",
+    env: {
+      ...env,
+      JS_RUNTIME_VERSION: version,
+      JS_RUNTIME_NAME: "node",
+      ...(packageManager != null
+        ? { NODE_PACKAGE_MANAGER: packageManager }
+        : {}),
+    },
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  process.exitCode = result.status;
+} else {
+  console.error(
+    `Gale does not ship with a prebuilt binary for your platform yet (${platform}-${arch}).\n` +
+      "You can:\n" +
+      "  1. Build from source: cargo install gale\n" +
+      "  2. Set the GALE_BINARY environment variable to point to a Gale binary\n" +
+      "  3. Open an issue: https://github.com/LyricalString/gale/issues",
+  );
+  process.exitCode = 1;
+}
+
+/**
+ * Detect the package manager from the npm_config_user_agent env var.
+ * Format: "npm/8.3.0 node/v16.13.2 win32 x64 workspaces/false"
+ *
+ * @returns The package manager string (e.g. "npm/8.3.0") or null.
+ */
+function detectPackageManager() {
+  const userAgent = env.npm_config_user_agent;
+  if (userAgent == null) {
+    return null;
+  }
+  return userAgent.split(" ")[0];
+}

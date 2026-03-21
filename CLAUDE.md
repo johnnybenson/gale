@@ -538,7 +538,7 @@ python tests/differential/run.py --skip-build # use existing binary
 3. **`cosmiconfig`-style resolution** -- Stylelint uses `cosmiconfig` which also checks `package.json` `stylelint` field; Gale does not
 4. **Sass (indented syntax)** -- Returns `UnsupportedSyntax` error
 5. **Rule options parity** -- Some rules accept options in Stylelint that Gale does not yet handle (e.g., `ignoreAtRules` for `at-rule-no-unknown`)
-6. **npm distribution** -- Plan to follow Biome's `optionalDependencies` pattern for cross-platform npm packages (not yet set up)
+6. **npm distribution** -- Set up following Biome's `optionalDependencies` pattern (`npm/gale-linter/` + `npm/@gale-linter/cli-*`). See `PUBLISHING.md` for details. Not yet published.
 
 ---
 

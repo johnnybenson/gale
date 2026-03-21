@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use globset::{Glob, GlobMatcher};
 use serde::de::Deserializer;
@@ -102,6 +103,8 @@ pub struct GaleConfig {
     /// Directory containing the config file.  Used by [`rules_for_file`] to
     /// resolve override glob patterns relative to the config location.
     pub config_dir: Option<PathBuf>,
+    /// Plugin names declared in the config file (extracted from the `plugins` field).
+    pub plugins: Vec<String>,
 }
 
 impl GaleConfig {
@@ -164,6 +167,7 @@ impl Default for GaleConfig {
             formatter: FormatterType::Text,
             overrides: Vec::new(),
             config_dir: None,
+            plugins: Vec::new(),
         }
     }
 }
@@ -467,6 +471,7 @@ const ALL_RULE_NAMES: &[&str] = &[
     "no-unknown-animations",
     "number-leading-zero",
     "number-max-precision",
+    "order/order",
     "order/properties-alphabetical-order",
     "order/properties-order",
     "property-allowed-list",
@@ -3064,6 +3069,74 @@ fn collect_rules_from_extends(
     (rules, overrides)
 }
 
+// ---------------------------------------------------------------------------
+// Plugin recognition
+// ---------------------------------------------------------------------------
+
+/// Known Stylelint plugins whose rules Gale implements as built-in rules.
+/// These plugins are silently accepted when found in the `plugins` config field.
+const KNOWN_PLUGINS: &[&str] = &[
+    "stylelint-scss",
+    "stylelint-order",
+    "@stylistic/stylelint-plugin",
+    "stylelint-no-unsupported-browser-features",
+    "stylelint-declaration-block-no-ignored-properties",
+];
+
+/// Rule prefixes associated with known plugins.  Used to determine whether an
+/// unrecognised rule belongs to a known plugin (and thus should produce a
+/// "not yet supported" warning rather than being silently dropped).
+const KNOWN_PLUGIN_RULE_PREFIXES: &[&str] = &[
+    "scss/",
+    "order/",
+    "@stylistic/",
+    "stylistic/",
+];
+
+/// Standalone rule names from known plugins (no prefix).
+const KNOWN_PLUGIN_STANDALONE_RULES: &[&str] = &[
+    "plugin/no-unsupported-browser-features",
+    "plugin/declaration-block-no-ignored-properties",
+];
+
+/// Extract plugin name strings from the raw `plugins` JSON value.
+///
+/// Stylelint's `plugins` field can be a single string or an array of strings.
+/// Some entries may be paths (e.g. `./my-plugin.js`) — we normalise by
+/// extracting the last path component without the extension when it looks
+/// like a file path.
+fn extract_plugin_names(value: &serde_json::Value) -> Vec<String> {
+    let mut names = Vec::new();
+    match value {
+        serde_json::Value::String(s) => {
+            names.push(s.clone());
+        }
+        serde_json::Value::Array(arr) => {
+            for item in arr {
+                if let serde_json::Value::String(s) = item {
+                    names.push(s.clone());
+                }
+            }
+        }
+        _ => {}
+    }
+    names
+}
+
+/// Check whether a plugin name matches one of the known plugins.
+///
+/// Uses substring matching so that `./node_modules/stylelint-scss` or
+/// `stylelint-scss/lib/index.js` still matches `stylelint-scss`.
+pub fn is_known_plugin(plugin: &str) -> bool {
+    KNOWN_PLUGINS.iter().any(|known| plugin.contains(known))
+}
+
+/// Check whether a rule name looks like it belongs to a known plugin.
+pub fn is_known_plugin_rule(rule_name: &str) -> bool {
+    KNOWN_PLUGIN_RULE_PREFIXES.iter().any(|prefix| rule_name.starts_with(prefix))
+        || KNOWN_PLUGIN_STANDALONE_RULES.iter().any(|r| *r == rule_name)
+}
+
 /// Convert a raw [`ConfigFile`] into the resolved [`GaleConfig`].
 ///
 /// `base_dir` is used when resolving `extends` that reference npm packages or
@@ -3154,12 +3227,20 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
         .filter_map(resolve_override)
         .collect();
 
+    // 4. Extract plugin names from the config.
+    let plugins = raw
+        .plugins
+        .as_ref()
+        .map(extract_plugin_names)
+        .unwrap_or_default();
+
     GaleConfig {
         rules,
         ignore_patterns,
         formatter,
         overrides,
         config_dir: Some(base_dir.to_path_buf()),
+        plugins,
     }
 }
 
@@ -3279,6 +3360,62 @@ impl ConfigResolver {
     /// Check whether there are multiple distinct config files in play.
     pub fn has_multiple_configs(&self) -> bool {
         self.cache.len() > 1
+    }
+
+    /// Pre-resolve configs for a batch of files and return an `Arc`-based
+    /// lookup table keyed by parent directory.
+    ///
+    /// This is designed to be called **once** before parallel linting so that
+    /// the hot loop can do a simple `HashMap` lookup without any `Mutex`.
+    /// Files whose parent directory maps to the same config file will share
+    /// a single `Arc<GaleConfig>`.
+    pub fn resolve_all_for_files(
+        &mut self,
+        files: &[PathBuf],
+        fallback: &GaleConfig,
+    ) -> HashMap<PathBuf, Arc<GaleConfig>> {
+        // Deduplicate directories first to minimise I/O.
+        let mut dirs: Vec<PathBuf> = files
+            .iter()
+            .filter_map(|f| f.parent().map(|p| p.to_path_buf()))
+            .collect();
+        dirs.sort();
+        dirs.dedup();
+
+        // Resolve each directory's config (populates internal caches).
+        // Build an Arc-based config cache keyed by config file path so that
+        // directories sharing the same config file share one Arc.
+        let mut arc_cache: HashMap<PathBuf, Arc<GaleConfig>> = HashMap::new();
+        let fallback_arc = Arc::new(fallback.clone());
+
+        let mut dir_to_arc: HashMap<PathBuf, Arc<GaleConfig>> = HashMap::with_capacity(dirs.len());
+
+        for dir in &dirs {
+            // Synthesize a dummy file path in this directory so find_config_path works.
+            let dummy = dir.join("__dummy__");
+            let config_arc = if let Some(config_path) = self.find_config_path(&dummy) {
+                // Load config if not already cached.
+                if !self.cache.contains_key(&config_path) {
+                    let config = load_config(&config_path).unwrap_or_else(|err| {
+                        eprintln!(
+                            "Warning: failed to load config {}: {err}",
+                            config_path.display()
+                        );
+                        GaleConfig::default()
+                    });
+                    self.cache.insert(config_path.clone(), config);
+                }
+                arc_cache
+                    .entry(config_path.clone())
+                    .or_insert_with(|| Arc::new(self.cache[&config_path].clone()))
+                    .clone()
+            } else {
+                fallback_arc.clone()
+            };
+            dir_to_arc.insert(dir.clone(), config_arc);
+        }
+
+        dir_to_arc
     }
 }
 

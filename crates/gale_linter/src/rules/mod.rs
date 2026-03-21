@@ -92,6 +92,7 @@ pub mod no_irregular_whitespace;
 pub mod no_unknown_animations;
 pub mod number_leading_zero;
 pub mod number_max_precision;
+pub mod order_order;
 pub mod order_properties_alphabetical_order;
 pub mod order_properties_order;
 pub mod property_allowed_list;
@@ -146,21 +147,39 @@ pub mod value_keyword_case;
 pub mod value_no_vendor_prefix;
 
 // SCSS-specific rules (scss/ prefix)
+pub mod scss_at_else_closing_brace_newline_after;
+pub mod scss_at_else_closing_brace_space_after;
 pub mod scss_at_extend_no_missing_placeholder;
+pub mod scss_at_function_pattern;
+pub mod scss_at_if_closing_brace_newline_after;
+pub mod scss_at_if_closing_brace_space_after;
 pub mod scss_at_if_no_null;
+pub mod scss_at_import_partial_extension;
+pub mod scss_at_mixin_argumentless_call_parentheses;
+pub mod scss_at_mixin_pattern;
 pub mod scss_at_rule_no_unknown;
 pub mod scss_comment_no_empty;
+pub mod scss_declaration_nested_properties;
 pub mod scss_declaration_nested_properties_no_divided_groups;
+pub mod scss_dollar_variable_colon_space_after;
+pub mod scss_dollar_variable_colon_space_before;
 pub mod scss_dollar_variable_no_missing_interpolation;
+pub mod scss_dollar_variable_pattern;
+pub mod scss_double_slash_comment_whitespace_inside;
+pub mod scss_function_no_unknown;
 pub mod scss_function_quote_no_quoted_strings_inside;
 pub mod scss_function_unquote_no_unquoted_strings_inside;
 pub mod scss_load_no_partial_leading_underscore;
 pub mod scss_load_partial_extension;
+pub mod scss_no_duplicate_dollar_variables;
 pub mod scss_no_duplicate_mixins;
 pub mod scss_no_global_function_names;
 pub mod scss_operator_no_newline_after;
 pub mod scss_operator_no_newline_before;
 pub mod scss_operator_no_unspaced;
+pub mod scss_partial_no_import;
+pub mod scss_percent_placeholder_pattern;
+pub mod scss_selector_no_redundant_nesting_selector;
 
 use crate::registry::RuleRegistry;
 
@@ -295,6 +314,7 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(no_irregular_whitespace::NoIrregularWhitespace));
     registry.register(Box::new(no_unknown_animations::NoUnknownAnimations));
     registry.register(Box::new(number_leading_zero::NumberLeadingZero));
+    registry.register(Box::new(order_order::OrderOrder));
     registry.register(Box::new(
         order_properties_alphabetical_order::OrderPropertiesAlphabeticalOrder,
     ));
@@ -365,15 +385,51 @@ pub fn register_all(registry: &mut RuleRegistry) {
 
     // SCSS-specific rules
     registry.register(Box::new(
+        scss_at_else_closing_brace_newline_after::ScssAtElseClosingBraceNewlineAfter,
+    ));
+    registry.register(Box::new(
+        scss_at_else_closing_brace_space_after::ScssAtElseClosingBraceSpaceAfter,
+    ));
+    registry.register(Box::new(
         scss_at_extend_no_missing_placeholder::ScssAtExtendNoMissingPlaceholder,
     ));
+    registry.register(Box::new(scss_at_function_pattern::ScssAtFunctionPattern));
+    registry.register(Box::new(
+        scss_at_if_closing_brace_newline_after::ScssAtIfClosingBraceNewlineAfter,
+    ));
+    registry.register(Box::new(
+        scss_at_if_closing_brace_space_after::ScssAtIfClosingBraceSpaceAfter,
+    ));
     registry.register(Box::new(scss_at_if_no_null::ScssAtIfNoNull));
+    registry.register(Box::new(
+        scss_at_import_partial_extension::ScssAtImportPartialExtension,
+    ));
+    registry.register(Box::new(
+        scss_at_mixin_argumentless_call_parentheses::ScssAtMixinArgumentlessCallParentheses,
+    ));
+    registry.register(Box::new(scss_at_mixin_pattern::ScssAtMixinPattern));
     registry.register(Box::new(scss_at_rule_no_unknown::ScssAtRuleNoUnknown));
     registry.register(Box::new(scss_comment_no_empty::ScssCommentNoEmpty));
+    registry.register(Box::new(
+        scss_declaration_nested_properties::ScssDeclarationNestedProperties,
+    ));
     registry.register(Box::new(scss_declaration_nested_properties_no_divided_groups::ScssDeclarationNestedPropertiesNoDividedGroups));
+    registry.register(Box::new(
+        scss_dollar_variable_colon_space_after::ScssDollarVariableColonSpaceAfter,
+    ));
+    registry.register(Box::new(
+        scss_dollar_variable_colon_space_before::ScssDollarVariableColonSpaceBefore,
+    ));
     registry.register(Box::new(
         scss_dollar_variable_no_missing_interpolation::ScssDollarVariableNoMissingInterpolation,
     ));
+    registry.register(Box::new(
+        scss_dollar_variable_pattern::ScssDollarVariablePattern,
+    ));
+    registry.register(Box::new(
+        scss_double_slash_comment_whitespace_inside::ScssDoubleSlashCommentWhitespaceInside,
+    ));
+    registry.register(Box::new(scss_function_no_unknown::ScssFunctionNoUnknown));
     registry.register(Box::new(
         scss_function_quote_no_quoted_strings_inside::ScssFunctionQuoteNoQuotedStringsInside,
     ));
@@ -383,6 +439,9 @@ pub fn register_all(registry: &mut RuleRegistry) {
     ));
     registry.register(Box::new(
         scss_load_partial_extension::ScssLoadPartialExtension,
+    ));
+    registry.register(Box::new(
+        scss_no_duplicate_dollar_variables::ScssNoDuplicateDollarVariables,
     ));
     registry.register(Box::new(scss_no_duplicate_mixins::ScssNoDuplicateMixins));
     registry.register(Box::new(
@@ -395,4 +454,11 @@ pub fn register_all(registry: &mut RuleRegistry) {
         scss_operator_no_newline_before::ScssOperatorNoNewlineBefore,
     ));
     registry.register(Box::new(scss_operator_no_unspaced::ScssOperatorNoUnspaced));
+    registry.register(Box::new(scss_partial_no_import::ScssPartialNoImport));
+    registry.register(Box::new(
+        scss_percent_placeholder_pattern::ScssPercentPlaceholderPattern,
+    ));
+    registry.register(Box::new(
+        scss_selector_no_redundant_nesting_selector::ScssSelectorNoRedundantNestingSelector,
+    ));
 }

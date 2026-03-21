@@ -6,6 +6,8 @@ use raffia::pos::Spanned as RaffiaSpanned;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+mod sass_to_scss;
+
 // ---------------------------------------------------------------------------
 // Syntax detection
 // ---------------------------------------------------------------------------
@@ -190,7 +192,31 @@ pub fn parse(source: &str, syntax: Syntax) -> Result<ParseResult, ParseError> {
                 }
             }
         }
-        other => Err(ParseError::UnsupportedSyntax { syntax: other }),
+        Syntax::Sass => {
+            // Convert Sass indented syntax to SCSS, then parse as SCSS.
+            // Byte offsets in diagnostics will refer to the converted source,
+            // not the original — acceptable for an initial implementation.
+            let scss_source = sass_to_scss::convert_sass_to_scss(source);
+            match parse_raffia(&scss_source, Syntax::Scss) {
+                Ok(mut result) => {
+                    result.syntax = Syntax::Sass;
+                    result.source = scss_source;
+                    Ok(result)
+                }
+                Err(_raffia_err) => {
+                    // Raffia failed on the converted SCSS — try lightningcss
+                    // with error recovery as a last resort.
+                    match parse_css(&scss_source) {
+                        Ok(mut result) => {
+                            result.syntax = Syntax::Sass;
+                            result.source = scss_source;
+                            Ok(result)
+                        }
+                        Err(_) => Err(_raffia_err),
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1173,9 +1199,11 @@ mod tests {
     }
 
     #[test]
-    fn test_unsupported_syntax() {
-        let err = parse("$foo: red;", Syntax::Sass).unwrap_err();
-        assert!(matches!(err, ParseError::UnsupportedSyntax { .. }));
+    fn test_sass_converted_to_scss() {
+        // Sass indented syntax is now converted to SCSS before parsing.
+        let result = parse("$foo: red", Syntax::Sass).expect("should parse Sass");
+        assert_eq!(result.syntax, Syntax::Sass);
+        assert!(!result.nodes.is_empty(), "should produce AST nodes");
     }
 
     #[test]

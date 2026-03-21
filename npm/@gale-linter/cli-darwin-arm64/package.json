@@ -1,0 +1,28 @@
+{
+  "name": "@gale-linter/cli-darwin-arm64",
+  "version": "0.1.0",
+  "description": "Gale CSS linter binary for macOS ARM64 (Apple Silicon)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LyricalString/gale.git",
+    "directory": "npm/@gale-linter/cli-darwin-arm64"
+  },
+  "homepage": "https://github.com/LyricalString/gale",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "files": [
+    "gale"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

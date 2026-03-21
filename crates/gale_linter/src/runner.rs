@@ -722,25 +722,28 @@ mod tests {
     }
 
     #[test]
-    fn parse_error_produces_diagnostic_not_empty() {
-        // When parsing completely fails (both raffia and lightningcss), the
-        // runner must return a parse-error diagnostic, not empty results.
-        // We simulate this by using Sass syntax which is unsupported.
+    fn sass_parses_successfully() {
+        // Sass indented syntax is now converted to SCSS before parsing,
+        // so it should produce lint results, not parse-error diagnostics.
         let registry = RuleRegistry::default();
         let runner = LintRunner::new(registry, vec!["block-no-empty".to_string()]);
         let src = ".foo\n  color: red";
         let result = runner.lint_source(src, "test.sass", Syntax::Sass);
 
         assert_eq!(result.file_path, "test.sass");
+        // The file should parse without a parse-error diagnostic.
+        let has_parse_error = result
+            .diagnostics
+            .iter()
+            .any(|d| d.rule_name == "parse-error");
         assert!(
-            !result.diagnostics.is_empty(),
-            "Unparseable file must produce at least a parse-error diagnostic, got 0"
+            !has_parse_error,
+            "Sass should now parse successfully, but got parse-error diagnostic"
         );
-        assert_eq!(result.diagnostics[0].rule_name, "parse-error");
     }
 
     #[test]
-    fn parse_error_produces_diagnostic_with_rules() {
+    fn sass_parses_successfully_with_rules() {
         // Same check through lint_source_with_rules path.
         let registry = RuleRegistry::default();
         let runner = LintRunner::new(registry, vec![]);
@@ -754,11 +757,14 @@ mod tests {
             &HashMap::new(),
         );
 
+        let has_parse_error = result
+            .diagnostics
+            .iter()
+            .any(|d| d.rule_name == "parse-error");
         assert!(
-            !result.diagnostics.is_empty(),
-            "Unparseable file must produce at least a parse-error diagnostic (with_rules)"
+            !has_parse_error,
+            "Sass should now parse successfully via with_rules, but got parse-error diagnostic"
         );
-        assert_eq!(result.diagnostics[0].rule_name, "parse-error");
     }
 
     #[test]
