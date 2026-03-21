@@ -23,16 +23,26 @@ impl Rule for DeclarationBlockNoDuplicateCustomProperties {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _context: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, context: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+
+        let is_preprocessor = matches!(
+            context.syntax,
+            gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less
+        );
 
         let mut seen = HashSet::new();
         let mut diagnostics = Vec::new();
 
         for decl in &rule.declarations {
             if !decl.property.starts_with("--") {
+                continue;
+            }
+            // Skip properties with SCSS/Less interpolation — we can't resolve the
+            // actual name, so duplicate detection would produce false positives.
+            if is_preprocessor && decl.property.contains("#{") {
                 continue;
             }
             if !seen.insert(decl.property.clone()) {

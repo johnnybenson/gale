@@ -60,6 +60,23 @@ fn extract_units(value: &str) -> Vec<String> {
     let mut i = 0;
 
     while i < len {
+        // Skip quoted strings — content inside quotes is not CSS values
+        // and should not be parsed for units (e.g. WCAG level "AA").
+        if chars[i] == '"' || chars[i] == '\'' {
+            let quote = chars[i];
+            i += 1;
+            while i < len && chars[i] != quote {
+                if chars[i] == '\\' {
+                    i += 1; // skip escaped char
+                }
+                i += 1;
+            }
+            if i < len {
+                i += 1; // skip closing quote
+            }
+            continue;
+        }
+
         // Skip content inside var(…) — custom property names can contain
         // number+letter sequences that aren't actual CSS units.
         // Also skip url(…) — data URLs contain embedded content.

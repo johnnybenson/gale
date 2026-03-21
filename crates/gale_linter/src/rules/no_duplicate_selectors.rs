@@ -28,7 +28,7 @@ impl Rule for NoDuplicateSelectors {
         let mut seen: HashMap<String, usize> = HashMap::new();
         let mut diagnostics = Vec::new();
 
-        collect_selectors(nodes, &mut seen, &mut diagnostics, self, &line_index);
+        collect_selectors(nodes, &mut seen, &mut diagnostics, self, &line_index, context.source);
 
         diagnostics
     }
@@ -40,6 +40,7 @@ fn collect_selectors(
     diagnostics: &mut Vec<Diagnostic>,
     rule: &NoDuplicateSelectors,
     line_index: &SourceLineIndex,
+    source: &str,
 ) {
     for node in nodes {
         match node {
@@ -51,13 +52,34 @@ fn collect_selectors(
                     continue;
                 }
                 let selector = normalize_selector(raw);
+
+                // Use the original source text for the message to preserve
+                // exact formatting (whitespace, quoting, etc.).
+                let display_selector = {
+                    let start = style_rule.span.offset;
+                    let end = (start + style_rule.selector.len()).min(source.len());
+                    if start < source.len() {
+                        // Extract from source and trim to the selector
+                        // (before the opening brace).
+                        let src = &source[start..end];
+                        let trimmed = src.trim();
+                        if trimmed.is_empty() {
+                            raw
+                        } else {
+                            trimmed
+                        }
+                    } else {
+                        raw
+                    }
+                };
+
                 if let Some(&first_line) = seen.get(&selector) {
                     diagnostics.push(
                         Diagnostic::new(
                             rule.name(),
                             format!(
                                 "Unexpected duplicate selector \"{}\", first used at line {}",
-                                style_rule.selector.trim(),
+                                display_selector,
                                 first_line,
                             ),
                         )
@@ -80,6 +102,7 @@ fn collect_selectors(
                     diagnostics,
                     rule,
                     line_index,
+                    source,
                 );
             }
             _ => {}

@@ -23,14 +23,19 @@ impl Rule for NoUnknownAnimations {
         Severity::Warning
     }
 
-    fn check_root(&self, nodes: &[CssNode], _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check_root(&self, nodes: &[CssNode], ctx: &RuleContext) -> Vec<Diagnostic> {
         // First pass: collect all @keyframes names.
         let mut keyframe_names = Vec::new();
         collect_keyframe_names(nodes, &mut keyframe_names);
 
+        let is_preprocessor = matches!(
+            ctx.syntax,
+            gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less
+        );
+
         // Second pass: find animation-name and animation declarations.
         let mut diags = Vec::new();
-        collect_animation_issues(nodes, &keyframe_names, self, &mut diags);
+        collect_animation_issues(nodes, &keyframe_names, self, &mut diags, is_preprocessor);
         diags
     }
 }
@@ -51,6 +56,7 @@ fn collect_animation_issues(
     keyframe_names: &[String],
     rule: &NoUnknownAnimations,
     diags: &mut Vec<Diagnostic>,
+    is_preprocessor: bool,
 ) {
     for node in nodes {
         match node {
@@ -61,6 +67,11 @@ fn collect_animation_issues(
                         // Value may be comma-separated list of names.
                         for name in decl.value.split(',') {
                             let name = name.trim();
+                            // Skip names with SCSS/Less interpolation — we can't
+                            // resolve the actual name at lint time.
+                            if is_preprocessor && name.contains("#{") {
+                                continue;
+                            }
                             if !name.is_empty()
                                 && name != "none"
                                 && !keyframe_names.contains(&name.to_string())
@@ -76,6 +87,10 @@ fn collect_animation_issues(
                             }
                         }
                     } else if prop == "animation" {
+                        // Skip values with SCSS/Less interpolation.
+                        if is_preprocessor && decl.value.contains("#{") {
+                            continue;
+                        }
                         // The animation shorthand: try to extract the animation name.
                         // The name is typically the first value that isn't a time,
                         // easing function, iteration count, etc.
@@ -101,11 +116,12 @@ fn collect_animation_issues(
                         keyframe_names,
                         rule,
                         diags,
+                        is_preprocessor,
                     );
                 }
             }
             CssNode::AtRule(at_rule) => {
-                collect_animation_issues(&at_rule.children, keyframe_names, rule, diags);
+                collect_animation_issues(&at_rule.children, keyframe_names, rule, diags, is_preprocessor);
             }
             _ => {}
         }

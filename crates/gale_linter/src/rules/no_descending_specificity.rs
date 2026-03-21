@@ -345,6 +345,29 @@ fn check_specificity_walk(
     }
 }
 
+/// Returns `true` if the selector contains a vendor-prefixed pseudo-class
+/// (e.g. `:-moz-ui-invalid`, `:-webkit-autofill`). Selectors with vendor-
+/// prefixed pseudo-classes have non-standard specificity behaviour and
+/// Stylelint skips them from descending specificity comparison.
+fn has_vendor_prefixed_pseudo_class(selector: &str) -> bool {
+    // Look for `:-` followed by a vendor prefix pattern.
+    let bytes = selector.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    while i + 1 < len {
+        if bytes[i] == b':' && bytes[i + 1] == b'-' {
+            // Make sure this isn't `::` (pseudo-element).
+            if i > 0 && bytes[i - 1] == b':' {
+                i += 2;
+                continue;
+            }
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
 fn check_one_selector(
     selector: &str,
     span: Span,
@@ -356,6 +379,11 @@ fn check_one_selector(
     for individual in selector.split(',') {
         let individual = individual.trim();
         if individual.is_empty() {
+            continue;
+        }
+
+        // Skip selectors with vendor-prefixed pseudo-classes (e.g. :-moz-ui-invalid).
+        if has_vendor_prefixed_pseudo_class(individual) {
             continue;
         }
 

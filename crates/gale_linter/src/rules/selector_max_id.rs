@@ -45,7 +45,23 @@ impl Rule for SelectorMaxId {
         // Find the byte offset of each individual selector within the source
         // so we can report accurate positions.
         let selector_source_start = rule.span.offset;
-        let parts = split_selector_list(&rule.selector);
+
+        // Read the original selector text from the source to preserve exact
+        // formatting (pseudo-element notation, attribute quoting, etc.).
+        // We find the opening `{` to determine where the selector ends,
+        // since the parser may normalize whitespace differently from source.
+        let source_selector = {
+            if selector_source_start < ctx.source.len() {
+                let rest = &ctx.source[selector_source_start..];
+                // Find the opening brace, respecting strings and brackets.
+                let end = find_selector_end(rest);
+                rest[..end].trim_end()
+            } else {
+                &rule.selector[..]
+            }
+        };
+
+        let parts = split_selector_list(source_selector);
         // Calculate byte offsets of each part within the selector string.
         let mut part_offsets: Vec<usize> = Vec::new();
         {
@@ -56,7 +72,7 @@ impl Rule for SelectorMaxId {
                     pos += 1; // the comma itself
                 }
                 // Find where this part starts (skip leading whitespace in the source selector)
-                let selector_bytes = rule.selector.as_bytes();
+                let selector_bytes = source_selector.as_bytes();
                 while pos < selector_bytes.len()
                     && (selector_bytes[pos] == b' '
                         || selector_bytes[pos] == b'\t'
@@ -97,6 +113,49 @@ impl Rule for SelectorMaxId {
         }
         diags
     }
+}
+
+/// Find the end of the selector text in source by locating the opening `{`.
+/// This accounts for quoted strings and attribute selectors containing `{`.
+fn find_selector_end(source: &str) -> usize {
+    let bytes = source.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'{' => return i,
+            b'"' | b'\'' => {
+                // Skip quoted string.
+                let quote = bytes[i];
+                i += 1;
+                while i < bytes.len() && bytes[i] != quote {
+                    if bytes[i] == b'\\' {
+                        i += 1; // skip escaped char
+                    }
+                    i += 1;
+                }
+            }
+            b'[' => {
+                // Skip attribute selector.
+                i += 1;
+                while i < bytes.len() && bytes[i] != b']' {
+                    if bytes[i] == b'"' || bytes[i] == b'\'' {
+                        let quote = bytes[i];
+                        i += 1;
+                        while i < bytes.len() && bytes[i] != quote {
+                            if bytes[i] == b'\\' {
+                                i += 1;
+                            }
+                            i += 1;
+                        }
+                    }
+                    i += 1;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    source.len()
 }
 
 /// Split a selector list by commas, respecting parentheses and brackets.

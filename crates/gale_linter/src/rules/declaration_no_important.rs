@@ -60,12 +60,30 @@ impl Rule for DeclarationNoImportant {
                     }
                 }
 
+                // Point the diagnostic span at the `!important` text when
+                // possible so that `disable-line` comments on the same line
+                // as `!important` (which may differ from the declaration
+                // start line for multi-line declarations) correctly suppress
+                // the diagnostic.
+                let diag_span = if let Some(pos) = fix_opt.as_ref().and_then(|_| {
+                    if decl_end <= ctx.source.len() && decl_start < decl_end {
+                        let slice = &ctx.source[decl_start..decl_end];
+                        find_important(slice).map(|p| decl_start + p)
+                    } else {
+                        None
+                    }
+                }) {
+                    Span::new(pos, "!important".len())
+                } else {
+                    Span::new(decl.span.offset, decl.span.length)
+                };
+
                 let mut diag = Diagnostic::new(
                     self.name(),
                     format!("Unexpected !important in declaration \"{}\"", decl.property),
                 )
                 .severity(self.default_severity())
-                .span(Span::new(decl.span.offset, decl.span.length));
+                .span(diag_span);
 
                 if let Some(fix) = fix_opt {
                     diag = diag.fix(fix);

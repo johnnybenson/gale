@@ -235,12 +235,58 @@ fn is_first_nested_by_source(source: &str, offset: usize) -> bool {
 }
 
 /// Check if the previous sibling is a single-line comment.
-fn prev_is_single_line_comment(nodes: &[CssNode], index: usize) -> bool {
+///
+/// Matches Stylelint's `isAfterSingleLineComment()` which considers ANY
+/// comment that occupies a single line — both `//` line comments and
+/// `/* … */` block comments that start and end on the same line.
+///
+/// An extra adjacency check verifies that the comment's span actually ends
+/// near the current rule's offset.  This guards against SCSS `//` comments
+/// that the parser may hoist out of nested blocks into the root node list,
+/// which would otherwise make a root-level rule incorrectly appear to follow
+/// a comment.
+fn prev_is_single_line_comment(
+    nodes: &[CssNode],
+    index: usize,
+    source: &str,
+    rule_offset: usize,
+) -> bool {
     if index == 0 {
         return false;
     }
     match &nodes[index - 1] {
-        CssNode::Comment(c) => c.is_line,
+        CssNode::Comment(c) => {
+            // Adjacency check: the comment must end on or just before the
+            // rule in the source.  Allow up to a few hundred bytes of
+            // whitespace/newlines between them (generous to accommodate
+            // indentation), but reject comments that are far away (inside
+            // a different block).
+            let comment_end = c.span.offset + c.span.length;
+            if rule_offset > comment_end + 200 {
+                return false;
+            }
+            // Also verify the text between the comment end and the rule
+            // offset contains only whitespace.
+            if comment_end <= rule_offset && comment_end <= source.len() {
+                let between = &source[comment_end..rule_offset.min(source.len())];
+                if between.chars().any(|ch| !ch.is_whitespace()) {
+                    return false;
+                }
+            }
+
+            // SCSS // comments are always single-line.
+            if c.is_line {
+                return true;
+            }
+            // For block comments, check if they occupy a single line in source.
+            let start = c.span.offset;
+            let end = (start + c.span.length).min(source.len());
+            if start < source.len() {
+                !source[start..end].contains('\n')
+            } else {
+                false
+            }
+        }
         _ => false,
     }
 }
@@ -271,9 +317,10 @@ fn prev_line_is_comment(source: &str, offset: usize) -> bool {
 }
 
 /// Source-based check: is the non-empty line immediately before `offset` a
-/// single-line (`//`) comment?  This catches SCSS `//` comments that may not
-/// appear in the AST.  Unlike `prev_line_is_comment` this intentionally does
-/// **not** match `/* … */` block comments.
+/// single-line comment?  This catches SCSS `//` comments that may not
+/// appear in the AST.  Matches Stylelint's `isAfterSingleLineComment()`
+/// which considers both `//` comments and single-line `/* … */` block
+/// comments.
 fn prev_line_is_single_line_comment(source: &str, offset: usize) -> bool {
     if offset == 0 || offset > source.len() {
         return false;
@@ -284,7 +331,7 @@ fn prev_line_is_single_line_comment(source: &str, offset: usize) -> bool {
     let trimmed = trimmed.strip_suffix('\r').unwrap_or(trimmed);
     let line_start = trimmed.rfind('\n').map(|p| p + 1).unwrap_or(0);
     let line = trimmed[line_start..].trim();
-    line.starts_with("//")
+    line.starts_with("//") || (line.starts_with("/*") && line.ends_with("*/"))
 }
 
 /// Check whether a selector contains preprocessor interpolation (`#{`, `@{`)
@@ -325,6 +372,13 @@ fn check_nodes(
             // interpolation (e.g. `.#{$prefix}--foo`) because they are not
             // "standard syntax".  Match that behavior.
             if has_interpolation(&style.selector) {
+                check_children(rule_impl, style, ctx, opts, diags);
+                continue;
+            }
+
+            // Stylelint skips SCSS placeholder selectors (`%placeholder`).
+            // These are non-standard syntax used with `@extend`.
+            if style.selector.trim_start().starts_with('%') {
                 check_children(rule_impl, style, ctx, opts, diags);
                 continue;
             }
@@ -405,7 +459,7 @@ fn check_nodes(
             let exception_matched = if opts.except_first_nested && first_nested {
                 true
             } else if opts.except_after_single_line_comment
-                && (prev_is_single_line_comment(nodes, i)
+                && (prev_is_single_line_comment(nodes, i, ctx.source, offset)
                     || prev_line_is_single_line_comment(ctx.source, offset))
             {
                 true
@@ -417,12 +471,12 @@ fn check_nodes(
                 expectation = !expectation;
             }
 
-            // Check and report
+            // Check and report — Stylelint's messages do not include selector text.
             if expectation && !has_empty {
                 diags.push(
                     Diagnostic::new(
                         rule_impl.name(),
-                        format!("Expected empty line before rule \"{}\"", style.selector),
+                        "Expected empty line before rule".to_string(),
                     )
                     .severity(rule_impl.default_severity())
                     .span(Span::new(style.span.offset, style.span.length)),
@@ -431,7 +485,7 @@ fn check_nodes(
                 diags.push(
                     Diagnostic::new(
                         rule_impl.name(),
-                        format!("Unexpected empty line before rule \"{}\"", style.selector),
+                        "Unexpected empty line before rule".to_string(),
                     )
                     .severity(rule_impl.default_severity())
                     .span(Span::new(style.span.offset, style.span.length)),
@@ -524,7 +578,7 @@ mod tests {
         ];
         let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx(src));
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("b"));
+        assert!(d[0].message.contains("Expected empty line before rule"));
     }
 
     #[test]

@@ -28,6 +28,16 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
             return vec![];
         };
 
+        // Stylelint skips rules whose selector contains SCSS interpolation
+        // (`#{...}`) via `isStandardSyntaxRule`. Match that behavior.
+        if matches!(
+            ctx.syntax,
+            gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass
+        ) && rule.selector.contains("#{")
+        {
+            return vec![];
+        }
+
         // Check for ignore options
         let ignore_list: Vec<String> = ctx
             .options
@@ -48,6 +58,11 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
             .iter()
             .any(|s| s == "consecutive-duplicates-with-different-values");
 
+        let is_preprocessor = matches!(
+            ctx.syntax,
+            gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less
+        );
+
         // Track seen properties as (prefix, unprefixed_name) to correctly
         // handle vendor-prefixed properties. `-webkit-transform` and `transform`
         // are NOT duplicates; `-webkit-transform` and `-webkit-transform` ARE.
@@ -57,6 +72,15 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
         let mut diagnostics = Vec::new();
 
         for decl in &rule.declarations {
+            // Skip properties with SCSS/Less interpolation — we can't resolve the
+            // actual name, so duplicate detection would produce false positives.
+            if is_preprocessor && decl.property.contains("#{") {
+                last_prop = Some((
+                    decl.property.to_ascii_lowercase(),
+                    decl.value.to_ascii_lowercase(),
+                ));
+                continue;
+            }
             let name = decl.property.to_ascii_lowercase();
             let value = decl.value.to_ascii_lowercase();
 

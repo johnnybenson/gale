@@ -3069,6 +3069,112 @@ pub fn resolve_config(start_dir: &Path) -> Option<GaleConfig> {
     }))
 }
 
+/// Find the config file that applies to a specific file path.
+///
+/// Walks up from the file's parent directory looking for the nearest config
+/// file — matching Stylelint's cosmiconfig-based per-file resolution.
+pub fn find_config_for_file(file_path: &Path) -> Option<PathBuf> {
+    let dir = if file_path.is_dir() {
+        file_path.to_path_buf()
+    } else {
+        file_path.parent()?.to_path_buf()
+    };
+    find_config(&dir)
+}
+
+/// Resolve the effective configuration for a specific file path.
+///
+/// Walks up from the file's parent directory to find the nearest config file,
+/// then loads and resolves it.  This matches Stylelint's behaviour where each
+/// file is linted with the closest config in the directory hierarchy (not
+/// necessarily the CWD config).
+pub fn resolve_config_for_file(file_path: &Path) -> Option<GaleConfig> {
+    let path = find_config_for_file(file_path)?;
+    Some(load_config(&path).unwrap_or_else(|err| {
+        eprintln!("Warning: failed to load config {}: {err}", path.display());
+        GaleConfig::default()
+    }))
+}
+
+/// A config resolver that caches resolved configs by the config file path.
+///
+/// In monorepo-style projects (like Carbon), different subdirectories may have
+/// their own stylelint config that overrides the root config.  This resolver
+/// ensures each file is linted with its nearest config (matching Stylelint's
+/// cosmiconfig behaviour) while avoiding redundant config resolution.
+pub struct ConfigResolver {
+    /// Cache: config file path -> resolved config.
+    cache: HashMap<PathBuf, GaleConfig>,
+    /// Cache: directory path -> config file path (or None if no config found).
+    dir_cache: HashMap<PathBuf, Option<PathBuf>>,
+}
+
+impl ConfigResolver {
+    pub fn new() -> Self {
+        Self {
+            cache: HashMap::new(),
+            dir_cache: HashMap::new(),
+        }
+    }
+
+    /// Seed the resolver with a known config, so that files resolving to this
+    /// config file path get the pre-loaded config without re-loading from disk.
+    pub fn seed(&mut self, config_path: PathBuf, config: GaleConfig) {
+        self.cache.insert(config_path, config);
+    }
+
+    /// Find the config file path for a given file, using the directory cache.
+    fn find_config_path(&mut self, file_path: &Path) -> Option<PathBuf> {
+        let dir = if file_path.is_dir() {
+            file_path.to_path_buf()
+        } else {
+            file_path.parent().unwrap_or(Path::new(".")).to_path_buf()
+        };
+
+        // Check directory cache first.
+        if let Some(cached) = self.dir_cache.get(&dir) {
+            return cached.clone();
+        }
+
+        let config_path = find_config(&dir);
+        self.dir_cache.insert(dir, config_path.clone());
+        config_path
+    }
+
+    /// Resolve the effective config for a given file path.
+    ///
+    /// Returns `None` if no config file is found anywhere in the directory
+    /// hierarchy.  Results are cached by config file path.
+    pub fn resolve_for_file(&mut self, file_path: &Path) -> Option<&GaleConfig> {
+        let config_path = self.find_config_path(file_path)?;
+
+        // Load and cache the config if not already cached.
+        if !self.cache.contains_key(&config_path) {
+            let config = load_config(&config_path).unwrap_or_else(|err| {
+                eprintln!(
+                    "Warning: failed to load config {}: {err}",
+                    config_path.display()
+                );
+                GaleConfig::default()
+            });
+            self.cache.insert(config_path.clone(), config);
+        }
+
+        self.cache.get(&config_path)
+    }
+
+    /// Check whether there are multiple distinct config files in play.
+    pub fn has_multiple_configs(&self) -> bool {
+        self.cache.len() > 1
+    }
+}
+
+impl Default for ConfigResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
