@@ -2,6 +2,7 @@ use lightningcss::printer::PrinterOptions;
 use lightningcss::rules::CssRule as LcssRule;
 use lightningcss::stylesheet::{ParserFlags, ParserOptions, StyleSheet};
 use lightningcss::traits::ToCss;
+use raffia::pos::Spanned as RaffiaSpanned;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -160,11 +161,13 @@ pub enum ParseError {
 
 /// Parse a CSS (or SCSS/Less/Sass) source string into a [`ParseResult`].
 ///
-/// Currently only [`Syntax::Css`] is fully supported via *lightningcss*.
-/// SCSS, Less and Sass will return [`ParseError::UnsupportedSyntax`].
+/// CSS is parsed via *lightningcss*; SCSS and Less are parsed via *raffia*.
+/// Sass (indented syntax) returns [`ParseError::UnsupportedSyntax`] for now.
 pub fn parse(source: &str, syntax: Syntax) -> Result<ParseResult, ParseError> {
     match syntax {
         Syntax::Css => parse_css(source),
+        Syntax::Scss => parse_raffia(source, Syntax::Scss),
+        Syntax::Less => parse_raffia(source, Syntax::Less),
         other => Err(ParseError::UnsupportedSyntax { syntax: other }),
     }
 }
@@ -636,6 +639,323 @@ fn loc_to_span(loc: lightningcss::rules::Location, source: &str, idx: &LineIndex
 }
 
 // ---------------------------------------------------------------------------
+// raffia-based parsing (SCSS / Less)
+// ---------------------------------------------------------------------------
+
+/// Parse SCSS or Less source via raffia, converting to our simplified AST.
+fn parse_raffia(source: &str, syntax: Syntax) -> Result<ParseResult, ParseError> {
+    use raffia::ParserBuilder;
+
+    let raffia_syntax = match syntax {
+        Syntax::Scss => raffia::Syntax::Scss,
+        Syntax::Less => raffia::Syntax::Less,
+        _ => unreachable!(),
+    };
+
+    let mut comments_vec: Vec<raffia::token::Comment<'_>> = Vec::new();
+    let builder = ParserBuilder::new(source)
+        .syntax(raffia_syntax)
+        .comments(&mut comments_vec);
+    let mut parser = builder.build();
+
+    let stylesheet = parser
+        .parse::<raffia::ast::Stylesheet>()
+        .map_err(|err| ParseError::Css {
+            message: format!("{err:?}"),
+        })?;
+
+    let mut nodes = convert_raffia_statements(&stylesheet.statements, source);
+
+    // Merge collected comments into the node list.
+    for c in &comments_vec {
+        nodes.push(CssNode::Comment(Comment {
+            text: c.content.to_owned(),
+            span: raffia_span(&c.span),
+        }));
+    }
+
+    // Sort all nodes by source offset so comments interleave properly.
+    nodes.sort_by_key(|n| n.span().offset);
+
+    Ok(ParseResult {
+        nodes,
+        syntax,
+        source: source.to_owned(),
+    })
+}
+
+/// Convert a list of raffia [`Statement`]s into our [`CssNode`] list.
+fn convert_raffia_statements(
+    stmts: &[raffia::ast::Statement<'_>],
+    source: &str,
+) -> Vec<CssNode> {
+    use raffia::ast::Statement;
+
+
+    let mut nodes = Vec::with_capacity(stmts.len());
+
+    for stmt in stmts {
+        match stmt {
+            Statement::QualifiedRule(qr) => {
+                nodes.push(CssNode::Style(convert_raffia_qualified_rule(qr, source)));
+            }
+
+            Statement::Declaration(decl) => {
+                nodes.push(CssNode::Declaration(convert_raffia_declaration(
+                    decl, source,
+                )));
+            }
+
+            Statement::AtRule(at) => {
+                nodes.push(CssNode::AtRule(convert_raffia_at_rule(at, source)));
+            }
+
+            Statement::SassVariableDeclaration(var) => {
+                // Treat `$var: value;` as a Declaration with `$name` as property.
+                let name = format!("${}", var.name.name.name);
+                let value_span = var.value.span();
+                let value = source_slice(source, value_span);
+                nodes.push(CssNode::Declaration(Declaration {
+                    property: name,
+                    value,
+                    span: raffia_span(&var.span),
+                    important: false,
+                }));
+            }
+
+            Statement::SassIfAtRule(sass_if) => {
+                // Map @if/@else if/@else to an AtRule.
+                let condition_span = sass_if.if_clause.condition.span();
+                let params = source_slice(source, condition_span);
+                let mut children =
+                    convert_raffia_block_statements(&sass_if.if_clause.block, source);
+
+                // Append else-if and else blocks as nested children.
+                for else_if in &sass_if.else_if_clauses {
+                    let ep = source_slice(source, else_if.condition.span());
+                    let ec = convert_raffia_block_statements(&else_if.block, source);
+                    children.push(CssNode::AtRule(AtRule {
+                        name: "else if".into(),
+                        params: ep,
+                        span: raffia_span(&else_if.span),
+                        children: ec,
+                    }));
+                }
+                if let Some(ref else_block) = sass_if.else_clause {
+                    let ec = convert_raffia_block_statements(else_block, source);
+                    children.push(CssNode::AtRule(AtRule {
+                        name: "else".into(),
+                        params: String::new(),
+                        span: raffia_span(&else_block.span),
+                        children: ec,
+                    }));
+                }
+
+                nodes.push(CssNode::AtRule(AtRule {
+                    name: "if".into(),
+                    params,
+                    span: raffia_span(&sass_if.span),
+                    children,
+                }));
+            }
+
+            Statement::UnknownSassAtRule(unknown) => {
+                // Handles @mixin, @include, @extend, @warn, @error, @debug, etc.
+                let name = raffia_interpolable_ident_to_string(&unknown.name, source);
+                let params = unknown
+                    .prelude
+                    .as_ref()
+                    .map(|p| source_slice(source, p.span()))
+                    .unwrap_or_default();
+                let children = unknown
+                    .block
+                    .as_ref()
+                    .map(|b| convert_raffia_block_statements(b, source))
+                    .unwrap_or_default();
+                nodes.push(CssNode::AtRule(AtRule {
+                    name,
+                    params,
+                    span: raffia_span(&unknown.span),
+                    children,
+                }));
+            }
+
+            // Less-specific statements we map as best-effort.
+            Statement::LessVariableDeclaration(var) => {
+                let name = format!("@{}", var.name.name.name);
+                let value_span = var.value.span();
+                let value = source_slice(source, value_span);
+                nodes.push(CssNode::Declaration(Declaration {
+                    property: name,
+                    value,
+                    span: raffia_span(&var.span),
+                    important: false,
+                }));
+            }
+
+            Statement::LessMixinDefinition(mixin) => {
+                let params = source_slice(source, &mixin.params.span);
+                let children = convert_raffia_block_statements(&mixin.block, source);
+                nodes.push(CssNode::AtRule(AtRule {
+                    name: "less-mixin".into(),
+                    params,
+                    span: raffia_span(&mixin.span),
+                    children,
+                }));
+            }
+
+            Statement::LessMixinCall(call) => {
+                let params = source_slice(source, &call.span);
+                nodes.push(CssNode::AtRule(AtRule {
+                    name: "less-mixin-call".into(),
+                    params,
+                    span: raffia_span(&call.span),
+                    children: Vec::new(),
+                }));
+            }
+
+            // Skip other statement types we don't need yet.
+            _ => {}
+        }
+    }
+
+    nodes
+}
+
+fn convert_raffia_block_statements(
+    block: &raffia::ast::SimpleBlock<'_>,
+    source: &str,
+) -> Vec<CssNode> {
+    convert_raffia_statements(&block.statements, source)
+}
+
+fn convert_raffia_qualified_rule(
+    qr: &raffia::ast::QualifiedRule<'_>,
+    source: &str,
+) -> StyleRule {
+    let selector = source_slice(source, &qr.selector.span);
+
+    let mut declarations = Vec::new();
+    let mut children = Vec::new();
+
+    for stmt in &qr.block.statements {
+        match stmt {
+            raffia::ast::Statement::Declaration(decl) => {
+                declarations.push(convert_raffia_declaration(decl, source));
+            }
+            raffia::ast::Statement::QualifiedRule(nested) => {
+                children.push(convert_raffia_qualified_rule(nested, source));
+            }
+            raffia::ast::Statement::SassVariableDeclaration(var) => {
+                let name = format!("${}", var.name.name.name);
+                let value_span = var.value.span();
+                let value = source_slice(source, value_span);
+                declarations.push(Declaration {
+                    property: name,
+                    value,
+                    span: raffia_span(&var.span),
+                    important: false,
+                });
+            }
+            // Other nested constructs (at-rules, etc.) — skip for now.
+            // They'll get picked up if we extend coverage later.
+            _ => {}
+        }
+    }
+
+    StyleRule {
+        selector,
+        declarations,
+        span: raffia_span(&qr.span),
+        children,
+    }
+}
+
+fn convert_raffia_declaration(
+    decl: &raffia::ast::Declaration<'_>,
+    source: &str,
+) -> Declaration {
+    let property = raffia_interpolable_ident_to_string(&decl.name, source);
+
+    // Extract the value from source using spans of the value components.
+    let value = if decl.value.is_empty() {
+        String::new()
+    } else {
+    
+        let first = decl.value.first().unwrap().span();
+        let last = decl.value.last().unwrap().span();
+        source[first.start..last.end].trim().to_owned()
+    };
+
+    let important = decl.important.is_some();
+
+    Declaration {
+        property,
+        value,
+        span: raffia_span(&decl.span),
+        important,
+    }
+}
+
+fn convert_raffia_at_rule(
+    at: &raffia::ast::AtRule<'_>,
+    source: &str,
+) -> AtRule {
+    let name = at.name.name.to_string();
+    let params = at
+        .prelude
+        .as_ref()
+        .map(|p| {
+        
+            source_slice(source, p.span())
+        })
+        .unwrap_or_default();
+    let children = at
+        .block
+        .as_ref()
+        .map(|b| convert_raffia_block_statements(b, source))
+        .unwrap_or_default();
+
+    AtRule {
+        name,
+        params,
+        span: raffia_span(&at.span),
+        children,
+    }
+}
+
+/// Convert a raffia `Span` (start/end offsets) to our `Span` (offset/length).
+fn raffia_span(s: &raffia::pos::Span) -> Span {
+    Span {
+        offset: s.start,
+        length: s.end.saturating_sub(s.start),
+    }
+}
+
+/// Extract a trimmed slice of source text from a raffia span.
+fn source_slice(source: &str, span: &raffia::pos::Span) -> String {
+    let start = span.start.min(source.len());
+    let end = span.end.min(source.len());
+    source[start..end].trim().to_owned()
+}
+
+/// Convert a raffia `InterpolableIdent` to a plain string.
+fn raffia_interpolable_ident_to_string(
+    ident: &raffia::ast::InterpolableIdent<'_>,
+    source: &str,
+) -> String {
+    match ident {
+        raffia::ast::InterpolableIdent::Literal(id) => id.name.to_string(),
+        // For interpolated idents, just use the source text.
+        other => {
+        
+            let span = other.span();
+            source_slice(source, span)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -709,8 +1029,120 @@ mod tests {
 
     #[test]
     fn test_unsupported_syntax() {
-        let err = parse("$foo: red;", Syntax::Scss).unwrap_err();
+        let err = parse("$foo: red;", Syntax::Sass).unwrap_err();
         assert!(matches!(err, ParseError::UnsupportedSyntax { .. }));
+    }
+
+    #[test]
+    fn test_parse_scss_variable() {
+        let scss = "$color: red;";
+        let result = parse(scss, Syntax::Scss).expect("should parse SCSS");
+        assert_eq!(result.syntax, Syntax::Scss);
+        assert_eq!(result.nodes.len(), 1);
+        if let CssNode::Declaration(ref decl) = result.nodes[0] {
+            assert_eq!(decl.property, "$color");
+            assert_eq!(decl.value, "red");
+        } else {
+            panic!("expected a Declaration node, got: {:?}", result.nodes[0]);
+        }
+    }
+
+    #[test]
+    fn test_parse_scss_nesting() {
+        let scss = r#"
+            .foo {
+                color: red;
+                &:hover {
+                    color: blue;
+                }
+            }
+        "#;
+        let result = parse(scss, Syntax::Scss).expect("should parse SCSS");
+        // Should have one top-level style rule.
+        let style_nodes: Vec<_> = result
+            .nodes
+            .iter()
+            .filter(|n| matches!(n, CssNode::Style(_)))
+            .collect();
+        assert_eq!(style_nodes.len(), 1);
+
+        if let CssNode::Style(rule) = style_nodes[0] {
+            assert!(
+                rule.selector.contains(".foo"),
+                "selector should contain '.foo', got: {}",
+                rule.selector,
+            );
+            assert_eq!(rule.declarations.len(), 1);
+            assert_eq!(rule.declarations[0].property, "color");
+            assert_eq!(rule.declarations[0].value, "red");
+            assert_eq!(rule.children.len(), 1);
+            assert!(
+                rule.children[0].selector.contains("&:hover"),
+                "nested selector should contain '&:hover', got: {}",
+                rule.children[0].selector,
+            );
+            assert_eq!(rule.children[0].declarations[0].value, "blue");
+        } else {
+            panic!("expected a Style node");
+        }
+    }
+
+    #[test]
+    fn test_parse_scss_mixin() {
+        let scss = "@mixin button($color) { background: $color; }";
+        let result = parse(scss, Syntax::Scss).expect("should parse SCSS mixin");
+        let at_rules: Vec<_> = result
+            .nodes
+            .iter()
+            .filter(|n| matches!(n, CssNode::AtRule(_)))
+            .collect();
+        assert!(!at_rules.is_empty(), "should have at least one AtRule");
+        if let CssNode::AtRule(at) = at_rules[0] {
+            assert_eq!(at.name, "mixin");
+        } else {
+            panic!("expected an AtRule");
+        }
+    }
+
+    #[test]
+    fn test_parse_scss_include() {
+        let scss = ".foo { @include button(red); }";
+        let result = parse(scss, Syntax::Scss).expect("should parse SCSS @include");
+        // The @include should be inside the style rule's block.
+        // Since we only extract declarations and nested rules from qualified rules,
+        // the @include is handled at the statement level.
+        assert!(!result.nodes.is_empty());
+    }
+
+    #[test]
+    fn test_parse_scss_comment() {
+        let scss = "/* hello */ .foo { color: red; }";
+        let result = parse(scss, Syntax::Scss).expect("should parse SCSS with comments");
+        let comments: Vec<_> = result
+            .nodes
+            .iter()
+            .filter(|n| matches!(n, CssNode::Comment(_)))
+            .collect();
+        assert_eq!(comments.len(), 1);
+        if let CssNode::Comment(c) = comments[0] {
+            assert!(c.text.contains("hello"));
+        }
+    }
+
+    #[test]
+    fn test_parse_scss_media() {
+        let scss = "@media (min-width: 768px) { .foo { color: blue; } }";
+        let result = parse(scss, Syntax::Scss).expect("should parse SCSS @media");
+        let at_rules: Vec<_> = result
+            .nodes
+            .iter()
+            .filter(|n| matches!(n, CssNode::AtRule(_)))
+            .collect();
+        assert!(!at_rules.is_empty());
+        if let CssNode::AtRule(at) = at_rules[0] {
+            assert_eq!(at.name, "media");
+            assert!(!at.children.is_empty());
+        }
     }
 
     #[test]

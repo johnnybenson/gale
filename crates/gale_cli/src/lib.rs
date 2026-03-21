@@ -2,7 +2,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Parser;
 use ignore::WalkBuilder;
 use rayon::prelude::*;
@@ -22,8 +22,12 @@ use gale_linter::{LintRunner, RuleRegistry};
 #[command(name = "gale", about = "An extremely fast CSS linter, written in Rust")]
 pub struct Cli {
     /// Files or glob patterns to lint
-    #[arg(required_unless_present = "stdin")]
+    #[arg(required_unless_present_any = ["stdin", "init"])]
     files: Vec<String>,
+
+    /// Generate a starter gale.json config file in the current directory
+    #[arg(long)]
+    init: bool,
 
     /// Read source from stdin instead of files
     #[arg(long)]
@@ -160,6 +164,38 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
 }
 
 // ---------------------------------------------------------------------------
+// Config initialisation (--init)
+// ---------------------------------------------------------------------------
+
+/// Config file names that, if present, prevent `--init` from creating a new one.
+const EXISTING_CONFIG_FILES: &[&str] = &["gale.json", "gale.toml", ".stylelintrc.json"];
+
+fn generate_init_config() -> Result<()> {
+    let cwd = std::env::current_dir()?;
+
+    for name in EXISTING_CONFIG_FILES {
+        let path = cwd.join(name);
+        if path.exists() {
+            bail!(
+                "Configuration file already exists: {}",
+                path.display()
+            );
+        }
+    }
+
+    let config_content = r#"{
+  "extends": "gale:recommended",
+  "rules": {}
+}
+"#;
+
+    let config_path = cwd.join("gale.json");
+    std::fs::write(&config_path, config_content)?;
+    println!("Created gale.json with recommended configuration.");
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Public entry point
 // ---------------------------------------------------------------------------
 
@@ -173,6 +209,11 @@ pub fn run() -> Result<()> {
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
         )
         .init();
+
+    // Handle --init: generate a starter config file and exit early.
+    if cli.init {
+        return generate_init_config();
+    }
 
     // Resolve configuration.
     let config = if let Some(ref cfg_path) = cli.config {
