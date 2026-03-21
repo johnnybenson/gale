@@ -1,0 +1,5 @@
+/target
+/benchmarks/fixtures/
+*.swp
+*.swo
+.DS_Store

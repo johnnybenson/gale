@@ -1,0 +1,19 @@
+[package]
+name = "gale_cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CLI frontend for the Gale CSS linter"
+
+[dependencies]
+gale_linter = { workspace = true }
+gale_config = { workspace = true }
+gale_css_parser = { workspace = true }
+gale_formatter = { workspace = true }
+gale_diagnostics = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+ignore = { workspace = true }
+rayon = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

@@ -1,0 +1,157 @@
+use gale_css_parser::CssNode;
+use gale_diagnostics::{Diagnostic, Severity, Span};
+
+use crate::rule::{Rule, RuleContext};
+
+/// Reports when a `font-family` declaration does not end with a generic family keyword.
+///
+/// Equivalent to Stylelint's `font-family-no-missing-generic-family-keyword` rule.
+pub struct FontFamilyNoMissingGenericFamilyKeyword;
+
+const GENERIC_FAMILIES: &[&str] = &[
+    "serif",
+    "sans-serif",
+    "monospace",
+    "cursive",
+    "fantasy",
+    "system-ui",
+    "ui-serif",
+    "ui-sans-serif",
+    "ui-monospace",
+    "ui-rounded",
+    "emoji",
+    "math",
+    "fangsong",
+];
+
+impl Rule for FontFamilyNoMissingGenericFamilyKeyword {
+    fn name(&self) -> &'static str {
+        "font-family-no-missing-generic-family-keyword"
+    }
+
+    fn description(&self) -> &'static str {
+        "Require a generic family keyword in font-family declarations"
+    }
+
+    fn default_severity(&self) -> Severity {
+        Severity::Warning
+    }
+
+    fn check(&self, node: &CssNode, _context: &RuleContext) -> Vec<Diagnostic> {
+        let style = match node {
+            CssNode::Style(s) => s,
+            _ => return vec![],
+        };
+
+        let mut diagnostics = Vec::new();
+
+        for decl in &style.declarations {
+            if decl.property != "font-family" {
+                continue;
+            }
+
+            let value = decl.value.trim();
+            if value.is_empty() {
+                continue;
+            }
+
+            // Split by comma and check the last entry.
+            let last_family = match value.rsplit(',').next() {
+                Some(f) => f.trim(),
+                None => continue,
+            };
+
+            // Remove surrounding quotes if present.
+            let last_family_unquoted = last_family
+                .trim_start_matches(|c| c == '"' || c == '\'')
+                .trim_end_matches(|c| c == '"' || c == '\'')
+                .trim();
+
+            let is_generic = GENERIC_FAMILIES
+                .iter()
+                .any(|&g| g.eq_ignore_ascii_case(last_family_unquoted));
+
+            if !is_generic {
+                diagnostics.push(
+                    Diagnostic::new(
+                        self.name(),
+                        "Unexpected missing generic font family",
+                    )
+                    .severity(self.default_severity())
+                    .span(Span::new(decl.span.offset, decl.span.length)),
+                );
+            }
+        }
+
+        diagnostics
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
+
+    fn make_context() -> RuleContext<'static> {
+        RuleContext {
+            file_path: "test.css",
+            source: "",
+            syntax: Syntax::Css,
+        }
+    }
+
+    #[test]
+    fn reports_missing_generic_family() {
+        let rule = FontFamilyNoMissingGenericFamilyKeyword;
+        let node = CssNode::Style(StyleRule {
+            selector: "body".to_string(),
+            declarations: vec![Declaration {
+                property: "font-family".to_string(),
+                value: "Arial, Helvetica".to_string(),
+                span: ParserSpan::new(6, 28),
+                important: false,
+            }],
+            children: vec![],
+            span: ParserSpan::new(0, 36),
+        });
+        let diags = rule.check(&node, &make_context());
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].message.contains("missing generic font family"));
+    }
+
+    #[test]
+    fn ignores_when_generic_family_present() {
+        let rule = FontFamilyNoMissingGenericFamilyKeyword;
+        let node = CssNode::Style(StyleRule {
+            selector: "body".to_string(),
+            declarations: vec![Declaration {
+                property: "font-family".to_string(),
+                value: "Arial, Helvetica, sans-serif".to_string(),
+                span: ParserSpan::new(6, 40),
+                important: false,
+            }],
+            children: vec![],
+            span: ParserSpan::new(0, 48),
+        });
+        let diags = rule.check(&node, &make_context());
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn accepts_system_ui() {
+        let rule = FontFamilyNoMissingGenericFamilyKeyword;
+        let node = CssNode::Style(StyleRule {
+            selector: "body".to_string(),
+            declarations: vec![Declaration {
+                property: "font-family".to_string(),
+                value: "system-ui".to_string(),
+                span: ParserSpan::new(6, 20),
+                important: false,
+            }],
+            children: vec![],
+            span: ParserSpan::new(0, 28),
+        });
+        let diags = rule.check(&node, &make_context());
+        assert!(diags.is_empty());
+    }
+}
