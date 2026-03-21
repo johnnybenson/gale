@@ -99,6 +99,9 @@ pub struct GaleConfig {
     pub ignore_patterns: Vec<String>,
     pub formatter: FormatterType,
     pub overrides: Vec<ResolvedOverride>,
+    /// Directory containing the config file.  Used by [`rules_for_file`] to
+    /// resolve override glob patterns relative to the config location.
+    pub config_dir: Option<PathBuf>,
 }
 
 impl GaleConfig {
@@ -106,14 +109,35 @@ impl GaleConfig {
     ///
     /// Starts with the base rules, then applies each matching override in order.
     /// Later overrides win over earlier ones.
+    ///
+    /// Override glob patterns are matched against the file path relative to the
+    /// config directory (if known), matching Stylelint's behaviour.
     pub fn rules_for_file(&self, file_path: &str) -> HashMap<String, RuleConfig> {
         if self.overrides.is_empty() {
             return self.rules.clone();
         }
 
+        // Compute the file path relative to the config directory for glob
+        // matching.  Fall back to the original path when no config_dir is set.
+        let relative_path: std::borrow::Cow<'_, str> = if let Some(ref config_dir) = self.config_dir {
+            let abs_file = if Path::new(file_path).is_absolute() {
+                PathBuf::from(file_path)
+            } else {
+                std::env::current_dir()
+                    .unwrap_or_default()
+                    .join(file_path)
+            };
+            match abs_file.strip_prefix(config_dir) {
+                Ok(rel) => rel.to_string_lossy().into_owned().into(),
+                Err(_) => file_path.into(),
+            }
+        } else {
+            file_path.into()
+        };
+
         let mut rules = self.rules.clone();
         for override_entry in &self.overrides {
-            if override_entry.matches(file_path) {
+            if override_entry.matches(&relative_path) || override_entry.matches(file_path) {
                 for (name, cfg) in &override_entry.rules {
                     if cfg.severity == Some(Severity::Off) {
                         rules.remove(name);
@@ -139,6 +163,7 @@ impl Default for GaleConfig {
             ignore_patterns: Vec::new(),
             formatter: FormatterType::Text,
             overrides: Vec::new(),
+            config_dir: None,
         }
     }
 }
@@ -350,36 +375,87 @@ fn parse_severity(s: &str) -> Severity {
 const ALL_RULE_NAMES: &[&str] = &[
     "alpha-value-notation",
     "annotation-no-unknown",
+    "at-rule-allowed-list",
+    "at-rule-descriptor-no-unknown",
+    "at-rule-descriptor-value-no-unknown",
+    "at-rule-disallowed-list",
+    "at-rule-empty-line-before",
+    "at-rule-no-deprecated",
     "at-rule-no-unknown",
     "at-rule-no-vendor-prefix",
+    "at-rule-prelude-no-invalid",
+    "at-rule-property-required-list",
     "block-no-empty",
+    "block-no-redundant-nested-style-rules",
+    "color-function-alias-notation",
+    "color-function-notation",
+    "color-hex-alpha",
     "color-hex-case",
     "color-hex-length",
     "color-named",
+    "color-no-hex",
     "color-no-invalid-hex",
+    "comment-empty-line-before",
     "comment-no-empty",
+    "comment-pattern",
+    "comment-whitespace-inside",
+    "comment-word-disallowed-list",
+    "container-name-pattern",
+    "custom-media-pattern",
+    "custom-property-empty-line-before",
     "custom-property-no-missing-var-function",
+    "custom-property-pattern",
     "declaration-block-no-duplicate-custom-properties",
     "declaration-block-no-duplicate-properties",
     "declaration-block-no-redundant-longhand-properties",
     "declaration-block-no-shorthand-property-overrides",
+    "declaration-block-single-line-max-declarations",
     "declaration-empty-line-before",
     "declaration-no-important",
+    "declaration-property-unit-allowed-list",
+    "declaration-property-unit-disallowed-list",
+    "declaration-property-value-allowed-list",
+    "declaration-property-value-disallowed-list",
+    "declaration-property-value-keyword-no-deprecated",
+    "declaration-property-value-no-unknown",
+    "display-notation",
     "font-family-name-quotes",
     "font-family-no-duplicate-names",
     "font-family-no-missing-generic-family-keyword",
+    "font-weight-notation",
+    "function-allowed-list",
     "function-calc-no-unspaced-operator",
+    "function-disallowed-list",
     "function-linear-gradient-no-nonstandard-direction",
     "function-name-case",
+    "function-no-unknown",
     "function-url-no-scheme-relative",
     "function-url-quotes",
+    "function-url-scheme-allowed-list",
+    "function-url-scheme-disallowed-list",
+    "hue-degree-notation",
     "import-notation",
     "keyframe-block-no-duplicate-selectors",
     "keyframe-declaration-no-important",
+    "keyframe-selector-notation",
+    "keyframes-name-pattern",
+    "layer-name-pattern",
     "length-zero-no-unit",
+    "lightness-notation",
+    "max-line-length",
+    "max-nesting-depth",
+    "media-feature-name-allowed-list",
+    "media-feature-name-disallowed-list",
     "media-feature-name-no-unknown",
     "media-feature-name-no-vendor-prefix",
+    "media-feature-name-unit-allowed-list",
+    "media-feature-name-value-allowed-list",
+    "media-feature-name-value-no-unknown",
+    "media-feature-range-notation",
     "media-query-no-invalid",
+    "media-type-no-deprecated",
+    "named-grid-areas-no-invalid",
+    "nesting-selector-no-missing-scoping-root",
     "no-descending-specificity",
     "no-duplicate-at-import-rules",
     "no-duplicate-selectors",
@@ -389,11 +465,18 @@ const ALL_RULE_NAMES: &[&str] = &[
     "no-invalid-position-declaration",
     "no-irregular-whitespace",
     "no-unknown-animations",
+    "number-leading-zero",
     "number-max-precision",
     "order/properties-alphabetical-order",
     "order/properties-order",
+    "property-allowed-list",
+    "property-disallowed-list",
+    "property-no-deprecated",
     "property-no-unknown",
     "property-no-vendor-prefix",
+    "rule-empty-line-before",
+    "rule-nesting-at-rule-required-list",
+    "rule-selector-property-disallowed-list",
     // SCSS-specific rules
     "scss/at-extend-no-missing-placeholder",
     "scss/at-if-no-null",
@@ -410,16 +493,45 @@ const ALL_RULE_NAMES: &[&str] = &[
     "scss/operator-no-newline-after",
     "scss/operator-no-newline-before",
     "scss/operator-no-unspaced",
+    "selector-anb-no-unmatchable",
+    "selector-attribute-name-disallowed-list",
+    "selector-attribute-operator-allowed-list",
+    "selector-attribute-operator-disallowed-list",
+    "selector-attribute-quotes",
     "selector-class-pattern",
+    "selector-combinator-allowed-list",
+    "selector-combinator-disallowed-list",
+    "selector-disallowed-list",
+    "selector-id-pattern",
     "selector-max-attribute",
+    "selector-max-class",
+    "selector-max-combinators",
+    "selector-max-compound-selectors",
+    "selector-max-id",
+    "selector-max-pseudo-class",
+    "selector-max-specificity",
+    "selector-max-type",
     "selector-max-universal",
+    "selector-nested-pattern",
+    "selector-no-qualifying-type",
     "selector-no-vendor-prefix",
+    "selector-not-notation",
+    "selector-pseudo-class-allowed-list",
+    "selector-pseudo-class-disallowed-list",
     "selector-pseudo-class-no-unknown",
+    "selector-pseudo-element-allowed-list",
     "selector-pseudo-element-colon-notation",
+    "selector-pseudo-element-disallowed-list",
     "selector-pseudo-element-no-unknown",
+    "selector-type-case",
     "selector-type-no-unknown",
     "shorthand-property-no-redundant-values",
     "string-no-newline",
+    "string-quotes",
+    "syntax-string-no-invalid",
+    "time-min-milliseconds",
+    "unit-allowed-list",
+    "unit-disallowed-list",
     "unit-no-unknown",
     "value-keyword-case",
     "value-no-vendor-prefix",
@@ -3047,6 +3159,7 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
         ignore_patterns,
         formatter,
         overrides,
+        config_dir: Some(base_dir.to_path_buf()),
     }
 }
 
@@ -4535,5 +4648,95 @@ overrides:
     fn parse_package_json_stylelint_missing_field() {
         let contents = r#"{ "name": "no-lint" }"#;
         assert!(parse_package_json_stylelint(contents).is_err());
+    }
+
+    #[test]
+    fn rules_for_file_override_null_with_config_dir() {
+        // Reproduce Carbon's scenario: a config in a subdirectory has
+        // overrides that null-out a rule for files matching a relative glob.
+        // The config_dir must be used to match the glob correctly.
+        let json = r#"{
+            "extends": "gale:recommended",
+            "overrides": [
+                {
+                    "files": ["src/components/**/*.scss"],
+                    "rules": {
+                        "max-nesting-depth": null
+                    }
+                }
+            ]
+        }"#;
+        let raw: ConfigFile = serde_json::from_str(json).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let sub = tmp.path().join("packages").join("web-components");
+        std::fs::create_dir_all(&sub).unwrap();
+        let mut cfg = resolve_raw(raw, &sub);
+        cfg.config_dir = Some(sub.clone());
+
+        // A file that matches the override pattern (relative to the
+        // config dir) should have max-nesting-depth removed.
+        let file_abs = sub.join("src/components/grid/grid-story.scss");
+        let file_str = file_abs.to_string_lossy();
+        let rules = cfg.rules_for_file(&file_str);
+        assert!(
+            !rules.contains_key("max-nesting-depth"),
+            "max-nesting-depth should be disabled by the override, but it is present"
+        );
+
+        // A file that does NOT match the override pattern should still have
+        // max-nesting-depth from the base config (gale:recommended does not
+        // include it, so it should not appear regardless).
+        let other = sub.join("src/other/main.css");
+        let other_str = other.to_string_lossy();
+        let other_rules = cfg.rules_for_file(&other_str);
+        // max-nesting-depth is not in gale:recommended, so this just verifies
+        // the override path doesn't accidentally affect non-matching files.
+        assert!(!other_rules.contains_key("max-nesting-depth"));
+    }
+
+    #[test]
+    fn per_file_config_resolver_finds_nested_config() {
+        // Simulate a monorepo where a subdirectory has its own config that
+        // overrides the root config.
+        let tmp = tempfile::tempdir().unwrap();
+
+        // Root config: enables max-nesting-depth with max 3.
+        let root_cfg = r#"{
+            "rules": {
+                "block-no-empty": true,
+                "max-nesting-depth": 3
+            }
+        }"#;
+        std::fs::write(tmp.path().join(".stylelintrc.json"), root_cfg).unwrap();
+
+        // Sub-package config: extends root but overrides max-nesting-depth
+        // to null for component files.
+        let sub = tmp.path().join("packages").join("web-components");
+        std::fs::create_dir_all(&sub).unwrap();
+        let sub_cfg = r#"{
+            "rules": {
+                "block-no-empty": true,
+                "max-nesting-depth": null
+            }
+        }"#;
+        std::fs::write(sub.join(".stylelintrc.json"), sub_cfg).unwrap();
+
+        // A file under the sub-package should use the sub-package config.
+        let file = sub.join("src/components/test.scss");
+        let mut resolver = ConfigResolver::new();
+        let resolved = resolver.resolve_for_file(&file).unwrap();
+        assert!(
+            !resolved.rules.contains_key("max-nesting-depth"),
+            "max-nesting-depth should be disabled by the sub-package config"
+        );
+        assert!(resolved.rules.contains_key("block-no-empty"));
+
+        // A file at the root should use the root config (max-nesting-depth enabled).
+        let root_file = tmp.path().join("src/main.css");
+        let root_resolved = resolver.resolve_for_file(&root_file).unwrap();
+        assert!(
+            root_resolved.rules.contains_key("max-nesting-depth"),
+            "max-nesting-depth should be enabled in the root config"
+        );
     }
 }

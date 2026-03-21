@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use gale_css_parser::CssNode;
 use gale_diagnostics::{Diagnostic, Severity, Span};
@@ -63,10 +63,12 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
             gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less
         );
 
-        // Track seen properties as (prefix, unprefixed_name) to correctly
-        // handle vendor-prefixed properties. `-webkit-transform` and `transform`
-        // are NOT duplicates; `-webkit-transform` and `-webkit-transform` ARE.
-        let mut seen: HashSet<(String, String)> = HashSet::new();
+        // Track seen properties as (prefix, unprefixed_name) -> (original_property, span)
+        // to correctly handle vendor-prefixed properties. `-webkit-transform` and
+        // `transform` are NOT duplicates; `-webkit-transform` and `-webkit-transform` ARE.
+        // We store the first occurrence's property name and span so we can report
+        // duplicates at the first occurrence's position (matching Stylelint behavior).
+        let mut seen: HashMap<(String, String), (String, gale_css_parser::Span)> = HashMap::new();
         // Track last property name+value for consecutive duplicate checks
         let mut last_prop: Option<(String, String)> = None;
         let mut diagnostics = Vec::new();
@@ -87,7 +89,7 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
             let (prefix, unprefixed) = split_vendor_prefix_from_prop(&name);
             let key = (prefix.to_string(), unprefixed.to_string());
 
-            if !seen.insert(key) {
+            if let Some((first_property, first_span)) = seen.get(&key) {
                 let is_consecutive = last_prop
                     .as_ref()
                     .map(|(prev_name, _)| prev_name == &name)
@@ -118,15 +120,18 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                 };
 
                 if !should_ignore {
+                    // Report at the first occurrence's position, matching Stylelint behavior.
                     diagnostics.push(
                         Diagnostic::new(
                             self.name(),
-                            format!("Unexpected duplicate property \"{}\"", decl.property),
+                            format!("Unexpected duplicate \"{}\"", first_property),
                         )
                         .severity(self.default_severity())
-                        .span(Span::new(decl.span.offset, decl.span.length)),
+                        .span(Span::new(first_span.offset, first_span.length)),
                     );
                 }
+            } else {
+                seen.insert(key, (decl.property.clone(), decl.span.clone()));
             }
 
             last_prop = Some((name, value));
@@ -230,7 +235,7 @@ mod tests {
         });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].message, "Unexpected duplicate property \"color\"");
+        assert_eq!(diags[0].message, "Unexpected duplicate \"color\"");
     }
 
     #[test]

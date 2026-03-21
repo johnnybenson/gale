@@ -193,11 +193,18 @@ def run_stylelint(clone_dir: Path, files: list[str]) -> list[dict] | None:
         cmd = [str(stylelint_bin), "--formatter", "json", "--no-color"] + batch
         result = run_cmd(cmd, cwd=str(clone_dir), timeout=120)
 
-        # Stylelint 16+ outputs JSON to stderr instead of stdout.
-        # Try stdout first, then fall back to stderr.
+        # Stylelint 16+ may output JSON to stderr instead of stdout.
+        # Some versions also prepend DeprecationWarning text to stderr.
+        # Try stdout first, then fall back to extracting JSON from stderr.
         output = result.stdout.strip()
         if not output:
-            output = result.stderr.strip()
+            stderr = result.stderr.strip()
+            # Try to extract JSON array from stderr (skip any preamble warnings)
+            json_start = stderr.find("[{")
+            if json_start >= 0:
+                output = stderr[json_start:]
+            else:
+                output = stderr
 
         if result.returncode == 2 and not output:
             print(f"  [error] Stylelint config error (exit 2, no output)")

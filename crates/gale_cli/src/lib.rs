@@ -11,7 +11,7 @@ use ignore::WalkBuilder;
 use rayon::prelude::*;
 use tracing::debug;
 
-use gale_config::GaleConfig;
+use gale_config::{ConfigResolver, GaleConfig};
 use gale_css_parser::detect_syntax;
 use gale_diagnostics::{LintResult, Severity, apply_fixes};
 use gale_formatter::create_formatter;
@@ -328,6 +328,13 @@ pub fn run() -> Result<()> {
     // it resolves to zero rules).  When true we respect whatever the config
     // says — including "no rules".  The "enable all rules" fallback only kicks
     // in when there is genuinely no config file anywhere.
+    //
+    // When `--config` is NOT specified we use a `ConfigResolver` for per-file
+    // config lookup (matching Stylelint's cosmiconfig behaviour where each file
+    // is linted with the closest config in the directory hierarchy).
+    let use_per_file_config = cli.config.is_none();
+    let resolver = Mutex::new(ConfigResolver::new());
+
     let (config, has_config_file) = if let Some(ref cfg_path) = cli.config {
         debug!("Using config file: {}", cfg_path.display());
         let cfg = gale_config::load_config(cfg_path).unwrap_or_else(|err| {
@@ -371,7 +378,19 @@ pub fn run() -> Result<()> {
     // Handle --print-config: print resolved config as JSON and exit.
     if let Some(ref file) = cli.print_config {
         let file_str = file.display().to_string();
-        let effective_rules = config.rules_for_file(&file_str);
+        // Use per-file config resolution when --config is not specified.
+        let file_config;
+        let effective_config = if use_per_file_config {
+            let abs_path = std::env::current_dir()
+                .unwrap_or_default()
+                .join(file);
+            file_config = gale_config::resolve_config_for_file(&abs_path)
+                .unwrap_or_else(|| config.clone());
+            &file_config
+        } else {
+            &config
+        };
+        let effective_rules = effective_config.rules_for_file(&file_str);
         let mut rules_json = serde_json::Map::new();
         for (name, rc) in &effective_rules {
             let severity = rc
@@ -389,7 +408,7 @@ pub fn run() -> Result<()> {
         let output = serde_json::json!({
             "file": file_str,
             "rules": rules_json,
-            "ignorePatterns": config.ignore_patterns,
+            "ignorePatterns": effective_config.ignore_patterns,
         });
         println!("{}", serde_json::to_string_pretty(&output)?);
         return Ok(());
@@ -441,6 +460,65 @@ pub fn run() -> Result<()> {
     );
     let has_overrides = config.has_overrides();
 
+    /// Lint a single file using a fully resolved config.
+    ///
+    /// Extracts enabled rules, options, and severities from the config (applying
+    /// per-file overrides) and runs the linter.
+    fn lint_file_with_resolved_config(
+        runner: &LintRunner,
+        source: &str,
+        file_path: &str,
+        syntax: gale_css_parser::Syntax,
+        config: &GaleConfig,
+    ) -> LintResult {
+        let effective_rules = config.rules_for_file(file_path);
+        let file_enabled: Vec<String> = effective_rules
+            .iter()
+            .filter(|(_, cfg)| {
+                cfg.severity
+                    .as_ref()
+                    .map(|s| !matches!(s, gale_config::Severity::Off))
+                    .unwrap_or(true)
+            })
+            .filter(|(name, _)| runner.has_rule(name))
+            .map(|(name, _)| name.clone())
+            .collect();
+        let override_options: std::collections::HashMap<String, serde_json::Value> =
+            effective_rules
+                .iter()
+                .filter_map(|(name, cfg)| {
+                    cfg.options
+                        .as_ref()
+                        .map(|opts| (name.clone(), opts.clone()))
+                })
+                .collect();
+        let override_severities: std::collections::HashMap<
+            String,
+            gale_diagnostics::Severity,
+        > = effective_rules
+            .iter()
+            .filter_map(|(name, cfg)| {
+                cfg.severity.as_ref().and_then(|s| match s {
+                    gale_config::Severity::Error => {
+                        Some((name.clone(), gale_diagnostics::Severity::Error))
+                    }
+                    gale_config::Severity::Warning => {
+                        Some((name.clone(), gale_diagnostics::Severity::Warning))
+                    }
+                    gale_config::Severity::Off => None,
+                })
+            })
+            .collect();
+        runner.lint_source_with_rules(
+            source,
+            file_path,
+            syntax,
+            &file_enabled,
+            &override_options,
+            &override_severities,
+        )
+    }
+
     /// Lint a single file, computing the effective rules from overrides if needed.
     fn lint_file(
         runner: &LintRunner,
@@ -451,54 +529,7 @@ pub fn run() -> Result<()> {
         has_overrides: bool,
     ) -> LintResult {
         if has_overrides {
-            let effective_rules = config.rules_for_file(file_path);
-            let file_enabled: Vec<String> = effective_rules
-                .iter()
-                .filter(|(_, cfg)| {
-                    cfg.severity
-                        .as_ref()
-                        .map(|s| !matches!(s, gale_config::Severity::Off))
-                        .unwrap_or(true)
-                })
-                .filter(|(name, _)| runner.has_rule(name))
-                .map(|(name, _)| name.clone())
-                .collect();
-            // Collect per-rule options from overrides
-            let override_options: std::collections::HashMap<String, serde_json::Value> =
-                effective_rules
-                    .iter()
-                    .filter_map(|(name, cfg)| {
-                        cfg.options
-                            .as_ref()
-                            .map(|opts| (name.clone(), opts.clone()))
-                    })
-                    .collect();
-            // Collect per-rule severity overrides from the effective rules
-            let override_severities: std::collections::HashMap<
-                String,
-                gale_diagnostics::Severity,
-            > = effective_rules
-                .iter()
-                .filter_map(|(name, cfg)| {
-                    cfg.severity.as_ref().and_then(|s| match s {
-                        gale_config::Severity::Error => {
-                            Some((name.clone(), gale_diagnostics::Severity::Error))
-                        }
-                        gale_config::Severity::Warning => {
-                            Some((name.clone(), gale_diagnostics::Severity::Warning))
-                        }
-                        gale_config::Severity::Off => None,
-                    })
-                })
-                .collect();
-            runner.lint_source_with_rules(
-                source,
-                file_path,
-                syntax,
-                &file_enabled,
-                &override_options,
-                &override_severities,
-            )
+            lint_file_with_resolved_config(runner, source, file_path, syntax, config)
         } else {
             runner.lint_source(source, file_path, syntax)
         }
@@ -548,8 +579,17 @@ pub fn run() -> Result<()> {
                     }
 
                     let syntax = detect_syntax(&file_path);
-                    let result =
-                        lint_file(&runner, &source, &file_path, syntax, &config, has_overrides);
+                    let result = if use_per_file_config {
+                        let abs = std::env::current_dir().unwrap_or_default().join(file);
+                        let mut res_guard = resolver.lock().unwrap_or_else(|e| e.into_inner());
+                        let file_cfg = res_guard.resolve_for_file(&abs)
+                            .cloned()
+                            .unwrap_or_else(|| config.clone());
+                        drop(res_guard);
+                        lint_file_with_resolved_config(&runner, &source, &file_path, syntax, &file_cfg)
+                    } else {
+                        lint_file(&runner, &source, &file_path, syntax, &config, has_overrides)
+                    };
 
                     // Update cache with the new result.
                     {
@@ -569,14 +609,26 @@ pub fn run() -> Result<()> {
                     let source = std::fs::read_to_string(file).ok()?;
                     let file_path = file.display().to_string();
                     let syntax = detect_syntax(&file_path);
-                    Some(lint_file(
-                        &runner,
-                        &source,
-                        &file_path,
-                        syntax,
-                        &config,
-                        has_overrides,
-                    ))
+                    if use_per_file_config {
+                        let abs = std::env::current_dir().unwrap_or_default().join(file);
+                        let mut res_guard = resolver.lock().unwrap_or_else(|e| e.into_inner());
+                        let file_cfg = res_guard.resolve_for_file(&abs)
+                            .cloned()
+                            .unwrap_or_else(|| config.clone());
+                        drop(res_guard);
+                        Some(lint_file_with_resolved_config(
+                            &runner, &source, &file_path, syntax, &file_cfg,
+                        ))
+                    } else {
+                        Some(lint_file(
+                            &runner,
+                            &source,
+                            &file_path,
+                            syntax,
+                            &config,
+                            has_overrides,
+                        ))
+                    }
                 })
                 .collect()
         }
