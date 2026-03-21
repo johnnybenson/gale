@@ -49,14 +49,20 @@ fn check_comment_nodes(
         .options
         .and_then(|v| v.get("ignore"))
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().any(|item| item.as_str() == Some("after-comment")))
+        .map(|arr| {
+            arr.iter()
+                .any(|item| item.as_str() == Some("after-comment"))
+        })
         .unwrap_or(false);
 
     let ignore_stylelint_commands = ctx
         .options
         .and_then(|v| v.get("ignore"))
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().any(|item| item.as_str() == Some("stylelint-commands")))
+        .map(|arr| {
+            arr.iter()
+                .any(|item| item.as_str() == Some("stylelint-commands"))
+        })
         .unwrap_or(false);
 
     for (i, node) in nodes.iter().enumerate() {
@@ -77,10 +83,8 @@ fn check_comment_nodes(
             }
 
             // ignore: ["after-comment"] — skip if the previous node is a comment
-            if ignore_after_comment && i > 0 {
-                if matches!(nodes[i - 1], CssNode::Comment(_)) {
-                    continue;
-                }
+            if ignore_after_comment && i > 0 && matches!(nodes[i - 1], CssNode::Comment(_)) {
+                continue;
             }
 
             let offset = comment.span.offset;
@@ -125,7 +129,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source,
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]
@@ -191,7 +197,9 @@ mod tests {
         let ctx = RuleContext {
             file_path: "t.scss",
             source: src,
-            syntax: Syntax::Scss, options: None };
+            syntax: Syntax::Scss,
+            options: None,
+        };
         let d = CommentEmptyLineBefore.check_root(&nodes, &ctx);
         assert!(d.is_empty());
     }

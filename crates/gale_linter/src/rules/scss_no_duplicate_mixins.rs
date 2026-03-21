@@ -107,9 +107,11 @@ mod tests {
     #[test]
     fn skips_non_scss() {
         let nodes = vec![mixin("foo"), mixin("foo")];
-        assert!(ScssNoDuplicateMixins
-            .check_root(&nodes, &css_ctx())
-            .is_empty());
+        assert!(
+            ScssNoDuplicateMixins
+                .check_root(&nodes, &css_ctx())
+                .is_empty()
+        );
     }
 
     #[test]

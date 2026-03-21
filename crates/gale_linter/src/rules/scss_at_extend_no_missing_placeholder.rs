@@ -34,15 +34,17 @@ impl Rule for ScssAtExtendNoMissingPlaceholder {
 
         let params = at.params.trim();
         if !params.starts_with('%') {
-            vec![Diagnostic::new(
-                self.name(),
-                format!(
-                    "Expected @extend to use a %placeholder selector, got \"{}\"",
-                    params
-                ),
-            )
-            .severity(self.default_severity())
-            .span(Span::new(at.span.offset, at.span.length))]
+            vec![
+                Diagnostic::new(
+                    self.name(),
+                    format!(
+                        "Expected @extend to use a %placeholder selector, got \"{}\"",
+                        params
+                    ),
+                )
+                .severity(self.default_severity())
+                .span(Span::new(at.span.offset, at.span.length)),
+            ]
         } else {
             vec![]
         }
@@ -93,9 +95,11 @@ mod tests {
             span: ParserSpan::new(0, 10),
             children: vec![],
         });
-        assert!(ScssAtExtendNoMissingPlaceholder
-            .check(&node, &scss_ctx())
-            .is_empty());
+        assert!(
+            ScssAtExtendNoMissingPlaceholder
+                .check(&node, &scss_ctx())
+                .is_empty()
+        );
     }
 
     #[test]
@@ -106,8 +110,10 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssAtExtendNoMissingPlaceholder
-            .check(&extend(".foo"), &css_ctx)
-            .is_empty());
+        assert!(
+            ScssAtExtendNoMissingPlaceholder
+                .check(&extend(".foo"), &css_ctx)
+                .is_empty()
+        );
     }
 }

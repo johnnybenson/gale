@@ -47,12 +47,14 @@ impl Rule for AtRuleAllowedList {
         if ALLOWED.contains(&name_lower.as_str()) {
             vec![]
         } else {
-            vec![Diagnostic::new(
-                self.name(),
-                format!("Unexpected at-rule \"@{name}\"", name = at_rule.name),
-            )
-            .severity(self.default_severity())
-            .span(Span::new(at_rule.span.offset, at_rule.span.length))]
+            vec![
+                Diagnostic::new(
+                    self.name(),
+                    format!("Unexpected at-rule \"@{name}\"", name = at_rule.name),
+                )
+                .severity(self.default_severity())
+                .span(Span::new(at_rule.span.offset, at_rule.span.length)),
+            ]
         }
     }
 }
@@ -66,7 +68,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn at_rule_node(name: &str) -> CssNode {
@@ -80,9 +84,21 @@ mod tests {
 
     #[test]
     fn allows_standard_at_rules() {
-        assert!(AtRuleAllowedList.check(&at_rule_node("media"), &ctx()).is_empty());
-        assert!(AtRuleAllowedList.check(&at_rule_node("import"), &ctx()).is_empty());
-        assert!(AtRuleAllowedList.check(&at_rule_node("keyframes"), &ctx()).is_empty());
+        assert!(
+            AtRuleAllowedList
+                .check(&at_rule_node("media"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            AtRuleAllowedList
+                .check(&at_rule_node("import"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            AtRuleAllowedList
+                .check(&at_rule_node("keyframes"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
@@ -94,6 +110,10 @@ mod tests {
 
     #[test]
     fn case_insensitive() {
-        assert!(AtRuleAllowedList.check(&at_rule_node("Media"), &ctx()).is_empty());
+        assert!(
+            AtRuleAllowedList
+                .check(&at_rule_node("Media"), &ctx())
+                .is_empty()
+        );
     }
 }

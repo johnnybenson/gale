@@ -29,12 +29,7 @@ impl Rule for StringNoNewline {
 
         if let CssNode::Style(style_rule) = node {
             for decl in &style_rule.declarations {
-                check_value_for_newlines(
-                    &decl.value,
-                    decl.span.offset,
-                    self,
-                    &mut diagnostics,
-                );
+                check_value_for_newlines(&decl.value, decl.span.offset, self, &mut diagnostics);
             }
         }
 
@@ -66,12 +61,9 @@ fn check_value_for_newlines(
                 }
                 if bytes[i] == b'\n' || bytes[i] == b'\r' {
                     diagnostics.push(
-                        Diagnostic::new(
-                            rule.name(),
-                            "Unexpected newline in string",
-                        )
-                        .severity(rule.default_severity())
-                        .span(Span::new(base_offset + string_start, i - string_start)),
+                        Diagnostic::new(rule.name(), "Unexpected newline in string")
+                            .severity(rule.default_severity())
+                            .span(Span::new(base_offset + string_start, i - string_start)),
                     );
                     break;
                 }
@@ -95,7 +87,9 @@ mod tests {
         RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]

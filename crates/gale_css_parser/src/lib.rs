@@ -234,10 +234,9 @@ fn parse_css(source: &str) -> Result<ParseResult, ParseError> {
         ..ParserOptions::default()
     };
 
-    let stylesheet =
-        StyleSheet::parse(source, opts).map_err(|err| ParseError::Css {
-            message: err.to_string(),
-        })?;
+    let stylesheet = StyleSheet::parse(source, opts).map_err(|err| ParseError::Css {
+        message: err.to_string(),
+    })?;
 
     let line_index = LineIndex::build(source);
     let nodes = convert_rules(&stylesheet.rules.0, source, &line_index);
@@ -351,12 +350,7 @@ fn convert_rules(rules: &[LcssRule], source: &str, idx: &LineIndex) -> Vec<CssNo
                 let params = layer
                     .name
                     .as_ref()
-                    .map(|n| {
-                        n.0.iter()
-                            .map(|s| s.as_ref())
-                            .collect::<Vec<_>>()
-                            .join(".")
-                    })
+                    .map(|n| n.0.iter().map(|s| s.as_ref()).collect::<Vec<_>>().join("."))
                     .unwrap_or_default();
                 let children = convert_rules(&layer.rules.0, source, idx);
                 nodes.push(CssNode::AtRule(AtRule {
@@ -371,12 +365,7 @@ fn convert_rules(rules: &[LcssRule], source: &str, idx: &LineIndex) -> Vec<CssNo
                 let params = layer
                     .names
                     .iter()
-                    .map(|n| {
-                        n.0.iter()
-                            .map(|s| s.as_ref())
-                            .collect::<Vec<_>>()
-                            .join(".")
-                    })
+                    .map(|n| n.0.iter().map(|s| s.as_ref()).collect::<Vec<_>>().join("."))
                     .collect::<Vec<_>>()
                     .join(", ");
                 nodes.push(CssNode::AtRule(AtRule {
@@ -408,7 +397,11 @@ fn convert_rules(rules: &[LcssRule], source: &str, idx: &LineIndex) -> Vec<CssNo
             }
 
             LcssRule::Nesting(nesting) => {
-                nodes.push(CssNode::Style(convert_style_rule(&nesting.style, source, idx)));
+                nodes.push(CssNode::Style(convert_style_rule(
+                    &nesting.style,
+                    source,
+                    idx,
+                )));
             }
 
             LcssRule::NestedDeclarations(nested_decls) => {
@@ -563,11 +556,7 @@ fn find_declaration_span(source: &str, from: usize, to: usize, property: &str) -
         let decl_end = rest
             .find(';')
             .map(|i| after_prop + i + 1) // include the semicolon
-            .unwrap_or_else(|| {
-                rest.find('}')
-                    .map(|i| after_prop + i)
-                    .unwrap_or(after_prop)
-            });
+            .unwrap_or_else(|| rest.find('}').map(|i| after_prop + i).unwrap_or(after_prop));
         Span::new(abs_start, decl_end - abs_start)
     } else {
         Span::empty()
@@ -690,12 +679,8 @@ fn parse_raffia(source: &str, syntax: Syntax) -> Result<ParseResult, ParseError>
 }
 
 /// Convert a list of raffia [`Statement`]s into our [`CssNode`] list.
-fn convert_raffia_statements(
-    stmts: &[raffia::ast::Statement<'_>],
-    source: &str,
-) -> Vec<CssNode> {
+fn convert_raffia_statements(stmts: &[raffia::ast::Statement<'_>], source: &str) -> Vec<CssNode> {
     use raffia::ast::Statement;
-
 
     let mut nodes = Vec::with_capacity(stmts.len());
 
@@ -834,10 +819,7 @@ fn convert_raffia_block_statements(
     convert_raffia_statements(&block.statements, source)
 }
 
-fn convert_raffia_qualified_rule(
-    qr: &raffia::ast::QualifiedRule<'_>,
-    source: &str,
-) -> StyleRule {
+fn convert_raffia_qualified_rule(qr: &raffia::ast::QualifiedRule<'_>, source: &str) -> StyleRule {
     let selector = source_slice(source, &qr.selector.span);
 
     let mut declarations = Vec::new();
@@ -876,17 +858,13 @@ fn convert_raffia_qualified_rule(
     }
 }
 
-fn convert_raffia_declaration(
-    decl: &raffia::ast::Declaration<'_>,
-    source: &str,
-) -> Declaration {
+fn convert_raffia_declaration(decl: &raffia::ast::Declaration<'_>, source: &str) -> Declaration {
     let property = raffia_interpolable_ident_to_string(&decl.name, source);
 
     // Extract the value from source using spans of the value components.
     let value = if decl.value.is_empty() {
         String::new()
     } else {
-    
         let first = decl.value.first().unwrap().span();
         let last = decl.value.last().unwrap().span();
         source[first.start..last.end].trim().to_owned()
@@ -902,18 +880,12 @@ fn convert_raffia_declaration(
     }
 }
 
-fn convert_raffia_at_rule(
-    at: &raffia::ast::AtRule<'_>,
-    source: &str,
-) -> AtRule {
+fn convert_raffia_at_rule(at: &raffia::ast::AtRule<'_>, source: &str) -> AtRule {
     let name = at.name.name.to_string();
     let params = at
         .prelude
         .as_ref()
-        .map(|p| {
-        
-            source_slice(source, p.span())
-        })
+        .map(|p| source_slice(source, p.span()))
         .unwrap_or_default();
     let children = at
         .block
@@ -953,7 +925,6 @@ fn raffia_interpolable_ident_to_string(
         raffia::ast::InterpolableIdent::Literal(id) => id.name.to_string(),
         // For interpolated idents, just use the source text.
         other => {
-        
             let span = other.span();
             source_slice(source, span)
         }

@@ -9,9 +9,8 @@ use crate::rule::{Rule, RuleContext};
 pub struct ColorNamed;
 
 const NAMED_COLORS: &[&str] = &[
-    "red", "blue", "green", "yellow", "orange", "purple", "pink", "black", "white", "gray",
-    "grey", "cyan", "magenta", "lime", "olive", "navy", "teal", "aqua", "fuchsia", "maroon",
-    "silver",
+    "red", "blue", "green", "yellow", "orange", "purple", "pink", "black", "white", "gray", "grey",
+    "cyan", "magenta", "lime", "olive", "navy", "teal", "aqua", "fuchsia", "maroon", "silver",
 ];
 
 impl Rule for ColorNamed {
@@ -39,7 +38,10 @@ impl Rule for ColorNamed {
                     diags.push(
                         Diagnostic::new(
                             self.name(),
-                            format!("Unexpected named color \"{color}\" in declaration \"{}\"", decl.property),
+                            format!(
+                                "Unexpected named color \"{color}\" in declaration \"{}\"",
+                                decl.property
+                            ),
                         )
                         .severity(self.default_severity())
                         .span(Span::new(decl.span.offset, decl.span.length)),
@@ -62,8 +64,7 @@ fn contains_word(haystack: &str, word: &str) -> bool {
     for i in 0..=(bytes.len() - wlen) {
         if &bytes[i..i + wlen] == word_bytes {
             let before_ok = i == 0 || !bytes[i - 1].is_ascii_alphanumeric();
-            let after_ok =
-                i + wlen == bytes.len() || !bytes[i + wlen].is_ascii_alphanumeric();
+            let after_ok = i + wlen == bytes.len() || !bytes[i + wlen].is_ascii_alphanumeric();
             if before_ok && after_ok {
                 return true;
             }
@@ -81,7 +82,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_value(value: &str) -> CssNode {

@@ -16,9 +16,7 @@ pub struct FunctionCalcNoUnspacedOperator;
 
 /// Regex to find `calc(...)` expressions, handling nested parentheses is done
 /// manually after finding the start.
-static CALC_START: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)calc\(").unwrap()
-});
+static CALC_START: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)calc\(").unwrap());
 
 /// Extract the content inside a `calc(` starting at the given position.
 /// Returns the substring inside the outermost `calc(...)`.
@@ -78,11 +76,9 @@ fn has_unspaced_operator(body: &str) -> bool {
             }
 
             // Check for whitespace before (space, tab, newline)
-            let has_space_before =
-                i > 0 && bytes[i - 1].is_ascii_whitespace();
+            let has_space_before = i > 0 && bytes[i - 1].is_ascii_whitespace();
             // Check for whitespace after
-            let has_space_after =
-                i + 1 < len && bytes[i + 1].is_ascii_whitespace();
+            let has_space_after = i + 1 < len && bytes[i + 1].is_ascii_whitespace();
 
             // Skip unary cases: after `(` or at start
             if i == 0 {
@@ -185,7 +181,9 @@ mod tests {
         RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]
@@ -260,7 +258,9 @@ mod tests {
         let ctx = RuleContext {
             file_path: "test.scss",
             source: "",
-            syntax: Syntax::Scss, options: None };
+            syntax: Syntax::Scss,
+            options: None,
+        };
         let diags = rule.check(&node, &ctx);
         assert!(diags.is_empty());
     }

@@ -39,10 +39,7 @@ impl Rule for DeclarationBlockNoDuplicateCustomProperties {
                 diagnostics.push(
                     Diagnostic::new(
                         self.name(),
-                        format!(
-                            "Unexpected duplicate custom property \"{}\"",
-                            decl.property
-                        ),
+                        format!("Unexpected duplicate custom property \"{}\"", decl.property),
                     )
                     .severity(self.default_severity())
                     .span(Span::new(decl.span.offset, decl.span.length)),
@@ -63,7 +60,9 @@ mod tests {
         RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]

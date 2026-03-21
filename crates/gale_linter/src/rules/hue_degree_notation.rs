@@ -51,9 +51,7 @@ impl Rule for HueDegreeNotation {
                                 diags.push(
                                     Diagnostic::new(
                                         self.name(),
-                                        format!(
-                                            "Expected degree notation for hue in {fn_name}()"
-                                        ),
+                                        format!("Expected degree notation for hue in {fn_name}()"),
                                     )
                                     .severity(self.default_severity())
                                     .span(Span::new(decl.span.offset, decl.span.length)),
@@ -104,7 +102,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_value(value: &str) -> CssNode {

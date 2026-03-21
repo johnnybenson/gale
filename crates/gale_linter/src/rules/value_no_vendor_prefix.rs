@@ -28,15 +28,15 @@ const KNOWN_PREFIXABLE_VALUES: &[&str] = &[
     "inline-flex",    // display: -webkit-inline-flex
     "isolate",        // unicode-bidi: -moz-isolate
     "linear-gradient",
-    "max-content",    // width: -webkit-max-content
-    "min-content",    // width: -webkit-min-content
-    "plaintext",      // unicode-bidi: -moz-plaintext
+    "max-content", // width: -webkit-max-content
+    "min-content", // width: -webkit-min-content
+    "plaintext",   // unicode-bidi: -moz-plaintext
     "radial-gradient",
     "repeating-linear-gradient",
     "repeating-radial-gradient",
-    "sticky",         // position: -webkit-sticky
-    "zoom-in",        // cursor: -webkit-zoom-in
-    "zoom-out",       // cursor: -webkit-zoom-out
+    "sticky",   // position: -webkit-sticky
+    "zoom-in",  // cursor: -webkit-zoom-in
+    "zoom-out", // cursor: -webkit-zoom-out
 ];
 
 impl Rule for ValueNoVendorPrefix {
@@ -96,11 +96,11 @@ impl Rule for ValueNoVendorPrefix {
                         lower_search.find(prefix).map(|rel_offset| {
                             let abs_offset = decl_start + rel_offset;
                             Fix::new(
-                                format!("Remove vendor prefix \"{}\"", prefix.trim_end_matches('-')),
-                                vec![Edit::new(
-                                    Span::new(abs_offset, prefix.len()),
-                                    "",
-                                )],
+                                format!(
+                                    "Remove vendor prefix \"{}\"",
+                                    prefix.trim_end_matches('-')
+                                ),
+                                vec![Edit::new(Span::new(abs_offset, prefix.len()), "")],
                             )
                         })
                     } else {
@@ -109,10 +109,7 @@ impl Rule for ValueNoVendorPrefix {
 
                     let mut diag = Diagnostic::new(
                         self.name(),
-                        format!(
-                            "Unexpected vendor-prefixed value \"{}\"",
-                            decl.value
-                        ),
+                        format!("Unexpected vendor-prefixed value \"{}\"", decl.value),
                     )
                     .severity(self.default_severity())
                     .span(Span::new(decl.span.offset, decl.span.length));
@@ -137,7 +134,8 @@ fn extract_unprefixed_value(lower_value: &str, prefix: &str) -> String {
     if let Some(pos) = lower_value.find(prefix) {
         let after = &lower_value[pos + prefix.len()..];
         // Take until whitespace, comma, or paren
-        let end = after.find(|c: char| c.is_ascii_whitespace() || c == ',' || c == ')' || c == '(')
+        let end = after
+            .find(|c: char| c.is_ascii_whitespace() || c == ',' || c == ')' || c == '(')
             .unwrap_or(after.len());
         after[..end].to_string()
     } else {
@@ -151,7 +149,12 @@ mod tests {
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_decl(val: &str) -> CssNode {
@@ -183,13 +186,22 @@ mod tests {
 
     #[test]
     fn allows_standard_value() {
-        assert!(ValueNoVendorPrefix.check(&style_decl("flex"), &ctx()).is_empty());
+        assert!(
+            ValueNoVendorPrefix
+                .check(&style_decl("flex"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn emits_fix_for_vendor_prefixed_value() {
         let source = "a { display: -webkit-flex; }";
-        let ctx = RuleContext { file_path: "t.css", source, syntax: Syntax::Css, options: None };
+        let ctx = RuleContext {
+            file_path: "t.css",
+            source,
+            syntax: Syntax::Css,
+            options: None,
+        };
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![Declaration {

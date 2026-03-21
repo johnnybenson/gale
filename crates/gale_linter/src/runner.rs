@@ -203,7 +203,11 @@ fn parse_rule_names(text: &str) -> Vec<Option<String>> {
         t.split(',')
             .map(|part| {
                 let p = part.trim();
-                if p.is_empty() { None } else { Some(p.to_string()) }
+                if p.is_empty() {
+                    None
+                } else {
+                    Some(p.to_string())
+                }
             })
             .filter(|n| n.is_some()) // filter out empty parts
             .collect()
@@ -220,10 +224,7 @@ fn close_disable(
     rule_name: &Option<String>,
 ) {
     // Find the last matching open disable (same rule or both None).
-    if let Some(idx) = open_disables
-        .iter()
-        .rposition(|(_, r)| r == rule_name)
-    {
+    if let Some(idx) = open_disables.iter().rposition(|(_, r)| r == rule_name) {
         let (start, rule) = open_disables.remove(idx);
         ranges.push(DisabledRange {
             start,
@@ -362,13 +363,24 @@ impl LintRunner {
             diagnostics.append(&mut results);
         }
         if debug {
-            eprintln!("[perf] check_root total: {:.3}s", t1.elapsed().as_secs_f64());
+            eprintln!(
+                "[perf] check_root total: {:.3}s",
+                t1.elapsed().as_secs_f64()
+            );
         }
 
         // Walk each top-level node for per-node checks.
         let t2 = Instant::now();
         for node in &parse_result.nodes {
-            walk_node(node, &active_rules, file_path, source, syntax, &self.rule_options, &mut diagnostics);
+            walk_node(
+                node,
+                &active_rules,
+                file_path,
+                source,
+                syntax,
+                &self.rule_options,
+                &mut diagnostics,
+            );
         }
         if debug {
             eprintln!("[perf] walk: {:.3}s", t2.elapsed().as_secs_f64());
@@ -444,13 +456,18 @@ impl LintRunner {
                 file_path,
                 source,
                 syntax,
-                options: rule_options.get(rule.name()).or_else(|| self.rule_options.get(rule.name())),
+                options: rule_options
+                    .get(rule.name())
+                    .or_else(|| self.rule_options.get(rule.name())),
             };
             let mut results = rule.check_root(&parse_result.nodes, &context);
             diagnostics.append(&mut results);
         }
         if debug {
-            eprintln!("[perf] check_root total: {:.3}s", t1.elapsed().as_secs_f64());
+            eprintln!(
+                "[perf] check_root total: {:.3}s",
+                t1.elapsed().as_secs_f64()
+            );
         }
 
         // Merge rule_options with self.rule_options (override-specific takes precedence)
@@ -464,7 +481,15 @@ impl LintRunner {
 
         let t2 = Instant::now();
         for node in &parse_result.nodes {
-            walk_node(node, &active_rules, file_path, source, syntax, merged_options, &mut diagnostics);
+            walk_node(
+                node,
+                &active_rules,
+                file_path,
+                source,
+                syntax,
+                merged_options,
+                &mut diagnostics,
+            );
         }
         if debug {
             eprintln!("[perf] walk: {:.3}s", t2.elapsed().as_secs_f64());
@@ -515,12 +540,28 @@ fn walk_node(
         CssNode::Style(style_rule) => {
             for child in &style_rule.children {
                 let child_node = CssNode::Style(child.clone());
-                walk_node(&child_node, rules, file_path, source, syntax, rule_options, diagnostics);
+                walk_node(
+                    &child_node,
+                    rules,
+                    file_path,
+                    source,
+                    syntax,
+                    rule_options,
+                    diagnostics,
+                );
             }
         }
         CssNode::AtRule(at_rule) => {
             for child in &at_rule.children {
-                walk_node(child, rules, file_path, source, syntax, rule_options, diagnostics);
+                walk_node(
+                    child,
+                    rules,
+                    file_path,
+                    source,
+                    syntax,
+                    rule_options,
+                    diagnostics,
+                );
             }
         }
         CssNode::Comment(_) | CssNode::Declaration(_) => {}
@@ -590,10 +631,7 @@ mod tests {
     #[test]
     fn gale_disable_enable_block() {
         let registry = RuleRegistry::default();
-        let runner = LintRunner::new(
-            registry,
-            vec!["block-no-empty".to_string()],
-        );
+        let runner = LintRunner::new(registry, vec!["block-no-empty".to_string()]);
         let src = "/* gale-disable */\na { }\n/* gale-enable */\nb { }";
         let result = runner.lint_source(src, "test.css", Syntax::Css);
         // First `a { }` is disabled, second `b { }` should be reported.

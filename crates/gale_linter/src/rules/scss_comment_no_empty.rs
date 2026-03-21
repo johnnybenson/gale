@@ -36,14 +36,13 @@ impl Rule for ScssCommentNoEmpty {
             return vec![];
         }
 
-        let inner = comment
-            .text
-            .trim_start_matches("/*")
-            .trim_end_matches("*/");
+        let inner = comment.text.trim_start_matches("/*").trim_end_matches("*/");
         if inner.trim().is_empty() {
-            vec![Diagnostic::new(self.name(), "Unexpected empty comment")
-                .severity(self.default_severity())
-                .span(Span::new(comment.span.offset, comment.span.length))]
+            vec![
+                Diagnostic::new(self.name(), "Unexpected empty comment")
+                    .severity(self.default_severity())
+                    .span(Span::new(comment.span.offset, comment.span.length)),
+            ]
         } else {
             vec![]
         }

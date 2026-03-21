@@ -32,12 +32,11 @@ impl Rule for SelectorDisallowedList {
         let selector = rule.selector.trim();
         for disallowed in DISALLOWED {
             if selector.contains(disallowed) {
-                return vec![Diagnostic::new(
-                    self.name(),
-                    format!("Unexpected selector \"{selector}\""),
-                )
-                .severity(self.default_severity())
-                .span(Span::new(rule.span.offset, rule.span.length))];
+                return vec![
+                    Diagnostic::new(self.name(), format!("Unexpected selector \"{selector}\""))
+                        .severity(self.default_severity())
+                        .span(Span::new(rule.span.offset, rule.span.length)),
+                ];
             }
         }
         vec![]
@@ -53,7 +52,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_selector(sel: &str) -> CssNode {

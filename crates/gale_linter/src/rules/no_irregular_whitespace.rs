@@ -52,7 +52,10 @@ impl Rule for NoIrregularWhitespace {
                 diagnostics.push(
                     Diagnostic::new(
                         self.name(),
-                        format!("Unexpected irregular whitespace character (U+{:04X})", ch as u32),
+                        format!(
+                            "Unexpected irregular whitespace character (U+{:04X})",
+                            ch as u32
+                        ),
                     )
                     .severity(self.default_severity())
                     .span(Span::new(i, ch.len_utf8())),
@@ -76,7 +79,9 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source,
-            syntax: Syntax::Css, options: None };
+            syntax: Syntax::Css,
+            options: None,
+        };
         let diags = rule.check_root(&[], &context);
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("U+00A0"));
@@ -89,7 +94,9 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source,
-            syntax: Syntax::Css, options: None };
+            syntax: Syntax::Css,
+            options: None,
+        };
         let diags = rule.check_root(&[], &context);
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("U+200B"));
@@ -101,7 +108,9 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "a { color: red; }",
-            syntax: Syntax::Css, options: None,        };
+            syntax: Syntax::Css,
+            options: None,
+        };
         let diags = rule.check_root(&[], &context);
         assert!(diags.is_empty());
     }

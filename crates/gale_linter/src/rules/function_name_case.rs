@@ -53,7 +53,12 @@ impl Rule for FunctionNameCase {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
-        let is_scss = matches!(ctx.syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less);
+        let is_scss = matches!(
+            ctx.syntax,
+            gale_css_parser::Syntax::Scss
+                | gale_css_parser::Syntax::Sass
+                | gale_css_parser::Syntax::Less
+        );
 
         let mut diags = Vec::new();
         for decl in &rule.declarations {
@@ -95,10 +100,7 @@ impl Rule for FunctionNameCase {
                             let abs_offset = decl_start + rel_offset;
                             Fix::new(
                                 format!("Lowercase function name to \"{lowered}\""),
-                                vec![Edit::new(
-                                    Span::new(abs_offset, func_name.len()),
-                                    &lowered,
-                                )],
+                                vec![Edit::new(Span::new(abs_offset, func_name.len()), &lowered)],
                             )
                         })
                     } else {
@@ -107,9 +109,7 @@ impl Rule for FunctionNameCase {
 
                     let mut diag = Diagnostic::new(
                         self.name(),
-                        format!(
-                            "Expected \"{func_name}\" to be \"{lowered}\"",
-                        ),
+                        format!("Expected \"{func_name}\" to be \"{lowered}\"",),
                     )
                     .severity(self.default_severity())
                     .span(Span::new(decl.span.offset, decl.span.length));
@@ -159,7 +159,12 @@ mod tests {
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_decl(val: &str) -> CssNode {
@@ -185,7 +190,11 @@ mod tests {
 
     #[test]
     fn allows_lowercase_function() {
-        assert!(FunctionNameCase.check(&style_decl("rgb(0, 0, 0)"), &ctx()).is_empty());
+        assert!(
+            FunctionNameCase
+                .check(&style_decl("rgb(0, 0, 0)"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
@@ -198,7 +207,12 @@ mod tests {
     #[test]
     fn emits_fix_for_uppercase_function() {
         let source = "a { color: RGB(0, 0, 0); }";
-        let ctx = RuleContext { file_path: "t.css", source, syntax: Syntax::Css, options: None };
+        let ctx = RuleContext {
+            file_path: "t.css",
+            source,
+            syntax: Syntax::Css,
+            options: None,
+        };
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![Declaration {

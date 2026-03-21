@@ -63,10 +63,7 @@ impl Rule for NoInvalidPositionAtImportRule {
                                     format!("Unexpected @{name} after other statements"),
                                 )
                                 .severity(self.default_severity())
-                                .span(Span::new(
-                                    at_rule.span.offset,
-                                    at_rule.span.length,
-                                )),
+                                .span(Span::new(at_rule.span.offset, at_rule.span.length)),
                             );
                         }
                         continue;
@@ -80,10 +77,7 @@ impl Rule for NoInvalidPositionAtImportRule {
                                     "Unexpected @import after other statements",
                                 )
                                 .severity(self.default_severity())
-                                .span(Span::new(
-                                    at_rule.span.offset,
-                                    at_rule.span.length,
-                                )),
+                                .span(Span::new(at_rule.span.offset, at_rule.span.length)),
                             );
                         }
                     } else {
@@ -127,7 +121,9 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css, options: None };
+            syntax: Syntax::Css,
+            options: None,
+        };
         let diags = rule.check_root(&nodes, &context);
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("@import"));
@@ -153,7 +149,9 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css, options: None };
+            syntax: Syntax::Css,
+            options: None,
+        };
         let diags = rule.check_root(&nodes, &context);
         assert!(diags.is_empty());
     }
@@ -185,7 +183,9 @@ mod tests {
         let context = RuleContext {
             file_path: "test.scss",
             source: "",
-            syntax: Syntax::Scss, options: None };
+            syntax: Syntax::Scss,
+            options: None,
+        };
         let diags = rule.check_root(&nodes, &context);
         assert!(diags.is_empty());
     }
@@ -211,7 +211,9 @@ mod tests {
         let context = RuleContext {
             file_path: "test.scss",
             source: "",
-            syntax: Syntax::Scss, options: None };
+            syntax: Syntax::Scss,
+            options: None,
+        };
         let diags = rule.check_root(&nodes, &context);
         assert!(diags.is_empty());
     }
@@ -236,9 +238,14 @@ mod tests {
         let context = RuleContext {
             file_path: "test.scss",
             source: "",
-            syntax: Syntax::Scss, options: None };
+            syntax: Syntax::Scss,
+            options: None,
+        };
         let diags = rule.check_root(&nodes, &context);
-        assert!(diags.is_empty(), "SCSS files should skip this rule entirely");
+        assert!(
+            diags.is_empty(),
+            "SCSS files should skip this rule entirely"
+        );
     }
 
     #[test]
@@ -267,7 +274,9 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css, options: None };
+            syntax: Syntax::Css,
+            options: None,
+        };
         let diags = rule.check_root(&nodes, &context);
         assert!(diags.is_empty());
     }

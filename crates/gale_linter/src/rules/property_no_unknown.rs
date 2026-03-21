@@ -44,8 +44,10 @@ impl Rule for PropertyNoUnknown {
                 continue;
             }
             // Skip SCSS variable declarations ($var)
-            if matches!(ctx.syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass)
-                && prop.starts_with('$')
+            if matches!(
+                ctx.syntax,
+                gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass
+            ) && prop.starts_with('$')
             {
                 continue;
             }
@@ -59,9 +61,12 @@ impl Rule for PropertyNoUnknown {
             }
             if !is_known_property(prop) {
                 diags.push(
-                    Diagnostic::new(self.name(), format!("Unexpected unknown property \"{prop}\""))
-                        .severity(self.default_severity())
-                        .span(Span::new(decl.span.offset, decl.span.length)),
+                    Diagnostic::new(
+                        self.name(),
+                        format!("Unexpected unknown property \"{prop}\""),
+                    )
+                    .severity(self.default_severity())
+                    .span(Span::new(decl.span.offset, decl.span.length)),
                 );
             }
         }
@@ -76,7 +81,12 @@ mod tests {
     use gale_linter_test_helper::*;
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]
@@ -107,12 +117,15 @@ mod tests {
         pub fn style_node(sel: &str, props: &[(&str, &str)]) -> CssNode {
             CssNode::Style(StyleRule {
                 selector: sel.to_string(),
-                declarations: props.iter().map(|(p, v)| Declaration {
-                    property: p.to_string(),
-                    value: v.to_string(),
-                    span: Span::new(0, 0),
-                    important: false,
-                }).collect(),
+                declarations: props
+                    .iter()
+                    .map(|(p, v)| Declaration {
+                        property: p.to_string(),
+                        value: v.to_string(),
+                        span: Span::new(0, 0),
+                        important: false,
+                    })
+                    .collect(),
                 children: vec![],
                 span: Span::new(0, 0),
             })

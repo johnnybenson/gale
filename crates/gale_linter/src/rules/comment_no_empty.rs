@@ -34,10 +34,7 @@ impl Rule for CommentNoEmpty {
 
                 // The text field contains the full comment including delimiters.
                 // Strip `/*` and `*/` and check if the content is empty/whitespace.
-                let inner = comment
-                    .text
-                    .trim_start_matches("/*")
-                    .trim_end_matches("*/");
+                let inner = comment.text.trim_start_matches("/*").trim_end_matches("*/");
                 if inner.trim().is_empty() {
                     // Build a fix that removes the empty comment.
                     // Also consume trailing whitespace/newline so we don't leave blank lines.
@@ -62,10 +59,12 @@ impl Rule for CommentNoEmpty {
                         vec![Edit::new(Span::from_range(start, end), "")],
                     );
 
-                    vec![Diagnostic::new(self.name(), "Unexpected empty comment")
-                        .severity(self.default_severity())
-                        .span(Span::new(comment.span.offset, comment.span.length))
-                        .fix(fix)]
+                    vec![
+                        Diagnostic::new(self.name(), "Unexpected empty comment")
+                            .severity(self.default_severity())
+                            .span(Span::new(comment.span.offset, comment.span.length))
+                            .fix(fix),
+                    ]
                 } else {
                     vec![]
                 }
@@ -84,7 +83,9 @@ mod tests {
         RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]
@@ -130,7 +131,9 @@ mod tests {
         let ctx = RuleContext {
             file_path: "test.scss",
             source: "//\n// \n",
-            syntax: Syntax::Scss, options: None };
+            syntax: Syntax::Scss,
+            options: None,
+        };
         // Empty double-slash comment
         let node = CssNode::Comment(gale_css_parser::Comment {
             is_line: true,
@@ -157,7 +160,9 @@ mod tests {
         let ctx = RuleContext {
             file_path: "test.css",
             source,
-            syntax: Syntax::Css, options: None };
+            syntax: Syntax::Css,
+            options: None,
+        };
         let node = CssNode::Comment(Comment {
             is_line: false,
             text: "/* */".to_string(),

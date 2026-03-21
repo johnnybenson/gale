@@ -75,7 +75,12 @@ mod tests {
     use gale_css_parser::{CssNode, Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_selector(sel: &str) -> CssNode {
@@ -101,7 +106,15 @@ mod tests {
 
     #[test]
     fn allows_known_pseudo_element() {
-        assert!(SelectorPseudoElementNoUnknown.check(&style_with_selector("a::before"), &ctx()).is_empty());
-        assert!(SelectorPseudoElementNoUnknown.check(&style_with_selector("a::placeholder"), &ctx()).is_empty());
+        assert!(
+            SelectorPseudoElementNoUnknown
+                .check(&style_with_selector("a::before"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            SelectorPseudoElementNoUnknown
+                .check(&style_with_selector("a::placeholder"), &ctx())
+                .is_empty()
+        );
     }
 }

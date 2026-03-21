@@ -58,10 +58,7 @@ impl Formatter for TextFormatter {
                 let (icon, colored_message) = match diag.severity {
                     Severity::Error => {
                         total_errors += 1;
-                        (
-                            "\u{2716}".red().to_string(),
-                            diag.message.red().to_string(),
-                        )
+                        ("\u{2716}".red().to_string(), diag.message.red().to_string())
                     }
                     Severity::Warning => {
                         total_warnings += 1;
@@ -253,7 +250,9 @@ mod tests {
     fn compact_formatter_output() {
         let formatter = CompactFormatter;
         let output = formatter.format(&sample_results());
-        assert!(output.contains("src/app.css: line 2, col 1, warning - Unexpected empty block (block-no-empty)"));
+        assert!(output.contains(
+            "src/app.css: line 2, col 1, warning - Unexpected empty block (block-no-empty)"
+        ));
     }
 
     #[test]

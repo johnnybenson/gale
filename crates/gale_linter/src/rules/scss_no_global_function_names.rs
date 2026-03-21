@@ -127,7 +127,9 @@ impl Rule for ScssNoGlobalFunctionNames {
 
             // Collect function name
             let start = i;
-            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_') {
+            while i < len
+                && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
+            {
                 i += 1;
             }
 
@@ -192,9 +194,11 @@ mod tests {
 
     #[test]
     fn skips_non_scss() {
-        assert!(ScssNoGlobalFunctionNames
-            .check(&decl("adjust-color(red, $red: 10)"), &css_ctx())
-            .is_empty());
+        assert!(
+            ScssNoGlobalFunctionNames
+                .check(&decl("adjust-color(red, $red: 10)"), &css_ctx())
+                .is_empty()
+        );
     }
 
     #[test]

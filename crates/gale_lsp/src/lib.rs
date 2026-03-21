@@ -53,7 +53,11 @@ impl GaleLspServer {
     }
 
     /// Lint source text and convert to LSP diagnostics (sync part).
-    fn lint_to_diagnostics(&self, uri: &Url, source: &str) -> Vec<tower_lsp::lsp_types::Diagnostic> {
+    fn lint_to_diagnostics(
+        &self,
+        uri: &Url,
+        source: &str,
+    ) -> Vec<tower_lsp::lsp_types::Diagnostic> {
         let runner_guard = self.runner.read().unwrap();
         let Some(runner) = runner_guard.as_ref() else {
             return Vec::new();

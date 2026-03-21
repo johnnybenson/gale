@@ -38,12 +38,11 @@ impl Rule for MediaQueryNoInvalid {
 
         // Empty media query
         if params.is_empty() {
-            return vec![Diagnostic::new(
-                self.name(),
-                "Unexpected empty media query",
-            )
-            .severity(self.default_severity())
-            .span(Span::new(at.span.offset, at.span.length))];
+            return vec![
+                Diagnostic::new(self.name(), "Unexpected empty media query")
+                    .severity(self.default_severity())
+                    .span(Span::new(at.span.offset, at.span.length)),
+            ];
         }
 
         // Check for unbalanced parentheses
@@ -54,34 +53,37 @@ impl Rule for MediaQueryNoInvalid {
                 ')' => {
                     depth -= 1;
                     if depth < 0 {
-                        return vec![Diagnostic::new(
-                            self.name(),
-                            "Unexpected unbalanced parentheses in media query",
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(at.span.offset, at.span.length))];
+                        return vec![
+                            Diagnostic::new(
+                                self.name(),
+                                "Unexpected unbalanced parentheses in media query",
+                            )
+                            .severity(self.default_severity())
+                            .span(Span::new(at.span.offset, at.span.length)),
+                        ];
                     }
                 }
                 _ => {}
             }
         }
         if depth != 0 {
-            return vec![Diagnostic::new(
-                self.name(),
-                "Unexpected unbalanced parentheses in media query",
-            )
-            .severity(self.default_severity())
-            .span(Span::new(at.span.offset, at.span.length))];
+            return vec![
+                Diagnostic::new(
+                    self.name(),
+                    "Unexpected unbalanced parentheses in media query",
+                )
+                .severity(self.default_severity())
+                .span(Span::new(at.span.offset, at.span.length)),
+            ];
         }
 
         // Check for empty parentheses ()
         if params.contains("()") {
-            return vec![Diagnostic::new(
-                self.name(),
-                "Unexpected empty parentheses in media query",
-            )
-            .severity(self.default_severity())
-            .span(Span::new(at.span.offset, at.span.length))];
+            return vec![
+                Diagnostic::new(self.name(), "Unexpected empty parentheses in media query")
+                    .severity(self.default_severity())
+                    .span(Span::new(at.span.offset, at.span.length)),
+            ];
         }
 
         vec![]
@@ -94,7 +96,12 @@ mod tests {
     use gale_css_parser::{AtRule, Span as ParserSpan, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn media(params: &str) -> CssNode {
@@ -122,8 +129,20 @@ mod tests {
 
     #[test]
     fn allows_valid_media_queries() {
-        assert!(MediaQueryNoInvalid.check(&media("(min-width: 768px)"), &ctx()).is_empty());
-        assert!(MediaQueryNoInvalid.check(&media("screen and (color)"), &ctx()).is_empty());
-        assert!(MediaQueryNoInvalid.check(&media("(hover: hover)"), &ctx()).is_empty());
+        assert!(
+            MediaQueryNoInvalid
+                .check(&media("(min-width: 768px)"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            MediaQueryNoInvalid
+                .check(&media("screen and (color)"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            MediaQueryNoInvalid
+                .check(&media("(hover: hover)"), &ctx())
+                .is_empty()
+        );
     }
 }

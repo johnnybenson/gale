@@ -255,21 +255,28 @@ impl RuleConfigValue {
                 // Check if the first element is a known severity string.
                 let is_severity_str = first
                     .and_then(|v| v.as_str())
-                    .map(|s| matches!(s.to_lowercase().as_str(), "error" | "warning" | "warn" | "off"))
+                    .map(|s| {
+                        matches!(
+                            s.to_lowercase().as_str(),
+                            "error" | "warning" | "warn" | "off"
+                        )
+                    })
                     .unwrap_or(false);
                 let is_bool = first.map(|v| v.is_boolean()).unwrap_or(false);
 
                 if is_severity_str {
                     // First element is a severity: ["error", { options }]
-                    let severity = first
-                        .and_then(|v| v.as_str())
-                        .map(parse_severity);
+                    let severity = first.and_then(|v| v.as_str()).map(parse_severity);
                     let options = items.get(1).cloned();
                     RuleConfig { severity, options }
                 } else if is_bool {
                     // First element is a boolean: [true, { options }]
                     let enabled = first.and_then(|v| v.as_bool()).unwrap_or(true);
-                    let severity = Some(if enabled { Severity::Error } else { Severity::Off });
+                    let severity = Some(if enabled {
+                        Severity::Error
+                    } else {
+                        Severity::Off
+                    });
                     let options = items.get(1).cloned();
                     RuleConfig { severity, options }
                 } else {
@@ -833,9 +840,9 @@ fn extract_imports(source: &str) -> Vec<(String, String)> {
         let trimmed = line.trim();
 
         // ESM: import <name> from '<path>'
-        if trimmed.starts_with("import ") {
+        if let Some(after_import) = trimmed.strip_prefix("import ") {
             // Skip destructured imports like `import { foo } from ...`
-            let rest = trimmed["import ".len()..].trim_start();
+            let rest = after_import.trim_start();
             if rest.starts_with('{') || rest.starts_with('*') {
                 continue;
             }
@@ -858,13 +865,18 @@ fn extract_imports(source: &str) -> Vec<(String, String)> {
         }
 
         // CJS: const <name> = require('<path>')
-        if trimmed.starts_with("const ") || trimmed.starts_with("let ") || trimmed.starts_with("var ") {
-            let rest = if trimmed.starts_with("const ") {
-                &trimmed["const ".len()..]
-            } else if trimmed.starts_with("let ") {
-                &trimmed["let ".len()..]
+        if trimmed.starts_with("const ")
+            || trimmed.starts_with("let ")
+            || trimmed.starts_with("var ")
+        {
+            let rest = if let Some(r) = trimmed.strip_prefix("const ") {
+                r
+            } else if let Some(r) = trimmed.strip_prefix("let ") {
+                r
+            } else if let Some(r) = trimmed.strip_prefix("var ") {
+                r
             } else {
-                &trimmed["var ".len()..]
+                unreachable!()
             };
             let rest = rest.trim_start();
             // Skip destructured: const { foo } = require(...)
@@ -882,11 +894,10 @@ fn extract_imports(source: &str) -> Vec<(String, String)> {
                     continue;
                 }
                 let after_eq = rest[eq_idx + 1..].trim();
-                if after_eq.starts_with("require(") {
-                    let inside = &after_eq["require(".len()..];
-                    if let Some(path) = extract_string_literal(inside) {
-                        imports.push((var_name, path));
-                    }
+                if let Some(inside) = after_eq.strip_prefix("require(")
+                    && let Some(path) = extract_string_literal(inside)
+                {
+                    imports.push((var_name, path));
                 }
             }
         }
@@ -950,15 +961,15 @@ fn extract_default_export(source: &str) -> Option<String> {
         if let Some(pos) = source.find(marker) {
             let after = source[pos + marker.len()..].trim_start();
             // If it starts with a literal value (array or object), extract it
-            if after.starts_with('[') {
-                if let Some(val) = extract_balanced(after, '[', ']') {
-                    return Some(val);
-                }
+            if after.starts_with('[')
+                && let Some(val) = extract_balanced(after, '[', ']')
+            {
+                return Some(val);
             }
-            if after.starts_with('{') {
-                if let Some(val) = extract_balanced(after, '{', '}') {
-                    return Some(val);
-                }
+            if after.starts_with('{')
+                && let Some(val) = extract_balanced(after, '{', '}')
+            {
+                return Some(val);
             }
             // Otherwise it might be a variable name: `export default X`
             // Find the identifier
@@ -1139,7 +1150,9 @@ fn strip_import_lines(source: &str) -> String {
             continue;
         }
         // Skip CJS require lines
-        if (trimmed.starts_with("const ") || trimmed.starts_with("let ") || trimmed.starts_with("var "))
+        if (trimmed.starts_with("const ")
+            || trimmed.starts_with("let ")
+            || trimmed.starts_with("var "))
             && trimmed.contains("require(")
         {
             continue;
@@ -1164,11 +1177,7 @@ fn parse_js_config(source: &str, file_dir: Option<&Path>) -> Result<ConfigFile, 
     let source = strip_import_lines(&source);
 
     // Find the start of the exported object literal.
-    let markers = [
-        "module.exports",
-        "exports",
-        "export default",
-    ];
+    let markers = ["module.exports", "exports", "export default"];
 
     let mut obj_start: Option<usize> = None;
 
@@ -1193,31 +1202,49 @@ fn parse_js_config(source: &str, file_dir: Option<&Path>) -> Result<ConfigFile, 
 
             // Check if the export is a variable reference (e.g. `export default config`)
             // rather than a direct object literal.
-            if !trimmed.starts_with('{') && trimmed.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_' || c == '$') {
+            if !trimmed.starts_with('{')
+                && trimmed
+                    .chars()
+                    .next()
+                    .is_some_and(|c| c.is_alphabetic() || c == '_' || c == '$')
+            {
                 let ident_end = trimmed
                     .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '$')
                     .unwrap_or(trimmed.len());
                 let var_name = &trimmed[..ident_end];
                 // Look for `const <var_name> = {` in the source
-                if let Some(value) = find_variable_value(&source, var_name) {
-                    if value.starts_with('{') {
-                        // Replace the variable reference with the inlined object
-                        let source = format!(
-                            "{}{}{}",
-                            &source[..pos],
-                            if *marker == "export default" { "export default " } else { "module.exports = " },
-                            &value
-                        );
-                        let new_marker_pos = pos;
-                        let new_after = new_marker_pos + if *marker == "export default" { "export default ".len() } else { "module.exports = ".len() };
-                        if let Some(brace_offset) = source[new_after..].find('{') {
-                            // We need to use the modified source for extraction
-                            let extracted = extract_braced_object(&source[new_after + brace_offset..]).ok_or_else(|| {
-                                ConfigError::UnsupportedFormat("failed to extract object literal from JS config".to_string())
+                if let Some(value) = find_variable_value(&source, var_name)
+                    && value.starts_with('{')
+                {
+                    // Replace the variable reference with the inlined object
+                    let source = format!(
+                        "{}{}{}",
+                        &source[..pos],
+                        if *marker == "export default" {
+                            "export default "
+                        } else {
+                            "module.exports = "
+                        },
+                        &value
+                    );
+                    let new_marker_pos = pos;
+                    let new_after = new_marker_pos
+                        + if *marker == "export default" {
+                            "export default ".len()
+                        } else {
+                            "module.exports = ".len()
+                        };
+                    if let Some(brace_offset) = source[new_after..].find('{') {
+                        // We need to use the modified source for extraction
+                        let extracted = extract_braced_object(&source[new_after + brace_offset..])
+                            .ok_or_else(|| {
+                                ConfigError::UnsupportedFormat(
+                                    "failed to extract object literal from JS config".to_string(),
+                                )
                             })?;
-                            let json = js_object_to_json(&extracted);
-                            return serde_json::from_str::<ConfigFile>(&json).map_err(ConfigError::from);
-                        }
+                        let json = js_object_to_json(&extracted);
+                        return serde_json::from_str::<ConfigFile>(&json)
+                            .map_err(ConfigError::from);
                     }
                 }
             }
@@ -1239,7 +1266,9 @@ fn parse_js_config(source: &str, file_dir: Option<&Path>) -> Result<ConfigFile, 
 
     // Extract from opening `{` to the matching `}`, respecting strings and comments.
     let extracted = extract_braced_object(&source[start..]).ok_or_else(|| {
-        ConfigError::UnsupportedFormat("failed to extract object literal from JS config".to_string())
+        ConfigError::UnsupportedFormat(
+            "failed to extract object literal from JS config".to_string(),
+        )
     })?;
 
     // Convert JS object syntax to JSON.
@@ -1990,11 +2019,7 @@ fn remove_spread_entries(s: &str) -> String {
         }
 
         // Detect `...identifier`
-        if c == '.'
-            && i + 2 < len
-            && chars[i + 1] == '.'
-            && chars[i + 2] == '.'
-        {
+        if c == '.' && i + 2 < len && chars[i + 1] == '.' && chars[i + 2] == '.' {
             // Skip `...` and the following identifier
             i += 3;
             while i < len
@@ -2020,7 +2045,11 @@ fn remove_spread_entries(s: &str) -> String {
     result
 }
 
-fn parse_config_file(file_name: &str, contents: &str, file_dir: Option<&Path>) -> Result<ConfigFile, ConfigError> {
+fn parse_config_file(
+    file_name: &str,
+    contents: &str,
+    file_dir: Option<&Path>,
+) -> Result<ConfigFile, ConfigError> {
     if file_name.ends_with(".json") || file_name == "gale.json" {
         Ok(serde_json::from_str(contents)?)
     } else if file_name.ends_with(".toml") || file_name == "gale.toml" {
@@ -2114,10 +2143,10 @@ fn resolve_npm_config(package_name: &str, base_dir: &Path) -> Option<ConfigFile>
         // Try with common extensions
         for ext in &["", ".js", ".json", ".cjs", ".mjs"] {
             let path = pkg_dir.join(format!("{sub}{ext}"));
-            if path.is_file() {
-                if let Ok(config) = load_config_file(&path) {
-                    return Some(config);
-                }
+            if path.is_file()
+                && let Ok(config) = load_config_file(&path)
+            {
+                return Some(config);
             }
         }
         return None;
@@ -2136,7 +2165,12 @@ fn resolve_npm_config(package_name: &str, base_dir: &Path) -> Option<ConfigFile>
     }
 
     // 2. Try common config file names
-    for name in &["index.json", "index.js", ".stylelintrc.json", ".stylelintrc"] {
+    for name in &[
+        "index.json",
+        "index.js",
+        ".stylelintrc.json",
+        ".stylelintrc",
+    ] {
         let path = pkg_dir.join(name);
         if let Ok(config) = load_config_file(&path) {
             return Some(config);
@@ -2191,10 +2225,10 @@ fn resolve_relative_config(rel_path: &str, base_dir: &Path) -> Option<ConfigFile
     // Try with common extensions.
     for ext in &[".js", ".json", ".cjs", ".mjs"] {
         let with_ext = base_dir.join(format!("{rel_path}{ext}"));
-        if with_ext.is_file() {
-            if let Ok(config) = load_config_file(&with_ext) {
-                return Some(config);
-            }
+        if with_ext.is_file()
+            && let Ok(config) = load_config_file(&with_ext)
+        {
+            return Some(config);
         }
     }
 
@@ -2244,9 +2278,7 @@ fn collect_rules_from_extends(
             };
 
             if let Some(config) = config {
-                let sub_base = if preset_name.starts_with("./")
-                    || preset_name.starts_with("../")
-                {
+                let sub_base = if preset_name.starts_with("./") || preset_name.starts_with("../") {
                     base_dir
                         .join(preset_name)
                         .parent()
@@ -2301,14 +2333,11 @@ fn collect_rules_from_extends(
                                 .as_ref()
                                 .map(|r| r.keys().cloned().collect())
                                 .unwrap_or_default();
-                            let rules_map =
-                                ov.rules.get_or_insert_with(HashMap::new);
+                            let rules_map = ov.rules.get_or_insert_with(HashMap::new);
                             for null_rule in &null_rules {
                                 if !ov_explicit.contains(null_rule) {
-                                    rules_map.insert(
-                                        null_rule.clone(),
-                                        RuleConfigValue::Null(None),
-                                    );
+                                    rules_map
+                                        .insert(null_rule.clone(), RuleConfigValue::Null(None));
                                 }
                             }
                         }
@@ -2544,14 +2573,8 @@ formatter: text
             RECOMMENDED_ERROR_RULES.len() + RECOMMENDED_WARNING_RULES.len()
         );
         // Spot-check severities.
-        assert_eq!(
-            preset["block-no-empty"].severity,
-            Some(Severity::Error)
-        );
-        assert_eq!(
-            preset["color-hex-length"].severity,
-            Some(Severity::Warning)
-        );
+        assert_eq!(preset["block-no-empty"].severity, Some(Severity::Error));
+        assert_eq!(preset["color-hex-length"].severity, Some(Severity::Warning));
     }
 
     #[test]
@@ -2583,10 +2606,7 @@ formatter: text
         let raw: ConfigFile = serde_json::from_str(json).unwrap();
         assert_eq!(
             raw.extends,
-            Some(vec![
-                "gale:recommended".to_string(),
-                "gale:all".to_string()
-            ])
+            Some(vec!["gale:recommended".to_string(), "gale:all".to_string()])
         );
     }
 
@@ -2945,8 +2965,14 @@ const config = {}
 "#;
         let imports = extract_imports(src);
         assert_eq!(imports.len(), 2);
-        assert_eq!(imports[0], ("propertyGroups".to_string(), "./groups.js".to_string()));
-        assert_eq!(imports[1], ("something".to_string(), "not-relative".to_string()));
+        assert_eq!(
+            imports[0],
+            ("propertyGroups".to_string(), "./groups.js".to_string())
+        );
+        assert_eq!(
+            imports[1],
+            ("something".to_string(), "not-relative".to_string())
+        );
     }
 
     #[test]
@@ -2958,7 +2984,10 @@ const stylelint = require('stylelint')
         let imports = extract_imports(src);
         assert_eq!(imports.len(), 2);
         assert_eq!(imports[0], ("groups".to_string(), "./groups".to_string()));
-        assert_eq!(imports[1], ("stylelint".to_string(), "stylelint".to_string()));
+        assert_eq!(
+            imports[1],
+            ("stylelint".to_string(), "stylelint".to_string())
+        );
     }
 
     #[test]
@@ -3070,7 +3099,10 @@ export default config
                 // Verify first group has the right properties
                 assert!(arr[0].is_object());
             }
-            _ => panic!("Expected array value for order/properties-order, got {:?}", val),
+            _ => panic!(
+                "Expected array value for order/properties-order, got {:?}",
+                val
+            ),
         }
 
         // Cleanup
@@ -3161,11 +3193,7 @@ export default {
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
 
-        std::fs::write(
-            tmp.join("data.js"),
-            "export default [\"a\", \"b\"]\n",
-        )
-        .unwrap();
+        std::fs::write(tmp.join("data.js"), "export default [\"a\", \"b\"]\n").unwrap();
 
         let config_src = r#"
 import items from './data'
@@ -3196,10 +3224,7 @@ export default {
 
     #[test]
     fn resolved_override_matches_glob() {
-        let ov = ResolvedOverride::new(
-            vec!["**/*.scss".to_string()],
-            HashMap::new(),
-        );
+        let ov = ResolvedOverride::new(vec!["**/*.scss".to_string()], HashMap::new());
         assert!(ov.matches("src/styles/main.scss"));
         assert!(ov.matches("main.scss"));
         assert!(!ov.matches("main.css"));

@@ -554,34 +554,15 @@ static KNOWN_AT_RULES: &[&str] = &[
 // ---------------------------------------------------------------------------
 
 static KNOWN_SCSS_AT_RULES: &[&str] = &[
-    "at-root",
-    "content",
-    "debug",
-    "each",
-    "else",
-    "else if",
-    "error",
-    "extend",
-    "for",
-    "forward",
-    "function",
-    "if",
-    "include",
-    "mixin",
-    "return",
-    "use",
-    "warn",
-    "while",
+    "at-root", "content", "debug", "each", "else", "else if", "error", "extend", "for", "forward",
+    "function", "if", "include", "mixin", "return", "use", "warn", "while",
 ];
 
 // ---------------------------------------------------------------------------
 // Less at-rules (sorted)
 // ---------------------------------------------------------------------------
 
-static KNOWN_LESS_AT_RULES: &[&str] = &[
-    "detached-ruleset",
-    "plugin",
-];
+static KNOWN_LESS_AT_RULES: &[&str] = &["detached-ruleset", "plugin"];
 
 // ---------------------------------------------------------------------------
 // Pseudo-classes (without the leading colon)
@@ -687,69 +668,11 @@ static KNOWN_PSEUDO_ELEMENTS: &[&str] = &[
 // ---------------------------------------------------------------------------
 
 static KNOWN_UNITS: &[&str] = &[
-    "%",
-    "cap",
-    "ch",
-    "cm",
-    "cqb",
-    "cqh",
-    "cqi",
-    "cqmax",
-    "cqmin",
-    "cqw",
-    "deg",
-    "dpcm",
-    "dpi",
-    "dppx",
-    "dvb",
-    "dvh",
-    "dvi",
-    "dvmax",
-    "dvmin",
-    "dvw",
-    "em",
-    "ex",
-    "fr",
-    "grad",
-    "hz",
-    "ic",
-    "in",
-    "khz",
-    "lh",
-    "lvb",
-    "lvh",
-    "lvi",
-    "lvmax",
-    "lvmin",
-    "lvw",
-    "mm",
-    "ms",
-    "pc",
-    "pt",
-    "px",
-    "q",
-    "rad",
-    "rcap",
-    "rch",
-    "rem",
-    "rex",
-    "ric",
-    "rlh",
-    "s",
-    "svb",
-    "svh",
-    "svi",
-    "svmax",
-    "svmin",
-    "svw",
-    "turn",
-    "vb",
-    "vh",
-    "vi",
-    "vmax",
-    "vmin",
-    "vw",
-    "x",
+    "%", "cap", "ch", "cm", "cqb", "cqh", "cqi", "cqmax", "cqmin", "cqw", "deg", "dpcm", "dpi",
+    "dppx", "dvb", "dvh", "dvi", "dvmax", "dvmin", "dvw", "em", "ex", "fr", "grad", "hz", "ic",
+    "in", "khz", "lh", "lvb", "lvh", "lvi", "lvmax", "lvmin", "lvw", "mm", "ms", "pc", "pt", "px",
+    "q", "rad", "rcap", "rch", "rem", "rex", "ric", "rlh", "s", "svb", "svh", "svi", "svmax",
+    "svmin", "svw", "turn", "vb", "vh", "vi", "vmax", "vmin", "vw", "x",
 ];
 
 // ---------------------------------------------------------------------------
@@ -976,7 +899,10 @@ mod tests {
     fn known_at_rules_for_less() {
         assert!(is_known_at_rule_for_syntax("media", Syntax::Less));
         assert!(is_known_at_rule_for_syntax("plugin", Syntax::Less));
-        assert!(is_known_at_rule_for_syntax("detached-ruleset", Syntax::Less));
+        assert!(is_known_at_rule_for_syntax(
+            "detached-ruleset",
+            Syntax::Less
+        ));
         assert!(!is_known_at_rule_for_syntax("plugin", Syntax::Css));
         assert!(!is_known_at_rule_for_syntax("mixin", Syntax::Less));
     }

@@ -79,7 +79,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source,
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_decls(decls: Vec<(&str, &str)>, span_offset: usize, span_len: usize) -> CssNode {

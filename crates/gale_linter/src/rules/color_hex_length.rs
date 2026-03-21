@@ -116,7 +116,12 @@ mod tests {
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_value(val: &str) -> CssNode {
@@ -155,14 +160,30 @@ mod tests {
     #[test]
     fn allows_non_shortenable_8_digit_hex() {
         // #f100ffaa — f1 pair doesn't match
-        assert!(ColorHexLength.check(&style_with_value("#f100ffaa"), &ctx()).is_empty());
+        assert!(
+            ColorHexLength
+                .check(&style_with_value("#f100ffaa"), &ctx())
+                .is_empty()
+        );
         // #ffff01ff — 01 pair doesn't match
-        assert!(ColorHexLength.check(&style_with_value("#ffff01ff"), &ctx()).is_empty());
+        assert!(
+            ColorHexLength
+                .check(&style_with_value("#ffff01ff"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn allows_non_shortenable_hex() {
-        assert!(ColorHexLength.check(&style_with_value("#f0f0f0"), &ctx()).is_empty());
-        assert!(ColorHexLength.check(&style_with_value("#fff"), &ctx()).is_empty());
+        assert!(
+            ColorHexLength
+                .check(&style_with_value("#f0f0f0"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            ColorHexLength
+                .check(&style_with_value("#fff"), &ctx())
+                .is_empty()
+        );
     }
 }

@@ -66,7 +66,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source,
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]
@@ -114,10 +116,7 @@ mod tests {
                 Declaration {
                     property: "display".to_string(),
                     value: "block".to_string(),
-                    span: ParserSpan::new(
-                        src.find("display").unwrap(),
-                        "display: block;".len(),
-                    ),
+                    span: ParserSpan::new(src.find("display").unwrap(), "display: block;".len()),
                     important: false,
                 },
             ],

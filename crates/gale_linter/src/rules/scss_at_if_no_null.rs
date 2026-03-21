@@ -37,12 +37,11 @@ impl Rule for ScssAtIfNoNull {
 
         let params = at.params.to_ascii_lowercase();
         if params.contains("== null") || params.contains("!= null") {
-            vec![Diagnostic::new(
-                self.name(),
-                "Unexpected null comparison in @if condition",
-            )
-            .severity(self.default_severity())
-            .span(Span::new(at.span.offset, at.span.length))]
+            vec![
+                Diagnostic::new(self.name(), "Unexpected null comparison in @if condition")
+                    .severity(self.default_severity())
+                    .span(Span::new(at.span.offset, at.span.length)),
+            ]
         } else {
             vec![]
         }
@@ -104,6 +103,10 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssAtIfNoNull.check(&if_rule("$var == null"), &ctx).is_empty());
+        assert!(
+            ScssAtIfNoNull
+                .check(&if_rule("$var == null"), &ctx)
+                .is_empty()
+        );
     }
 }

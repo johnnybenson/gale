@@ -71,12 +71,9 @@ fn find_disallowed_functions(
                 let fname = &lower[start..end];
                 if DISALLOWED.contains(&fname) {
                     diags.push(
-                        Diagnostic::new(
-                            rule.name(),
-                            format!("Unexpected function \"{fname}\""),
-                        )
-                        .severity(rule.default_severity())
-                        .span(Span::new(base_offset + start, end - start)),
+                        Diagnostic::new(rule.name(), format!("Unexpected function \"{fname}\""))
+                            .severity(rule.default_severity())
+                            .span(Span::new(base_offset + start, end - start)),
                     );
                 }
             }
@@ -94,7 +91,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_value(val: &str) -> CssNode {
@@ -150,9 +149,12 @@ mod tests {
                     // Simulate rgb being disallowed
                     if fname == "rgb" {
                         diags.push(
-                            Diagnostic::new(rule.name(), format!("Unexpected function \"{fname}\""))
-                                .severity(rule.default_severity())
-                                .span(Span::new(start, end - start)),
+                            Diagnostic::new(
+                                rule.name(),
+                                format!("Unexpected function \"{fname}\""),
+                            )
+                            .severity(rule.default_severity())
+                            .span(Span::new(start, end - start)),
                         );
                     }
                 }

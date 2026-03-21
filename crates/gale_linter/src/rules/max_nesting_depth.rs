@@ -64,9 +64,7 @@ fn check_style_depth(
             diags.push(
                 Diagnostic::new(
                     rule_impl.name(),
-                    format!(
-                        "Expected nesting depth to be no more than {max}, found {depth}"
-                    ),
+                    format!("Expected nesting depth to be no more than {max}, found {depth}"),
                 )
                 .severity(rule_impl.default_severity())
                 .span(Span::new(child.span.offset, child.span.length)),
@@ -85,7 +83,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn make_decl() -> Declaration {

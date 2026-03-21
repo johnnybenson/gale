@@ -28,8 +28,10 @@ impl Rule for SelectorClassPattern {
         let mut diags = Vec::new();
         for class in extract_class_names(&rule.selector) {
             // Skip class names containing SCSS interpolation #{...}
-            if matches!(ctx.syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass)
-                && class.contains("#{")
+            if matches!(
+                ctx.syntax,
+                gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass
+            ) && class.contains("#{")
             {
                 continue;
             }
@@ -37,9 +39,7 @@ impl Rule for SelectorClassPattern {
                 diags.push(
                     Diagnostic::new(
                         self.name(),
-                        format!(
-                            "Expected class selector \".{class}\" to match kebab-case pattern"
-                        ),
+                        format!("Expected class selector \".{class}\" to match kebab-case pattern"),
                     )
                     .severity(self.default_severity())
                     .span(Span::new(rule.span.offset, rule.span.length)),
@@ -130,7 +130,12 @@ mod tests {
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_selector(sel: &str) -> CssNode {
@@ -156,8 +161,16 @@ mod tests {
 
     #[test]
     fn allows_kebab_case_class() {
-        assert!(SelectorClassPattern.check(&style_with_selector(".my-class"), &ctx()).is_empty());
-        assert!(SelectorClassPattern.check(&style_with_selector(".foo"), &ctx()).is_empty());
+        assert!(
+            SelectorClassPattern
+                .check(&style_with_selector(".my-class"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            SelectorClassPattern
+                .check(&style_with_selector(".foo"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]

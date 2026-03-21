@@ -39,14 +39,16 @@ fn calculate_specificity(selector: &str) -> Specificity {
                 a += 1;
                 i += 1;
                 // Skip the identifier
-                while i < len && (chars[i].is_alphanumeric() || chars[i] == '-' || chars[i] == '_') {
+                while i < len && (chars[i].is_alphanumeric() || chars[i] == '-' || chars[i] == '_')
+                {
                     i += 1;
                 }
             }
             '.' => {
                 b += 1;
                 i += 1;
-                while i < len && (chars[i].is_alphanumeric() || chars[i] == '-' || chars[i] == '_') {
+                while i < len && (chars[i].is_alphanumeric() || chars[i] == '-' || chars[i] == '_')
+                {
                     i += 1;
                 }
             }
@@ -66,7 +68,9 @@ fn calculate_specificity(selector: &str) -> Specificity {
                     // Pseudo-element (::before, ::after, etc.)
                     c += 1;
                     i += 1;
-                    while i < len && (chars[i].is_alphanumeric() || chars[i] == '-' || chars[i] == '_') {
+                    while i < len
+                        && (chars[i].is_alphanumeric() || chars[i] == '-' || chars[i] == '_')
+                    {
                         i += 1;
                     }
                 } else {
@@ -75,7 +79,9 @@ fn calculate_specificity(selector: &str) -> Specificity {
                     // take the specificity of their most specific argument.
                     // For simplicity, we just count all pseudo-classes as b += 1.
                     let start = i;
-                    while i < len && (chars[i].is_alphanumeric() || chars[i] == '-' || chars[i] == '_') {
+                    while i < len
+                        && (chars[i].is_alphanumeric() || chars[i] == '-' || chars[i] == '_')
+                    {
                         i += 1;
                     }
                     let pseudo_name: String = chars[start..i].iter().collect();
@@ -117,7 +123,8 @@ fn calculate_specificity(selector: &str) -> Specificity {
             ch if ch.is_alphanumeric() || ch == '-' || ch == '_' => {
                 // Type selector
                 c += 1;
-                while i < len && (chars[i].is_alphanumeric() || chars[i] == '-' || chars[i] == '_') {
+                while i < len && (chars[i].is_alphanumeric() || chars[i] == '-' || chars[i] == '_')
+                {
                     i += 1;
                 }
             }
@@ -232,7 +239,9 @@ mod tests {
         RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]

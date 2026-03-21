@@ -133,7 +133,12 @@ mod tests {
     use gale_css_parser::{CssNode, Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_selector(sel: &str) -> CssNode {
@@ -159,26 +164,35 @@ mod tests {
 
     #[test]
     fn allows_known_pseudo_class() {
-        assert!(SelectorPseudoClassNoUnknown.check(&style_with_selector("a:hover"), &ctx()).is_empty());
-        assert!(SelectorPseudoClassNoUnknown.check(&style_with_selector("a:nth-child(2)"), &ctx()).is_empty());
+        assert!(
+            SelectorPseudoClassNoUnknown
+                .check(&style_with_selector("a:hover"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            SelectorPseudoClassNoUnknown
+                .check(&style_with_selector("a:nth-child(2)"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn does_not_confuse_with_pseudo_elements() {
         // ::before should not be parsed as pseudo-class
-        assert!(SelectorPseudoClassNoUnknown.check(&style_with_selector("a::before"), &ctx()).is_empty());
+        assert!(
+            SelectorPseudoClassNoUnknown
+                .check(&style_with_selector("a::before"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn allows_legacy_single_colon_pseudo_elements() {
-        for sel in [
-            "p:before",
-            "p:after",
-            "p:first-line",
-            "p:first-letter",
-        ] {
+        for sel in ["p:before", "p:after", "p:first-line", "p:first-letter"] {
             assert!(
-                SelectorPseudoClassNoUnknown.check(&style_with_selector(sel), &ctx()).is_empty(),
+                SelectorPseudoClassNoUnknown
+                    .check(&style_with_selector(sel), &ctx())
+                    .is_empty(),
                 "should not flag legacy pseudo-element in selector \"{sel}\"",
             );
         }

@@ -25,7 +25,9 @@ fn has_bare_custom_property(value: &str) -> bool {
     // Look for `--` that starts a CSS custom property identifier
     let chars_vec: Vec<char> = without_var.chars().collect();
     for (idx, ch) in chars_vec.iter().enumerate() {
-        if *ch == '-' && idx + 1 < chars_vec.len() && chars_vec[idx + 1] == '-'
+        if *ch == '-'
+            && idx + 1 < chars_vec.len()
+            && chars_vec[idx + 1] == '-'
             && (idx == 0 || !chars_vec[idx - 1].is_ascii_alphanumeric())
         {
             return true;
@@ -44,7 +46,12 @@ fn remove_var_functions(s: &str) -> String {
 
     while i < len {
         // Check for "var("
-        if i + 4 <= len && chars[i] == 'v' && chars[i + 1] == 'a' && chars[i + 2] == 'r' && chars[i + 3] == '(' {
+        if i + 4 <= len
+            && chars[i] == 'v'
+            && chars[i + 1] == 'a'
+            && chars[i + 2] == 'r'
+            && chars[i + 3] == '('
+        {
             let mut depth = 1;
             let mut j = i + 4;
             while j < len && depth > 0 {
@@ -117,7 +124,9 @@ mod tests {
         RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]
@@ -136,9 +145,11 @@ mod tests {
         });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
-        assert!(diags[0]
-            .message
-            .contains("missing var function for custom property"));
+        assert!(
+            diags[0]
+                .message
+                .contains("missing var function for custom property")
+        );
     }
 
     #[test]

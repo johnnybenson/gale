@@ -68,15 +68,10 @@ fn collect_animation_issues(
                                 diags.push(
                                     Diagnostic::new(
                                         rule.name(),
-                                        format!(
-                                            "Unknown animation name \"{name}\""
-                                        ),
+                                        format!("Unknown animation name \"{name}\""),
                                     )
                                     .severity(rule.default_severity())
-                                    .span(Span::new(
-                                        decl.span.offset,
-                                        decl.span.length,
-                                    )),
+                                    .span(Span::new(decl.span.offset, decl.span.length)),
                                 );
                             }
                         }
@@ -91,15 +86,10 @@ fn collect_animation_issues(
                             diags.push(
                                 Diagnostic::new(
                                     rule.name(),
-                                    format!(
-                                        "Unknown animation name \"{name}\""
-                                    ),
+                                    format!("Unknown animation name \"{name}\""),
                                 )
                                 .severity(rule.default_severity())
-                                .span(Span::new(
-                                    decl.span.offset,
-                                    decl.span.length,
-                                )),
+                                .span(Span::new(decl.span.offset, decl.span.length)),
                             );
                         }
                     }
@@ -151,9 +141,7 @@ fn extract_animation_name(value: &str) -> Option<String> {
         let lower = token.to_ascii_lowercase();
         // Skip time values (e.g. 1s, 200ms, 0.5s)
         if lower.ends_with('s') || lower.ends_with("ms") {
-            let num_part = lower
-                .trim_end_matches("ms")
-                .trim_end_matches('s');
+            let num_part = lower.trim_end_matches("ms").trim_end_matches('s');
             if num_part.parse::<f64>().is_ok() {
                 continue;
             }
@@ -184,24 +172,24 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]
     fn reports_unknown_animation_name() {
-        let nodes = vec![
-            CssNode::Style(StyleRule {
-                selector: "a".to_string(),
-                declarations: vec![Declaration {
-                    property: "animation-name".to_string(),
-                    value: "fadeIn".to_string(),
-                    span: ParserSpan::new(4, 20),
-                    important: false,
-                }],
-                children: vec![],
-                span: ParserSpan::new(0, 30),
-            }),
-        ];
+        let nodes = vec![CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![Declaration {
+                property: "animation-name".to_string(),
+                value: "fadeIn".to_string(),
+                span: ParserSpan::new(4, 20),
+                important: false,
+            }],
+            children: vec![],
+            span: ParserSpan::new(0, 30),
+        })];
         let d = NoUnknownAnimations.check_root(&nodes, &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("fadeIn"));
@@ -234,19 +222,17 @@ mod tests {
 
     #[test]
     fn reports_unknown_in_animation_shorthand() {
-        let nodes = vec![
-            CssNode::Style(StyleRule {
-                selector: "a".to_string(),
-                declarations: vec![Declaration {
-                    property: "animation".to_string(),
-                    value: "slideUp 1s ease".to_string(),
-                    span: ParserSpan::new(4, 25),
-                    important: false,
-                }],
-                children: vec![],
-                span: ParserSpan::new(0, 35),
-            }),
-        ];
+        let nodes = vec![CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![Declaration {
+                property: "animation".to_string(),
+                value: "slideUp 1s ease".to_string(),
+                span: ParserSpan::new(4, 25),
+                important: false,
+            }],
+            children: vec![],
+            span: ParserSpan::new(0, 35),
+        })];
         let d = NoUnknownAnimations.check_root(&nodes, &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("slideUp"));

@@ -56,21 +56,18 @@ impl Rule for OrderPropertiesOrder {
             let prop_lower = prop.to_ascii_lowercase();
 
             if let Some(&expected_idx) = order_map.get(prop_lower.as_str()) {
-                if let Some(prev_idx) = last_seen_index {
-                    if expected_idx < prev_idx {
-                        let prev_name =
-                            last_seen_property.as_deref().unwrap_or("unknown");
-                        diagnostics.push(
-                            Diagnostic::new(
-                                self.name(),
-                                format!(
-                                    "Expected \"{prop}\" to come before \"{prev_name}\""
-                                ),
-                            )
-                            .severity(self.default_severity())
-                            .span(Span::new(decl.span.offset, decl.span.length)),
-                        );
-                    }
+                if let Some(prev_idx) = last_seen_index
+                    && expected_idx < prev_idx
+                {
+                    let prev_name = last_seen_property.as_deref().unwrap_or("unknown");
+                    diagnostics.push(
+                        Diagnostic::new(
+                            self.name(),
+                            format!("Expected \"{prop}\" to come before \"{prev_name}\""),
+                        )
+                        .severity(self.default_severity())
+                        .span(Span::new(decl.span.offset, decl.span.length)),
+                    );
                 }
                 last_seen_index = Some(expected_idx);
                 last_seen_property = Some(prop.clone());
@@ -117,11 +114,7 @@ fn build_order_map(options: Option<&serde_json::Value>) -> Option<HashMap<&str, 
         }
     }
 
-    if map.is_empty() {
-        None
-    } else {
-        Some(map)
-    }
+    if map.is_empty() { None } else { Some(map) }
 }
 
 #[cfg(test)]
@@ -175,8 +168,7 @@ mod tests {
     #[test]
     fn simple_array_correct_order() {
         let rule = OrderPropertiesOrder;
-        let options =
-            serde_json::json!(["position", "top", "right", "display", "width"]);
+        let options = serde_json::json!(["position", "top", "right", "display", "width"]);
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![
@@ -195,8 +187,7 @@ mod tests {
     #[test]
     fn simple_array_wrong_order() {
         let rule = OrderPropertiesOrder;
-        let options =
-            serde_json::json!(["position", "top", "right", "display", "width"]);
+        let options = serde_json::json!(["position", "top", "right", "display", "width"]);
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![
@@ -282,8 +273,7 @@ mod tests {
     #[test]
     fn unknown_properties_are_ignored() {
         let rule = OrderPropertiesOrder;
-        let options =
-            serde_json::json!(["position", "display", "width"]);
+        let options = serde_json::json!(["position", "display", "width"]);
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![
@@ -302,8 +292,7 @@ mod tests {
     #[test]
     fn skips_scss_variables() {
         let rule = OrderPropertiesOrder;
-        let options =
-            serde_json::json!(["position", "display", "width"]);
+        let options = serde_json::json!(["position", "display", "width"]);
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![
@@ -322,8 +311,7 @@ mod tests {
     #[test]
     fn skips_custom_properties() {
         let rule = OrderPropertiesOrder;
-        let options =
-            serde_json::json!(["position", "display", "width"]);
+        let options = serde_json::json!(["position", "display", "width"]);
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![

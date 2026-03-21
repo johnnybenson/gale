@@ -73,7 +73,9 @@ mod tests {
         RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]
@@ -116,10 +118,7 @@ mod tests {
         ];
         let diags = rule.check_root(&nodes, &make_context());
         assert_eq!(diags.len(), 1);
-        assert_eq!(
-            diags[0].message,
-            "Unexpected duplicate selector \".foo\""
-        );
+        assert_eq!(diags[0].message, "Unexpected duplicate selector \".foo\"");
     }
 
     #[test]

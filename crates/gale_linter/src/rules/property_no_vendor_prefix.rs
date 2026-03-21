@@ -51,31 +51,27 @@ impl Rule for PropertyNoVendorPrefix {
                 // Try to find the property in the source to build a fix
                 let decl_start = decl.span.offset;
                 let decl_end = decl_start + decl.span.length;
-                let fix =
-                    if decl_end <= ctx.source.len() && decl_start < decl_end {
-                        let search_area = &ctx.source[decl_start..decl_end];
-                        let lower_search = search_area.to_ascii_lowercase();
-                        let lower_prop = decl.property.to_ascii_lowercase();
-                        lower_search.find(&lower_prop).map(|rel_offset| {
-                            let abs_offset = decl_start + rel_offset;
-                            Fix::new(
-                                format!("Remove vendor prefix from \"{}\"", decl.property),
-                                vec![Edit::new(
-                                    Span::new(abs_offset, decl.property.len()),
-                                    &unprefixed,
-                                )],
-                            )
-                        })
-                    } else {
-                        None
-                    };
+                let fix = if decl_end <= ctx.source.len() && decl_start < decl_end {
+                    let search_area = &ctx.source[decl_start..decl_end];
+                    let lower_search = search_area.to_ascii_lowercase();
+                    let lower_prop = decl.property.to_ascii_lowercase();
+                    lower_search.find(&lower_prop).map(|rel_offset| {
+                        let abs_offset = decl_start + rel_offset;
+                        Fix::new(
+                            format!("Remove vendor prefix from \"{}\"", decl.property),
+                            vec![Edit::new(
+                                Span::new(abs_offset, decl.property.len()),
+                                &unprefixed,
+                            )],
+                        )
+                    })
+                } else {
+                    None
+                };
 
                 let mut diag = Diagnostic::new(
                     self.name(),
-                    format!(
-                        "Unexpected vendor-prefixed property \"{}\"",
-                        decl.property
-                    ),
+                    format!("Unexpected vendor-prefixed property \"{}\"", decl.property),
                 )
                 .severity(self.default_severity())
                 .span(Span::new(decl.span.offset, decl.span.length));
@@ -107,42 +103,113 @@ fn strip_vendor_prefix(property: &str) -> String {
 /// have NO standard equivalent are not autoprefixable and should not
 /// be flagged (matching Stylelint's behavior).
 const KNOWN_PREFIXABLE_PROPERTIES: &[&str] = &[
-    "align-content", "align-items", "align-self",
-    "animation", "animation-delay", "animation-direction", "animation-duration",
-    "animation-fill-mode", "animation-iteration-count", "animation-name",
-    "animation-play-state", "animation-timing-function",
-    "appearance", "backdrop-filter", "backface-visibility",
-    "background-clip", "background-origin", "background-size",
-    "border-image", "border-radius",
-    "border-top-left-radius", "border-top-right-radius",
-    "border-bottom-left-radius", "border-bottom-right-radius",
-    "box-decoration-break", "box-shadow", "box-sizing",
-    "clip-path", "column-count", "column-fill", "column-gap",
-    "column-rule", "column-rule-color", "column-rule-style", "column-rule-width",
-    "column-span", "column-width", "columns",
-    "filter", "flex", "flex-basis", "flex-direction", "flex-flow",
-    "flex-grow", "flex-shrink", "flex-wrap",
-    "font-feature-settings", "font-kerning", "font-variant-ligatures",
-    "grid", "grid-area", "grid-auto-columns", "grid-auto-flow",
-    "grid-auto-rows", "grid-column", "grid-column-end", "grid-column-gap",
-    "grid-column-start", "grid-gap", "grid-row", "grid-row-end",
-    "grid-row-gap", "grid-row-start", "grid-template",
-    "grid-template-areas", "grid-template-columns", "grid-template-rows",
-    "hyphens", "image-rendering",
-    "justify-content", "mask", "mask-image", "object-fit", "object-position",
-    "opacity", "order", "overscroll-behavior",
-    "perspective", "perspective-origin",
+    "align-content",
+    "align-items",
+    "align-self",
+    "animation",
+    "animation-delay",
+    "animation-direction",
+    "animation-duration",
+    "animation-fill-mode",
+    "animation-iteration-count",
+    "animation-name",
+    "animation-play-state",
+    "animation-timing-function",
+    "appearance",
+    "backdrop-filter",
+    "backface-visibility",
+    "background-clip",
+    "background-origin",
+    "background-size",
+    "border-image",
+    "border-radius",
+    "border-top-left-radius",
+    "border-top-right-radius",
+    "border-bottom-left-radius",
+    "border-bottom-right-radius",
+    "box-decoration-break",
+    "box-shadow",
+    "box-sizing",
+    "clip-path",
+    "column-count",
+    "column-fill",
+    "column-gap",
+    "column-rule",
+    "column-rule-color",
+    "column-rule-style",
+    "column-rule-width",
+    "column-span",
+    "column-width",
+    "columns",
+    "filter",
+    "flex",
+    "flex-basis",
+    "flex-direction",
+    "flex-flow",
+    "flex-grow",
+    "flex-shrink",
+    "flex-wrap",
+    "font-feature-settings",
+    "font-kerning",
+    "font-variant-ligatures",
+    "grid",
+    "grid-area",
+    "grid-auto-columns",
+    "grid-auto-flow",
+    "grid-auto-rows",
+    "grid-column",
+    "grid-column-end",
+    "grid-column-gap",
+    "grid-column-start",
+    "grid-gap",
+    "grid-row",
+    "grid-row-end",
+    "grid-row-gap",
+    "grid-row-start",
+    "grid-template",
+    "grid-template-areas",
+    "grid-template-columns",
+    "grid-template-rows",
+    "hyphens",
+    "image-rendering",
+    "justify-content",
+    "mask",
+    "mask-image",
+    "object-fit",
+    "object-position",
+    "opacity",
+    "order",
+    "overscroll-behavior",
+    "perspective",
+    "perspective-origin",
     "scroll-snap-type",
-    "shape-image-threshold", "shape-margin", "shape-outside",
-    "tab-size", "text-decoration", "text-decoration-color",
-    "text-decoration-line", "text-decoration-skip", "text-decoration-style",
-    "text-emphasis", "text-emphasis-color", "text-emphasis-position",
-    "text-emphasis-style", "text-orientation", "text-overflow",
+    "shape-image-threshold",
+    "shape-margin",
+    "shape-outside",
+    "tab-size",
+    "text-decoration",
+    "text-decoration-color",
+    "text-decoration-line",
+    "text-decoration-skip",
+    "text-decoration-style",
+    "text-emphasis",
+    "text-emphasis-color",
+    "text-emphasis-position",
+    "text-emphasis-style",
+    "text-orientation",
+    "text-overflow",
     "touch-action",
-    "transform", "transform-origin", "transform-style",
-    "transition", "transition-delay", "transition-duration",
-    "transition-property", "transition-timing-function",
-    "user-select", "will-change", "writing-mode",
+    "transform",
+    "transform-origin",
+    "transform-style",
+    "transition",
+    "transition-delay",
+    "transition-duration",
+    "transition-property",
+    "transition-timing-function",
+    "user-select",
+    "will-change",
+    "writing-mode",
 ];
 
 fn is_vendor_prefixed(property: &str) -> bool {
@@ -168,8 +235,8 @@ fn is_vendor_prefixed(property: &str) -> bool {
 
 fn strip_vendor_prefix_lower(property: &str) -> String {
     for prefix in &["-webkit-", "-moz-", "-ms-", "-o-"] {
-        if property.starts_with(prefix) {
-            return property[prefix.len()..].to_string();
+        if let Some(stripped) = property.strip_prefix(prefix) {
+            return stripped.to_string();
         }
     }
     property.to_string()
@@ -181,7 +248,12 @@ mod tests {
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_decl(prop: &str) -> CssNode {
@@ -207,18 +279,31 @@ mod tests {
 
     #[test]
     fn allows_standard_property() {
-        assert!(PropertyNoVendorPrefix.check(&style_decl("transform"), &ctx()).is_empty());
+        assert!(
+            PropertyNoVendorPrefix
+                .check(&style_decl("transform"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn allows_custom_property() {
-        assert!(PropertyNoVendorPrefix.check(&style_decl("--my-var"), &ctx()).is_empty());
+        assert!(
+            PropertyNoVendorPrefix
+                .check(&style_decl("--my-var"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn emits_fix_for_vendor_prefixed_property() {
         let source = "a { -webkit-transform: none; }";
-        let ctx = RuleContext { file_path: "t.css", source, syntax: Syntax::Css, options: None };
+        let ctx = RuleContext {
+            file_path: "t.css",
+            source,
+            syntax: Syntax::Css,
+            options: None,
+        };
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![Declaration {

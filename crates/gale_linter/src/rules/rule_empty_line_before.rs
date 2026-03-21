@@ -41,10 +41,8 @@ fn check_nodes(
             // Skip the very first node at root level
             let is_first = i == 0;
             // Also skip if only preceded by comments
-            let is_first_meaningful = is_first
-                || nodes[..i]
-                    .iter()
-                    .all(|n| matches!(n, CssNode::Comment(_)));
+            let is_first_meaningful =
+                is_first || nodes[..i].iter().all(|n| matches!(n, CssNode::Comment(_)));
 
             if !is_first_meaningful || !is_root {
                 let offset = style.span.offset;
@@ -87,7 +85,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source,
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]

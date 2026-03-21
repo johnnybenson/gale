@@ -31,8 +31,10 @@ impl Rule for SelectorNoQualifyingType {
             let sel = sel.trim();
             // Skip selectors containing SCSS interpolation — the actual selector
             // is dynamic and cannot be validated at lint time.
-            if matches!(ctx.syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass)
-                && sel.contains("#{")
+            if matches!(
+                ctx.syntax,
+                gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass
+            ) && sel.contains("#{")
             {
                 continue;
             }
@@ -40,9 +42,7 @@ impl Rule for SelectorNoQualifyingType {
                 diags.push(
                     Diagnostic::new(
                         self.name(),
-                        format!(
-                            "Unexpected qualifying type selector in \"{sel}\""
-                        ),
+                        format!("Unexpected qualifying type selector in \"{sel}\""),
                     )
                     .severity(self.default_severity())
                     .span(Span::new(rule.span.offset, rule.span.length)),
@@ -176,7 +176,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_selector(sel: &str) -> CssNode {

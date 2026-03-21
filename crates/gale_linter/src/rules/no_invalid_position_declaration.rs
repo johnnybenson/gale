@@ -71,7 +71,12 @@ mod tests {
     use gale_css_parser::{AtRule, Declaration, Span as ParserSpan, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]

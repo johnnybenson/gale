@@ -51,10 +51,7 @@ impl Rule for FunctionUrlQuotes {
                     .span(Span::new(abs_offset, url_content.len()))
                     .fix(Fix::new(
                         "Wrap URL in double quotes",
-                        vec![Edit::new(
-                            Span::new(abs_offset, url_content.len()),
-                            &quoted,
-                        )],
+                        vec![Edit::new(Span::new(abs_offset, url_content.len()), &quoted)],
                     )),
                 );
             }
@@ -103,7 +100,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_value(val: &str) -> CssNode {

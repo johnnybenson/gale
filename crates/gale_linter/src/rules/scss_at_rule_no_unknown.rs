@@ -39,12 +39,14 @@ impl Rule for ScssAtRuleNoUnknown {
         }
 
         if !is_known_at_rule_for_syntax(&at.name, ctx.syntax) {
-            vec![Diagnostic::new(
-                self.name(),
-                format!("Unexpected unknown at-rule \"@{}\"", at.name),
-            )
-            .severity(self.default_severity())
-            .span(Span::new(at.span.offset, at.span.length))]
+            vec![
+                Diagnostic::new(
+                    self.name(),
+                    format!("Unexpected unknown at-rule \"@{}\"", at.name),
+                )
+                .severity(self.default_severity())
+                .span(Span::new(at.span.offset, at.span.length)),
+            ]
         } else {
             vec![]
         }
@@ -85,7 +87,11 @@ mod tests {
 
     #[test]
     fn skips_non_scss() {
-        assert!(ScssAtRuleNoUnknown.check(&at("tailwind"), &css_ctx()).is_empty());
+        assert!(
+            ScssAtRuleNoUnknown
+                .check(&at("tailwind"), &css_ctx())
+                .is_empty()
+        );
     }
 
     #[test]
@@ -111,8 +117,10 @@ mod tests {
 
     #[test]
     fn skips_vendor_prefixed() {
-        assert!(ScssAtRuleNoUnknown
-            .check(&at("-webkit-keyframes"), &scss_ctx())
-            .is_empty());
+        assert!(
+            ScssAtRuleNoUnknown
+                .check(&at("-webkit-keyframes"), &scss_ctx())
+                .is_empty()
+        );
     }
 }

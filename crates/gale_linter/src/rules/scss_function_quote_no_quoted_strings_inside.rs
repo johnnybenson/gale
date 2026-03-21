@@ -34,12 +34,11 @@ impl Rule for ScssFunctionQuoteNoQuotedStringsInside {
             let after = &value[idx + 6..];
             let trimmed = after.trim_start();
             if trimmed.starts_with('"') || trimmed.starts_with('\'') {
-                return vec![Diagnostic::new(
-                    self.name(),
-                    "Unexpected quoted string inside quote()",
-                )
-                .severity(self.default_severity())
-                .span(Span::new(decl.span.offset, decl.span.length))];
+                return vec![
+                    Diagnostic::new(self.name(), "Unexpected quoted string inside quote()")
+                        .severity(self.default_severity())
+                        .span(Span::new(decl.span.offset, decl.span.length)),
+                ];
             }
         }
 
@@ -72,15 +71,14 @@ mod tests {
 
     #[test]
     fn reports_quoted_string_inside_quote() {
-        let d = ScssFunctionQuoteNoQuotedStringsInside
-            .check(&decl("quote(\"hello\")"), &scss_ctx());
+        let d =
+            ScssFunctionQuoteNoQuotedStringsInside.check(&decl("quote(\"hello\")"), &scss_ctx());
         assert_eq!(d.len(), 1);
     }
 
     #[test]
     fn allows_unquoted_inside_quote() {
-        let d = ScssFunctionQuoteNoQuotedStringsInside
-            .check(&decl("quote($var)"), &scss_ctx());
+        let d = ScssFunctionQuoteNoQuotedStringsInside.check(&decl("quote($var)"), &scss_ctx());
         assert!(d.is_empty());
     }
 }

@@ -12,12 +12,7 @@ pub struct DeclarationBlockNoShorthandPropertyOverrides;
 /// Returns the list of longhand properties that a given shorthand expands to.
 fn longhands_for(shorthand: &str) -> Option<&'static [&'static str]> {
     match shorthand {
-        "margin" => Some(&[
-            "margin-top",
-            "margin-right",
-            "margin-bottom",
-            "margin-left",
-        ]),
+        "margin" => Some(&["margin-top", "margin-right", "margin-bottom", "margin-left"]),
         "padding" => Some(&[
             "padding-top",
             "padding-right",
@@ -90,11 +85,7 @@ fn longhands_for(shorthand: &str) -> Option<&'static [&'static str]> {
             "animation-fill-mode",
             "animation-play-state",
         ]),
-        "list-style" => Some(&[
-            "list-style-type",
-            "list-style-position",
-            "list-style-image",
-        ]),
+        "list-style" => Some(&["list-style-type", "list-style-position", "list-style-image"]),
         "text-decoration" => Some(&[
             "text-decoration-color",
             "text-decoration-style",
@@ -171,7 +162,8 @@ impl Rule for DeclarationBlockNoShorthandPropertyOverrides {
             // Check if this property is a longhand of any shorthand.
             for &shorthand in SHORTHANDS {
                 if let Some(longhands) = longhands_for(shorthand)
-                    && longhands.contains(&prop) && !seen_longhands.contains(&prop)
+                    && longhands.contains(&prop)
+                    && !seen_longhands.contains(&prop)
                 {
                     seen_longhands.push(prop);
                 }
@@ -191,7 +183,9 @@ mod tests {
         RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]

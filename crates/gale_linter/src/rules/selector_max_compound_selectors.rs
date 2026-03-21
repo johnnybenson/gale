@@ -36,7 +36,12 @@ impl Rule for SelectorMaxCompoundSelectors {
             .map(|n| n as usize)
             .unwrap_or(MAX_COMPOUND);
 
-        let selector = if matches!(ctx.syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less) {
+        let selector = if matches!(
+            ctx.syntax,
+            gale_css_parser::Syntax::Scss
+                | gale_css_parser::Syntax::Sass
+                | gale_css_parser::Syntax::Less
+        ) {
             strip_scss_line_comments(&rule.selector)
         } else {
             rule.selector.clone()
@@ -142,7 +147,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_selector(sel: &str) -> CssNode {
@@ -162,8 +169,7 @@ mod tests {
     #[test]
     fn reports_too_many_compound_selectors() {
         // 4 compound selectors: .a .b .c .d
-        let d = SelectorMaxCompoundSelectors
-            .check(&style_with_selector(".a .b .c .d"), &ctx());
+        let d = SelectorMaxCompoundSelectors.check(&style_with_selector(".a .b .c .d"), &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("found 4"));
     }
@@ -171,23 +177,21 @@ mod tests {
     #[test]
     fn allows_within_limit() {
         // 3 compound selectors: .a .b .c
-        let d = SelectorMaxCompoundSelectors
-            .check(&style_with_selector(".a .b .c"), &ctx());
+        let d = SelectorMaxCompoundSelectors.check(&style_with_selector(".a .b .c"), &ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn counts_child_combinator() {
         // 4 compound selectors: .a > .b > .c > .d
-        let d = SelectorMaxCompoundSelectors
-            .check(&style_with_selector(".a > .b > .c > .d"), &ctx());
+        let d =
+            SelectorMaxCompoundSelectors.check(&style_with_selector(".a > .b > .c > .d"), &ctx());
         assert_eq!(d.len(), 1);
     }
 
     #[test]
     fn single_selector_ok() {
-        let d = SelectorMaxCompoundSelectors
-            .check(&style_with_selector(".foo"), &ctx());
+        let d = SelectorMaxCompoundSelectors.check(&style_with_selector(".foo"), &ctx());
         assert!(d.is_empty());
     }
 }

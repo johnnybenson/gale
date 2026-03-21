@@ -27,9 +27,12 @@ impl Rule for ColorNoInvalidHex {
             for hex in find_hex_colors(&decl.value) {
                 if !is_valid_hex(&hex) {
                     diags.push(
-                        Diagnostic::new(self.name(), format!("Unexpected invalid hex color \"{hex}\""))
-                            .severity(self.default_severity())
-                            .span(Span::new(decl.span.offset, decl.span.length)),
+                        Diagnostic::new(
+                            self.name(),
+                            format!("Unexpected invalid hex color \"{hex}\""),
+                        )
+                        .severity(self.default_severity())
+                        .span(Span::new(decl.span.offset, decl.span.length)),
                     );
                 }
             }
@@ -125,7 +128,12 @@ mod tests {
     use gale_css_parser::{CssNode, Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_value(val: &str) -> CssNode {
@@ -157,8 +165,20 @@ mod tests {
 
     #[test]
     fn allows_valid_hex() {
-        assert!(ColorNoInvalidHex.check(&style_with_value("#fff"), &ctx()).is_empty());
-        assert!(ColorNoInvalidHex.check(&style_with_value("#ff00ff"), &ctx()).is_empty());
-        assert!(ColorNoInvalidHex.check(&style_with_value("#ff00ff80"), &ctx()).is_empty());
+        assert!(
+            ColorNoInvalidHex
+                .check(&style_with_value("#fff"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            ColorNoInvalidHex
+                .check(&style_with_value("#ff00ff"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            ColorNoInvalidHex
+                .check(&style_with_value("#ff00ff80"), &ctx())
+                .is_empty()
+        );
     }
 }

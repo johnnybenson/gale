@@ -48,10 +48,10 @@ pub mod no_invalid_position_at_import_rule;
 pub mod no_invalid_position_declaration;
 pub mod no_irregular_whitespace;
 pub mod no_unknown_animations;
-pub mod order_properties_alphabetical_order;
-pub mod order_properties_order;
 pub mod number_leading_zero;
 pub mod number_max_precision;
+pub mod order_properties_alphabetical_order;
+pub mod order_properties_order;
 pub mod property_disallowed_list;
 pub mod property_no_unknown;
 pub mod property_no_vendor_prefix;
@@ -60,8 +60,8 @@ pub mod selector_class_pattern;
 pub mod selector_disallowed_list;
 pub mod selector_max_class;
 pub mod selector_max_compound_selectors;
-pub mod selector_max_specificity;
 pub mod selector_max_id;
+pub mod selector_max_specificity;
 pub mod selector_max_type;
 pub mod selector_nested_pattern;
 pub mod selector_no_qualifying_type;
@@ -112,44 +112,78 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(comment_empty_line_before::CommentEmptyLineBefore));
     registry.register(Box::new(comment_no_empty::CommentNoEmpty));
     registry.register(Box::new(custom_media_pattern::CustomMediaPattern));
-    registry.register(Box::new(custom_property_no_missing_var_function::CustomPropertyNoMissingVarFunction));
+    registry.register(Box::new(
+        custom_property_no_missing_var_function::CustomPropertyNoMissingVarFunction,
+    ));
     registry.register(Box::new(custom_property_pattern::CustomPropertyPattern));
     registry.register(Box::new(declaration_block_no_duplicate_custom_properties::DeclarationBlockNoDuplicateCustomProperties));
-    registry.register(Box::new(declaration_block_no_duplicate_properties::DeclarationBlockNoDuplicateProperties));
+    registry.register(Box::new(
+        declaration_block_no_duplicate_properties::DeclarationBlockNoDuplicateProperties,
+    ));
     registry.register(Box::new(declaration_block_no_redundant_longhand_properties::DeclarationBlockNoRedundantLonghandProperties));
     registry.register(Box::new(declaration_block_no_shorthand_property_overrides::DeclarationBlockNoShorthandPropertyOverrides));
-    registry.register(Box::new(declaration_block_single_line_max_declarations::DeclarationBlockSingleLineMaxDeclarations));
-    registry.register(Box::new(declaration_empty_line_before::DeclarationEmptyLineBefore));
+    registry.register(Box::new(
+        declaration_block_single_line_max_declarations::DeclarationBlockSingleLineMaxDeclarations,
+    ));
+    registry.register(Box::new(
+        declaration_empty_line_before::DeclarationEmptyLineBefore,
+    ));
     registry.register(Box::new(declaration_no_important::DeclarationNoImportant));
-    registry.register(Box::new(declaration_property_value_disallowed_list::DeclarationPropertyValueDisallowedList));
-    registry.register(Box::new(font_family_no_duplicate_names::FontFamilyNoDuplicateNames));
-    registry.register(Box::new(font_family_no_missing_generic_family_keyword::FontFamilyNoMissingGenericFamilyKeyword));
+    registry.register(Box::new(
+        declaration_property_value_disallowed_list::DeclarationPropertyValueDisallowedList,
+    ));
+    registry.register(Box::new(
+        font_family_no_duplicate_names::FontFamilyNoDuplicateNames,
+    ));
+    registry.register(Box::new(
+        font_family_no_missing_generic_family_keyword::FontFamilyNoMissingGenericFamilyKeyword,
+    ));
     registry.register(Box::new(font_weight_notation::FontWeightNotation));
-    registry.register(Box::new(function_calc_no_unspaced_operator::FunctionCalcNoUnspacedOperator));
+    registry.register(Box::new(
+        function_calc_no_unspaced_operator::FunctionCalcNoUnspacedOperator,
+    ));
     registry.register(Box::new(function_disallowed_list::FunctionDisallowedList));
     registry.register(Box::new(function_name_case::FunctionNameCase));
     registry.register(Box::new(function_url_quotes::FunctionUrlQuotes));
     registry.register(Box::new(hue_degree_notation::HueDegreeNotation));
     registry.register(Box::new(import_notation::ImportNotation));
-    registry.register(Box::new(keyframe_block_no_duplicate_selectors::KeyframeBlockNoDuplicateSelectors));
-    registry.register(Box::new(keyframe_declaration_no_important::KeyframeDeclarationNoImportant));
+    registry.register(Box::new(
+        keyframe_block_no_duplicate_selectors::KeyframeBlockNoDuplicateSelectors,
+    ));
+    registry.register(Box::new(
+        keyframe_declaration_no_important::KeyframeDeclarationNoImportant,
+    ));
     registry.register(Box::new(length_zero_no_unit::LengthZeroNoUnit));
     registry.register(Box::new(max_line_length::MaxLineLength));
     registry.register(Box::new(max_nesting_depth::MaxNestingDepth));
-    registry.register(Box::new(media_feature_name_no_unknown::MediaFeatureNameNoUnknown));
-    registry.register(Box::new(media_feature_range_notation::MediaFeatureRangeNotation));
+    registry.register(Box::new(
+        media_feature_name_no_unknown::MediaFeatureNameNoUnknown,
+    ));
+    registry.register(Box::new(
+        media_feature_range_notation::MediaFeatureRangeNotation,
+    ));
     registry.register(Box::new(media_query_no_invalid::MediaQueryNoInvalid));
     registry.register(Box::new(no_descending_specificity::NoDescendingSpecificity));
-    registry.register(Box::new(no_duplicate_at_import_rules::NoDuplicateAtImportRules));
+    registry.register(Box::new(
+        no_duplicate_at_import_rules::NoDuplicateAtImportRules,
+    ));
     registry.register(Box::new(no_duplicate_selectors::NoDuplicateSelectors));
     registry.register(Box::new(no_empty_source::NoEmptySource));
-    registry.register(Box::new(no_invalid_double_slash_comments::NoInvalidDoubleSlashComments));
-    registry.register(Box::new(no_invalid_position_at_import_rule::NoInvalidPositionAtImportRule));
-    registry.register(Box::new(no_invalid_position_declaration::NoInvalidPositionDeclaration));
+    registry.register(Box::new(
+        no_invalid_double_slash_comments::NoInvalidDoubleSlashComments,
+    ));
+    registry.register(Box::new(
+        no_invalid_position_at_import_rule::NoInvalidPositionAtImportRule,
+    ));
+    registry.register(Box::new(
+        no_invalid_position_declaration::NoInvalidPositionDeclaration,
+    ));
     registry.register(Box::new(no_irregular_whitespace::NoIrregularWhitespace));
     registry.register(Box::new(no_unknown_animations::NoUnknownAnimations));
     registry.register(Box::new(number_leading_zero::NumberLeadingZero));
-    registry.register(Box::new(order_properties_alphabetical_order::OrderPropertiesAlphabeticalOrder));
+    registry.register(Box::new(
+        order_properties_alphabetical_order::OrderPropertiesAlphabeticalOrder,
+    ));
     registry.register(Box::new(order_properties_order::OrderPropertiesOrder));
     registry.register(Box::new(number_max_precision::NumberMaxPrecision));
     registry.register(Box::new(property_disallowed_list::PropertyDisallowedList));
@@ -159,18 +193,30 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(selector_class_pattern::SelectorClassPattern));
     registry.register(Box::new(selector_disallowed_list::SelectorDisallowedList));
     registry.register(Box::new(selector_max_class::SelectorMaxClass));
-    registry.register(Box::new(selector_max_compound_selectors::SelectorMaxCompoundSelectors));
+    registry.register(Box::new(
+        selector_max_compound_selectors::SelectorMaxCompoundSelectors,
+    ));
     registry.register(Box::new(selector_max_id::SelectorMaxId));
     registry.register(Box::new(selector_max_specificity::SelectorMaxSpecificity));
     registry.register(Box::new(selector_max_type::SelectorMaxType));
     registry.register(Box::new(selector_nested_pattern::SelectorNestedPattern));
-    registry.register(Box::new(selector_no_qualifying_type::SelectorNoQualifyingType));
+    registry.register(Box::new(
+        selector_no_qualifying_type::SelectorNoQualifyingType,
+    ));
     registry.register(Box::new(selector_not_notation::SelectorNotNotation));
-    registry.register(Box::new(selector_pseudo_class_no_unknown::SelectorPseudoClassNoUnknown));
-    registry.register(Box::new(selector_pseudo_element_colon_notation::SelectorPseudoElementColonNotation));
-    registry.register(Box::new(selector_pseudo_element_no_unknown::SelectorPseudoElementNoUnknown));
+    registry.register(Box::new(
+        selector_pseudo_class_no_unknown::SelectorPseudoClassNoUnknown,
+    ));
+    registry.register(Box::new(
+        selector_pseudo_element_colon_notation::SelectorPseudoElementColonNotation,
+    ));
+    registry.register(Box::new(
+        selector_pseudo_element_no_unknown::SelectorPseudoElementNoUnknown,
+    ));
     registry.register(Box::new(selector_type_no_unknown::SelectorTypeNoUnknown));
-    registry.register(Box::new(shorthand_property_no_redundant_values::ShorthandPropertyNoRedundantValues));
+    registry.register(Box::new(
+        shorthand_property_no_redundant_values::ShorthandPropertyNoRedundantValues,
+    ));
     registry.register(Box::new(string_no_newline::StringNoNewline));
     registry.register(Box::new(string_quotes::StringQuotes));
     registry.register(Box::new(unit_no_unknown::UnitNoUnknown));
@@ -178,19 +224,35 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(value_no_vendor_prefix::ValueNoVendorPrefix));
 
     // SCSS-specific rules
-    registry.register(Box::new(scss_at_extend_no_missing_placeholder::ScssAtExtendNoMissingPlaceholder));
+    registry.register(Box::new(
+        scss_at_extend_no_missing_placeholder::ScssAtExtendNoMissingPlaceholder,
+    ));
     registry.register(Box::new(scss_at_if_no_null::ScssAtIfNoNull));
     registry.register(Box::new(scss_at_rule_no_unknown::ScssAtRuleNoUnknown));
     registry.register(Box::new(scss_comment_no_empty::ScssCommentNoEmpty));
     registry.register(Box::new(scss_declaration_nested_properties_no_divided_groups::ScssDeclarationNestedPropertiesNoDividedGroups));
-    registry.register(Box::new(scss_dollar_variable_no_missing_interpolation::ScssDollarVariableNoMissingInterpolation));
-    registry.register(Box::new(scss_function_quote_no_quoted_strings_inside::ScssFunctionQuoteNoQuotedStringsInside));
+    registry.register(Box::new(
+        scss_dollar_variable_no_missing_interpolation::ScssDollarVariableNoMissingInterpolation,
+    ));
+    registry.register(Box::new(
+        scss_function_quote_no_quoted_strings_inside::ScssFunctionQuoteNoQuotedStringsInside,
+    ));
     registry.register(Box::new(scss_function_unquote_no_unquoted_strings_inside::ScssFunctionUnquoteNoUnquotedStringsInside));
-    registry.register(Box::new(scss_load_no_partial_leading_underscore::ScssLoadNoPartialLeadingUnderscore));
-    registry.register(Box::new(scss_load_partial_extension::ScssLoadPartialExtension));
+    registry.register(Box::new(
+        scss_load_no_partial_leading_underscore::ScssLoadNoPartialLeadingUnderscore,
+    ));
+    registry.register(Box::new(
+        scss_load_partial_extension::ScssLoadPartialExtension,
+    ));
     registry.register(Box::new(scss_no_duplicate_mixins::ScssNoDuplicateMixins));
-    registry.register(Box::new(scss_no_global_function_names::ScssNoGlobalFunctionNames));
-    registry.register(Box::new(scss_operator_no_newline_after::ScssOperatorNoNewlineAfter));
-    registry.register(Box::new(scss_operator_no_newline_before::ScssOperatorNoNewlineBefore));
+    registry.register(Box::new(
+        scss_no_global_function_names::ScssNoGlobalFunctionNames,
+    ));
+    registry.register(Box::new(
+        scss_operator_no_newline_after::ScssOperatorNoNewlineAfter,
+    ));
+    registry.register(Box::new(
+        scss_operator_no_newline_before::ScssOperatorNoNewlineBefore,
+    ));
     registry.register(Box::new(scss_operator_no_unspaced::ScssOperatorNoUnspaced));
 }

@@ -42,9 +42,7 @@ fn check_nested_selectors(
             diags.push(
                 Diagnostic::new(
                     rule.name(),
-                    format!(
-                        "Expected nested selector \"{selector}\" to start with \"&\""
-                    ),
+                    format!("Expected nested selector \"{selector}\" to start with \"&\""),
                 )
                 .severity(rule.default_severity())
                 .span(Span::new(child.span.offset, child.span.length)),
@@ -64,7 +62,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn make_decl() -> Declaration {

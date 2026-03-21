@@ -42,15 +42,14 @@ impl Rule for ScssLoadNoPartialLeadingUnderscore {
         // Get the filename portion (last segment after `/`).
         let filename = path.rsplit('/').next().unwrap_or(path);
         if filename.starts_with('_') {
-            vec![Diagnostic::new(
-                self.name(),
-                format!(
-                    "Unexpected leading underscore in partial name \"{}\"",
-                    path
-                ),
-            )
-            .severity(self.default_severity())
-            .span(Span::new(at.span.offset, at.span.length))]
+            vec![
+                Diagnostic::new(
+                    self.name(),
+                    format!("Unexpected leading underscore in partial name \"{}\"", path),
+                )
+                .severity(self.default_severity())
+                .span(Span::new(at.span.offset, at.span.length)),
+            ]
         } else {
             vec![]
         }
@@ -114,22 +113,20 @@ mod tests {
 
     #[test]
     fn reports_leading_underscore_in_import() {
-        let d =
-            ScssLoadNoPartialLeadingUnderscore.check(&import_rule("\"_mixins\""), &scss_ctx());
+        let d = ScssLoadNoPartialLeadingUnderscore.check(&import_rule("\"_mixins\""), &scss_ctx());
         assert_eq!(d.len(), 1);
     }
 
     #[test]
     fn reports_underscore_in_path() {
-        let d = ScssLoadNoPartialLeadingUnderscore
-            .check(&use_rule("\"path/to/_file\""), &scss_ctx());
+        let d =
+            ScssLoadNoPartialLeadingUnderscore.check(&use_rule("\"path/to/_file\""), &scss_ctx());
         assert_eq!(d.len(), 1);
     }
 
     #[test]
     fn allows_no_underscore() {
-        let d =
-            ScssLoadNoPartialLeadingUnderscore.check(&use_rule("\"variables\""), &scss_ctx());
+        let d = ScssLoadNoPartialLeadingUnderscore.check(&use_rule("\"variables\""), &scss_ctx());
         assert!(d.is_empty());
     }
 
@@ -148,8 +145,10 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssLoadNoPartialLeadingUnderscore
-            .check(&use_rule("\"_variables\""), &ctx)
-            .is_empty());
+        assert!(
+            ScssLoadNoPartialLeadingUnderscore
+                .check(&use_rule("\"_variables\""), &ctx)
+                .is_empty()
+        );
     }
 }

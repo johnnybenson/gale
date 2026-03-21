@@ -39,12 +39,11 @@ impl Rule for ScssFunctionUnquoteNoUnquotedStringsInside {
                 && !trimmed.starts_with('$')
                 && !trimmed.starts_with(')')
             {
-                return vec![Diagnostic::new(
-                    self.name(),
-                    "Unexpected unquoted string inside unquote()",
-                )
-                .severity(self.default_severity())
-                .span(Span::new(decl.span.offset, decl.span.length))];
+                return vec![
+                    Diagnostic::new(self.name(), "Unexpected unquoted string inside unquote()")
+                        .severity(self.default_severity())
+                        .span(Span::new(decl.span.offset, decl.span.length)),
+                ];
             }
         }
 
@@ -77,8 +76,8 @@ mod tests {
 
     #[test]
     fn reports_unquoted_string_inside_unquote() {
-        let d = ScssFunctionUnquoteNoUnquotedStringsInside
-            .check(&decl("unquote(bold)"), &scss_ctx());
+        let d =
+            ScssFunctionUnquoteNoUnquotedStringsInside.check(&decl("unquote(bold)"), &scss_ctx());
         assert_eq!(d.len(), 1);
     }
 
@@ -91,8 +90,8 @@ mod tests {
 
     #[test]
     fn allows_variable_inside_unquote() {
-        let d = ScssFunctionUnquoteNoUnquotedStringsInside
-            .check(&decl("unquote($var)"), &scss_ctx());
+        let d =
+            ScssFunctionUnquoteNoUnquotedStringsInside.check(&decl("unquote($var)"), &scss_ctx());
         assert!(d.is_empty());
     }
 }

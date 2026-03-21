@@ -88,7 +88,12 @@ mod tests {
     use gale_css_parser::{AtRule as CssAtRule, Span as ParserSpan, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn at_rule(name: &str) -> CssNode {
@@ -109,14 +114,27 @@ mod tests {
 
     #[test]
     fn allows_standard_at_rule() {
-        assert!(AtRuleNoVendorPrefix.check(&at_rule("keyframes"), &ctx()).is_empty());
-        assert!(AtRuleNoVendorPrefix.check(&at_rule("media"), &ctx()).is_empty());
+        assert!(
+            AtRuleNoVendorPrefix
+                .check(&at_rule("keyframes"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            AtRuleNoVendorPrefix
+                .check(&at_rule("media"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn emits_fix_for_vendor_prefixed_at_rule() {
         let source = "@-webkit-keyframes fade { }";
-        let ctx = RuleContext { file_path: "t.css", source, syntax: Syntax::Css, options: None };
+        let ctx = RuleContext {
+            file_path: "t.css",
+            source,
+            syntax: Syntax::Css,
+            options: None,
+        };
         let node = CssNode::AtRule(CssAtRule {
             name: "-webkit-keyframes".to_string(),
             params: "fade".to_string(),

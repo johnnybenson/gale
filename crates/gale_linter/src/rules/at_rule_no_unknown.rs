@@ -29,9 +29,12 @@ impl Rule for AtRuleNoUnknown {
         }
         if !is_known_at_rule_for_syntax(&at.name, ctx.syntax) {
             vec![
-                Diagnostic::new(self.name(), format!("Unexpected unknown at-rule \"@{}\"", at.name))
-                    .severity(self.default_severity())
-                    .span(Span::new(at.span.offset, at.span.length)),
+                Diagnostic::new(
+                    self.name(),
+                    format!("Unexpected unknown at-rule \"@{}\"", at.name),
+                )
+                .severity(self.default_severity())
+                .span(Span::new(at.span.offset, at.span.length)),
             ]
         } else {
             vec![]
@@ -45,7 +48,12 @@ mod tests {
     use gale_css_parser::{AtRule, CssNode, Span, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn at(name: &str) -> CssNode {
@@ -72,15 +80,29 @@ mod tests {
 
     #[test]
     fn skips_vendor_prefixed() {
-        assert!(AtRuleNoUnknown.check(&at("-webkit-keyframes"), &ctx()).is_empty());
+        assert!(
+            AtRuleNoUnknown
+                .check(&at("-webkit-keyframes"), &ctx())
+                .is_empty()
+        );
     }
 
     fn scss_ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.scss", source: "", syntax: Syntax::Scss, options: None }
+        RuleContext {
+            file_path: "t.scss",
+            source: "",
+            syntax: Syntax::Scss,
+            options: None,
+        }
     }
 
     fn less_ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.less", source: "", syntax: Syntax::Less, options: None }
+        RuleContext {
+            file_path: "t.less",
+            source: "",
+            syntax: Syntax::Less,
+            options: None,
+        }
     }
 
     #[test]
@@ -108,7 +130,11 @@ mod tests {
     fn allows_less_at_rules_in_less() {
         let ctx = less_ctx();
         assert!(AtRuleNoUnknown.check(&at("plugin"), &ctx).is_empty());
-        assert!(AtRuleNoUnknown.check(&at("detached-ruleset"), &ctx).is_empty());
+        assert!(
+            AtRuleNoUnknown
+                .check(&at("detached-ruleset"), &ctx)
+                .is_empty()
+        );
     }
 
     #[test]

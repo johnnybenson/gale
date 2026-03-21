@@ -12,12 +12,7 @@ use crate::rule::{Rule, RuleContext};
 /// Equivalent to Stylelint's `annotation-no-unknown` rule.
 pub struct AnnotationNoUnknown;
 
-const KNOWN_COMMANDS: &[&str] = &[
-    "disable",
-    "disable-line",
-    "disable-next-line",
-    "enable",
-];
+const KNOWN_COMMANDS: &[&str] = &["disable", "disable-line", "disable-next-line", "enable"];
 
 impl Rule for AnnotationNoUnknown {
     fn name(&self) -> &'static str {
@@ -48,12 +43,14 @@ impl Rule for AnnotationNoUnknown {
                 // Extract the command (everything up to the first space or end)
                 let command = rest.split_whitespace().next().unwrap_or("");
                 if !KNOWN_COMMANDS.contains(&command) {
-                    return vec![Diagnostic::new(
-                        self.name(),
-                        format!("Unexpected unknown annotation \"/* {prefix}{command} */\""),
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(comment.span.offset, comment.span.length))];
+                    return vec![
+                        Diagnostic::new(
+                            self.name(),
+                            format!("Unexpected unknown annotation \"/* {prefix}{command} */\""),
+                        )
+                        .severity(self.default_severity())
+                        .span(Span::new(comment.span.offset, comment.span.length)),
+                    ];
                 }
             }
         }
@@ -68,7 +65,12 @@ mod tests {
     use gale_css_parser::{Comment, Span as ParserSpan, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn comment(text: &str) -> CssNode {
@@ -95,15 +97,39 @@ mod tests {
 
     #[test]
     fn allows_known_annotations() {
-        assert!(AnnotationNoUnknown.check(&comment("/* stylelint-disable */"), &ctx()).is_empty());
-        assert!(AnnotationNoUnknown.check(&comment("/* stylelint-enable */"), &ctx()).is_empty());
-        assert!(AnnotationNoUnknown.check(&comment("/* stylelint-disable-line */"), &ctx()).is_empty());
-        assert!(AnnotationNoUnknown.check(&comment("/* stylelint-disable-next-line */"), &ctx()).is_empty());
-        assert!(AnnotationNoUnknown.check(&comment("/* gale-disable */"), &ctx()).is_empty());
+        assert!(
+            AnnotationNoUnknown
+                .check(&comment("/* stylelint-disable */"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            AnnotationNoUnknown
+                .check(&comment("/* stylelint-enable */"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            AnnotationNoUnknown
+                .check(&comment("/* stylelint-disable-line */"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            AnnotationNoUnknown
+                .check(&comment("/* stylelint-disable-next-line */"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            AnnotationNoUnknown
+                .check(&comment("/* gale-disable */"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn ignores_regular_comments() {
-        assert!(AnnotationNoUnknown.check(&comment("/* hello world */"), &ctx()).is_empty());
+        assert!(
+            AnnotationNoUnknown
+                .check(&comment("/* hello world */"), &ctx())
+                .is_empty()
+        );
     }
 }

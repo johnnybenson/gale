@@ -62,10 +62,7 @@ impl Rule for DeclarationNoImportant {
 
                 let mut diag = Diagnostic::new(
                     self.name(),
-                    format!(
-                        "Unexpected !important in declaration \"{}\"",
-                        decl.property
-                    ),
+                    format!("Unexpected !important in declaration \"{}\"", decl.property),
                 )
                 .severity(self.default_severity())
                 .span(Span::new(decl.span.offset, decl.span.length));
@@ -95,7 +92,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source,
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_node(prop: &str, val: &str, important: bool, offset: usize, len: usize) -> CssNode {

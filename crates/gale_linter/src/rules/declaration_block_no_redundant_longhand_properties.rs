@@ -21,7 +21,12 @@ const SHORTHAND_MAPPINGS: &[ShorthandMapping] = &[
     },
     ShorthandMapping {
         shorthand: "padding",
-        longhands: &["padding-top", "padding-right", "padding-bottom", "padding-left"],
+        longhands: &[
+            "padding-top",
+            "padding-right",
+            "padding-bottom",
+            "padding-left",
+        ],
     },
     ShorthandMapping {
         shorthand: "border-color",
@@ -167,7 +172,12 @@ mod tests {
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_props(props: &[(&str, &str)]) -> CssNode {
@@ -203,7 +213,11 @@ mod tests {
     #[test]
     fn allows_incomplete_longhands() {
         let node = style_with_props(&[("margin-top", "1px"), ("margin-bottom", "3px")]);
-        assert!(DeclarationBlockNoRedundantLonghandProperties.check(&node, &ctx()).is_empty());
+        assert!(
+            DeclarationBlockNoRedundantLonghandProperties
+                .check(&node, &ctx())
+                .is_empty()
+        );
     }
 
     #[test]

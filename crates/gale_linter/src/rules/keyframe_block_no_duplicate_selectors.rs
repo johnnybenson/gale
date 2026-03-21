@@ -45,16 +45,10 @@ impl Rule for KeyframeBlockNoDuplicateSelectors {
                     diagnostics.push(
                         Diagnostic::new(
                             self.name(),
-                            format!(
-                                "Unexpected duplicate keyframe selector \"{}\"",
-                                selector
-                            ),
+                            format!("Unexpected duplicate keyframe selector \"{}\"", selector),
                         )
                         .severity(self.default_severity())
-                        .span(Span::new(
-                            style_rule.span.offset,
-                            style_rule.span.length,
-                        )),
+                        .span(Span::new(style_rule.span.offset, style_rule.span.length)),
                     );
                 }
             }
@@ -73,7 +67,9 @@ mod tests {
         RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]

@@ -231,7 +231,11 @@ impl Diagnostic {
 
 impl std::fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {} ({})", self.severity, self.message, self.rule_name)
+        write!(
+            f,
+            "{}: {} ({})",
+            self.severity, self.message, self.rule_name
+        )
     }
 }
 
@@ -385,7 +389,10 @@ mod tests {
         let diags = vec![
             Diagnostic::new("color-hex-length", "shorten")
                 .span(Span::new(11, 7))
-                .fix(Fix::new("Shorten hex", vec![Edit::new(Span::new(11, 7), "#fff")])),
+                .fix(Fix::new(
+                    "Shorten hex",
+                    vec![Edit::new(Span::new(11, 7), "#fff")],
+                )),
         ];
         let (fixed, count) = apply_fixes(source, &diags);
         assert_eq!(fixed, "a { color: #fff; }");
@@ -398,10 +405,16 @@ mod tests {
         let diags = vec![
             Diagnostic::new("length-zero-no-unit", "remove unit")
                 .span(Span::new(12, 3))
-                .fix(Fix::new("Remove unit", vec![Edit::new(Span::new(12, 3), "0")])),
+                .fix(Fix::new(
+                    "Remove unit",
+                    vec![Edit::new(Span::new(12, 3), "0")],
+                )),
             Diagnostic::new("length-zero-no-unit", "remove unit")
                 .span(Span::new(26, 3))
-                .fix(Fix::new("Remove unit", vec![Edit::new(Span::new(26, 3), "0")])),
+                .fix(Fix::new(
+                    "Remove unit",
+                    vec![Edit::new(Span::new(26, 3), "0")],
+                )),
         ];
         let (fixed, count) = apply_fixes(source, &diags);
         assert_eq!(fixed, "a { margin: 0; padding: 0; }");
@@ -411,9 +424,7 @@ mod tests {
     #[test]
     fn apply_fixes_no_fixes() {
         let source = "a { color: red; }";
-        let diags = vec![
-            Diagnostic::new("some-rule", "no fix available").span(Span::new(0, 1)),
-        ];
+        let diags = vec![Diagnostic::new("some-rule", "no fix available").span(Span::new(0, 1))];
         let (fixed, count) = apply_fixes(source, &diags);
         assert_eq!(fixed, source);
         assert_eq!(count, 0);

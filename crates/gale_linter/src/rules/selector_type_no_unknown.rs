@@ -29,7 +29,12 @@ impl Rule for SelectorTypeNoUnknown {
             return vec![];
         };
 
-        let selector = if matches!(ctx.syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less) {
+        let selector = if matches!(
+            ctx.syntax,
+            gale_css_parser::Syntax::Scss
+                | gale_css_parser::Syntax::Sass
+                | gale_css_parser::Syntax::Less
+        ) {
             strip_scss_line_comments(&rule.selector)
         } else {
             rule.selector.clone()
@@ -97,8 +102,11 @@ fn extract_type_selectors(selector: &str) -> Vec<String> {
                     let mut depth = 1;
                     i += 1;
                     while i < len && depth > 0 {
-                        if chars[i] == '(' { depth += 1; }
-                        else if chars[i] == ')' { depth -= 1; }
+                        if chars[i] == '(' {
+                            depth += 1;
+                        } else if chars[i] == ')' {
+                            depth -= 1;
+                        }
                         i += 1;
                     }
                 }
@@ -108,7 +116,9 @@ fn extract_type_selectors(selector: &str) -> Vec<String> {
             // Skip class selectors (.name)
             '.' => {
                 i += 1;
-                while i < len && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_') {
+                while i < len
+                    && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
+                {
                     i += 1;
                 }
                 expect_type = false;
@@ -117,7 +127,9 @@ fn extract_type_selectors(selector: &str) -> Vec<String> {
             // Skip ID selectors (#name)
             '#' => {
                 i += 1;
-                while i < len && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_') {
+                while i < len
+                    && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
+                {
                     i += 1;
                 }
                 expect_type = false;
@@ -128,8 +140,11 @@ fn extract_type_selectors(selector: &str) -> Vec<String> {
                 let mut depth = 1;
                 i += 1;
                 while i < len && depth > 0 {
-                    if chars[i] == '[' { depth += 1; }
-                    else if chars[i] == ']' { depth -= 1; }
+                    if chars[i] == '[' {
+                        depth += 1;
+                    } else if chars[i] == ']' {
+                        depth -= 1;
+                    }
                     i += 1;
                 }
                 expect_type = false;
@@ -162,7 +177,9 @@ fn extract_type_selectors(selector: &str) -> Vec<String> {
             // Identifier character — could be a type selector
             c if c.is_ascii_alphabetic() && expect_type => {
                 let start = i;
-                while i < len && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_') {
+                while i < len
+                    && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
+                {
                     i += 1;
                 }
                 let name: String = chars[start..i].iter().collect();
@@ -173,7 +190,9 @@ fn extract_type_selectors(selector: &str) -> Vec<String> {
             _ => {
                 if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
                     // Skip over identifiers we don't care about
-                    while i < len && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_') {
+                    while i < len
+                        && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
+                    {
                         i += 1;
                     }
                 } else {
@@ -203,7 +222,11 @@ fn strip_scss_line_comments(selector: &str) -> String {
                 match bytes[i] {
                     b'\'' if !in_double => in_single = !in_single,
                     b'"' if !in_single => in_double = !in_double,
-                    b'/' if !in_single && !in_double && i + 1 < bytes.len() && bytes[i + 1] == b'/' => {
+                    b'/' if !in_single
+                        && !in_double
+                        && i + 1 < bytes.len()
+                        && bytes[i + 1] == b'/' =>
+                    {
                         return &line[..i];
                     }
                     _ => {}
@@ -222,7 +245,12 @@ mod tests {
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style(sel: &str) -> CssNode {
@@ -248,20 +276,44 @@ mod tests {
 
     #[test]
     fn allows_known_html_elements() {
-        assert!(SelectorTypeNoUnknown.check(&style("div"), &ctx()).is_empty());
+        assert!(
+            SelectorTypeNoUnknown
+                .check(&style("div"), &ctx())
+                .is_empty()
+        );
         assert!(SelectorTypeNoUnknown.check(&style("a"), &ctx()).is_empty());
-        assert!(SelectorTypeNoUnknown.check(&style("span"), &ctx()).is_empty());
+        assert!(
+            SelectorTypeNoUnknown
+                .check(&style("span"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn skips_custom_elements() {
-        assert!(SelectorTypeNoUnknown.check(&style("my-component"), &ctx()).is_empty());
-        assert!(SelectorTypeNoUnknown.check(&style("app-header"), &ctx()).is_empty());
+        assert!(
+            SelectorTypeNoUnknown
+                .check(&style("my-component"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            SelectorTypeNoUnknown
+                .check(&style("app-header"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn ignores_class_and_id_selectors() {
-        assert!(SelectorTypeNoUnknown.check(&style(".foo"), &ctx()).is_empty());
-        assert!(SelectorTypeNoUnknown.check(&style("#bar"), &ctx()).is_empty());
+        assert!(
+            SelectorTypeNoUnknown
+                .check(&style(".foo"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            SelectorTypeNoUnknown
+                .check(&style("#bar"), &ctx())
+                .is_empty()
+        );
     }
 }

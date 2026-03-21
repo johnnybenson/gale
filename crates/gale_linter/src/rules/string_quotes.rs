@@ -34,7 +34,13 @@ impl Rule for StringQuotes {
             } else {
                 &decl.value
             };
-            check_single_quotes(self, source_slice, decl_start, decl_end <= ctx.source.len(), &mut diags);
+            check_single_quotes(
+                self,
+                source_slice,
+                decl_start,
+                decl_end <= ctx.source.len(),
+                &mut diags,
+            );
         }
         diags
     }
@@ -117,7 +123,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_value(val: &str) -> CssNode {

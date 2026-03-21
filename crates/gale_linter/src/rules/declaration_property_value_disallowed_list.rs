@@ -64,7 +64,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_decl(prop: &str, val: &str) -> CssNode {
@@ -83,19 +85,15 @@ mod tests {
 
     #[test]
     fn allows_all_when_list_empty() {
-        let d = DeclarationPropertyValueDisallowedList.check(
-            &style_with_decl("color", "red"),
-            &ctx(),
-        );
+        let d =
+            DeclarationPropertyValueDisallowedList.check(&style_with_decl("color", "red"), &ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_any_declaration_by_default() {
-        let d = DeclarationPropertyValueDisallowedList.check(
-            &style_with_decl("display", "none"),
-            &ctx(),
-        );
+        let d = DeclarationPropertyValueDisallowedList
+            .check(&style_with_decl("display", "none"), &ctx());
         assert!(d.is_empty());
     }
 

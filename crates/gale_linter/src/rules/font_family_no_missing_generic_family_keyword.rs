@@ -57,7 +57,10 @@ impl Rule for FontFamilyNoMissingGenericFamilyKeyword {
 
             // Skip CSS-wide keywords (inherit, initial, unset, revert, revert-layer)
             let lower = value.to_ascii_lowercase();
-            if matches!(lower.as_str(), "inherit" | "initial" | "unset" | "revert" | "revert-layer") {
+            if matches!(
+                lower.as_str(),
+                "inherit" | "initial" | "unset" | "revert" | "revert-layer"
+            ) {
                 continue;
             }
 
@@ -86,12 +89,9 @@ impl Rule for FontFamilyNoMissingGenericFamilyKeyword {
 
             if !is_generic {
                 diagnostics.push(
-                    Diagnostic::new(
-                        self.name(),
-                        "Unexpected missing generic font family",
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(decl.span.offset, decl.span.length)),
+                    Diagnostic::new(self.name(), "Unexpected missing generic font family")
+                        .severity(self.default_severity())
+                        .span(Span::new(decl.span.offset, decl.span.length)),
                 );
             }
         }
@@ -109,7 +109,9 @@ mod tests {
         RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]

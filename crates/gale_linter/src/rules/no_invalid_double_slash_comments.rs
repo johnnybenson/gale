@@ -73,17 +73,11 @@ impl Rule for NoInvalidDoubleSlashComments {
                     // Double-slash comment found.
                     let start = i;
                     // Find end of line.
-                    let end = source[i..]
-                        .find('\n')
-                        .map(|pos| i + pos)
-                        .unwrap_or(len);
+                    let end = source[i..].find('\n').map(|pos| i + pos).unwrap_or(len);
                     diagnostics.push(
-                        Diagnostic::new(
-                            self.name(),
-                            "Unexpected double-slash CSS comment",
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(start, end - start)),
+                        Diagnostic::new(self.name(), "Unexpected double-slash CSS comment")
+                            .severity(self.default_severity())
+                            .span(Span::new(start, end - start)),
                     );
                     i = end;
                     continue;
@@ -107,7 +101,9 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "a { color: red; } // bad comment",
-            syntax: Syntax::Css, options: None,        };
+            syntax: Syntax::Css,
+            options: None,
+        };
         let diags = rule.check_root(&[], &context);
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].message, "Unexpected double-slash CSS comment");
@@ -119,7 +115,9 @@ mod tests {
         let context = RuleContext {
             file_path: "test.scss",
             source: "// this is fine in SCSS",
-            syntax: Syntax::Scss, options: None };
+            syntax: Syntax::Scss,
+            options: None,
+        };
         let diags = rule.check_root(&[], &context);
         assert!(diags.is_empty());
     }
@@ -130,7 +128,9 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "/* this is fine */ a { color: red; }",
-            syntax: Syntax::Css, options: None,        };
+            syntax: Syntax::Css,
+            options: None,
+        };
         let diags = rule.check_root(&[], &context);
         assert!(diags.is_empty());
     }
@@ -141,7 +141,9 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "a { content: \"//not-a-comment\"; }",
-            syntax: Syntax::Css, options: None,        };
+            syntax: Syntax::Css,
+            options: None,
+        };
         let diags = rule.check_root(&[], &context);
         assert!(diags.is_empty());
     }
@@ -152,7 +154,9 @@ mod tests {
         let context = RuleContext {
             file_path: "test.css",
             source: "/* // inside block */ a { color: red; }",
-            syntax: Syntax::Css, options: None,        };
+            syntax: Syntax::Css,
+            options: None,
+        };
         let diags = rule.check_root(&[], &context);
         assert!(diags.is_empty());
     }

@@ -47,9 +47,7 @@ impl Rule for AlphaValueNotation {
                 diags.push(
                     Diagnostic::new(
                         self.name(),
-                        format!(
-                            "Expected percentage notation for alpha value in {func_name}()"
-                        ),
+                        format!("Expected percentage notation for alpha value in {func_name}()"),
                     )
                     .severity(self.default_severity())
                     .span(Span::new(abs_offset, 1)),
@@ -89,8 +87,7 @@ fn find_alpha_functions(value: &str) -> Vec<(usize, String)> {
                     if parts.len() == 2 {
                         Some((
                             parts[1].trim(),
-                            args_start + args.find('/').unwrap() + 1
-                                + parts[1].len()
+                            args_start + args.find('/').unwrap() + 1 + parts[1].len()
                                 - parts[1].trim_start().len(),
                         ))
                     } else {
@@ -165,7 +162,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_value(val: &str) -> CssNode {

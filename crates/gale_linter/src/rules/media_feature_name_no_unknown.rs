@@ -80,7 +80,13 @@ fn extract_media_features(params: &str) -> Vec<String> {
                     j += 1;
                 }
                 // Must be followed by : or ) or < > = to be a feature name
-                if j < len && (chars[j] == ':' || chars[j] == ')' || chars[j] == '<' || chars[j] == '>' || chars[j] == '=') {
+                if j < len
+                    && (chars[j] == ':'
+                        || chars[j] == ')'
+                        || chars[j] == '<'
+                        || chars[j] == '>'
+                        || chars[j] == '=')
+                {
                     let name: String = chars[start..i].iter().collect();
                     // Skip known media types that can appear in parens
                     if !matches!(name.as_str(), "not" | "and" | "or" | "only") {
@@ -102,7 +108,12 @@ mod tests {
     use gale_css_parser::{AtRule, Span as ParserSpan, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn media(params: &str) -> CssNode {
@@ -123,13 +134,29 @@ mod tests {
 
     #[test]
     fn allows_known_media_features() {
-        assert!(MediaFeatureNameNoUnknown.check(&media("(min-width: 768px)"), &ctx()).is_empty());
-        assert!(MediaFeatureNameNoUnknown.check(&media("(hover: hover)"), &ctx()).is_empty());
-        assert!(MediaFeatureNameNoUnknown.check(&media("(prefers-color-scheme: dark)"), &ctx()).is_empty());
+        assert!(
+            MediaFeatureNameNoUnknown
+                .check(&media("(min-width: 768px)"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            MediaFeatureNameNoUnknown
+                .check(&media("(hover: hover)"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            MediaFeatureNameNoUnknown
+                .check(&media("(prefers-color-scheme: dark)"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn allows_vendor_prefixed() {
-        assert!(MediaFeatureNameNoUnknown.check(&media("(-webkit-min-device-pixel-ratio: 2)"), &ctx()).is_empty());
+        assert!(
+            MediaFeatureNameNoUnknown
+                .check(&media("(-webkit-min-device-pixel-ratio: 2)"), &ctx())
+                .is_empty()
+        );
     }
 }

@@ -44,20 +44,20 @@ impl Rule for OrderPropertiesAlphabeticalOrder {
 
             let prop_lower = prop.to_ascii_lowercase();
 
-            if let Some(ref prev) = prev_property {
-                if prop_lower < *prev {
-                    diagnostics.push(
-                        Diagnostic::new(
-                            self.name(),
-                            format!(
-                                "Expected \"{prop}\" to come before \"{}\"",
-                                find_original_prev(rule, prev)
-                            ),
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(decl.span.offset, decl.span.length)),
-                    );
-                }
+            if let Some(ref prev) = prev_property
+                && prop_lower < *prev
+            {
+                diagnostics.push(
+                    Diagnostic::new(
+                        self.name(),
+                        format!(
+                            "Expected \"{prop}\" to come before \"{}\"",
+                            find_original_prev(rule, prev)
+                        ),
+                    )
+                    .severity(self.default_severity())
+                    .span(Span::new(decl.span.offset, decl.span.length)),
+                );
             }
 
             prev_property = Some(prop_lower);

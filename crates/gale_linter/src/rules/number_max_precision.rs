@@ -84,7 +84,12 @@ mod tests {
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_decl(val: &str) -> CssNode {
@@ -109,8 +114,16 @@ mod tests {
 
     #[test]
     fn allows_within_precision() {
-        assert!(NumberMaxPrecision.check(&style_decl("0.1234em"), &ctx()).is_empty());
-        assert!(NumberMaxPrecision.check(&style_decl("10px"), &ctx()).is_empty());
+        assert!(
+            NumberMaxPrecision
+                .check(&style_decl("0.1234em"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            NumberMaxPrecision
+                .check(&style_decl("10px"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]

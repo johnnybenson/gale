@@ -41,14 +41,16 @@ impl Rule for CustomMediaPattern {
         if let Some(name) = name
             && !is_kebab_case(name)
         {
-            return vec![Diagnostic::new(
-                self.name(),
-                format!(
-                    "Expected custom media query name \"--{name}\" to match kebab-case pattern"
-                ),
-            )
-            .severity(self.default_severity())
-            .span(Span::new(at.span.offset, at.span.length))];
+            return vec![
+                Diagnostic::new(
+                    self.name(),
+                    format!(
+                        "Expected custom media query name \"--{name}\" to match kebab-case pattern"
+                    ),
+                )
+                .severity(self.default_severity())
+                .span(Span::new(at.span.offset, at.span.length)),
+            ];
         }
 
         vec![]
@@ -66,9 +68,7 @@ fn is_kebab_case(name: &str) -> bool {
     while i < bytes.len() {
         if bytes[i] == b'-' {
             i += 1;
-            if i >= bytes.len()
-                || !(bytes[i].is_ascii_lowercase() || bytes[i].is_ascii_digit())
-            {
+            if i >= bytes.len() || !(bytes[i].is_ascii_lowercase() || bytes[i].is_ascii_digit()) {
                 return false;
             }
         } else if bytes[i].is_ascii_lowercase() || bytes[i].is_ascii_digit() {
@@ -90,7 +90,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn custom_media(params: &str) -> CssNode {
@@ -111,8 +113,7 @@ mod tests {
 
     #[test]
     fn allows_kebab_case() {
-        let d =
-            CustomMediaPattern.check(&custom_media("--my-query (min-width: 768px)"), &ctx());
+        let d = CustomMediaPattern.check(&custom_media("--my-query (min-width: 768px)"), &ctx());
         assert!(d.is_empty());
     }
 

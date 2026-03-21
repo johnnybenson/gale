@@ -39,15 +39,14 @@ impl Rule for ScssLoadPartialExtension {
 
         for ext in &[".scss", ".sass", ".css"] {
             if path.ends_with(ext) {
-                return vec![Diagnostic::new(
-                    self.name(),
-                    format!(
-                        "Unexpected file extension \"{}\" in partial import",
-                        ext
-                    ),
-                )
-                .severity(self.default_severity())
-                .span(Span::new(at.span.offset, at.span.length))];
+                return vec![
+                    Diagnostic::new(
+                        self.name(),
+                        format!("Unexpected file extension \"{}\" in partial import", ext),
+                    )
+                    .severity(self.default_severity())
+                    .span(Span::new(at.span.offset, at.span.length)),
+                ];
             }
         }
 
@@ -126,8 +125,10 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssLoadPartialExtension
-            .check(&use_rule("\"variables.scss\""), &ctx)
-            .is_empty());
+        assert!(
+            ScssLoadPartialExtension
+                .check(&use_rule("\"variables.scss\""), &ctx)
+                .is_empty()
+        );
     }
 }

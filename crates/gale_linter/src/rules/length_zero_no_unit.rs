@@ -9,9 +9,9 @@ use crate::rule::{Rule, RuleContext};
 pub struct LengthZeroNoUnit;
 
 const LENGTH_UNITS: &[&str] = &[
-    "px", "em", "rem", "ex", "ch", "vw", "vh", "vmin", "vmax", "cm", "mm", "in", "pt", "pc",
-    "q", "cap", "ic", "rlh", "lh", "vi", "vb", "cqw", "cqh", "cqi", "cqb", "cqmin", "cqmax",
-    "dvw", "dvh", "lvw", "lvh", "svw", "svh",
+    "px", "em", "rem", "ex", "ch", "vw", "vh", "vmin", "vmax", "cm", "mm", "in", "pt", "pc", "q",
+    "cap", "ic", "rlh", "lh", "vi", "vb", "cqw", "cqh", "cqi", "cqb", "cqmin", "cqmax", "dvw",
+    "dvh", "lvw", "lvh", "svw", "svh",
 ];
 
 impl Rule for LengthZeroNoUnit {
@@ -83,8 +83,7 @@ fn find_zero_with_units(value: &str) -> Vec<(usize, usize)> {
     while i < len {
         if bytes[i] == b'0' {
             // Check it's not preceded by a digit or dot
-            let is_start = i == 0
-                || (!bytes[i - 1].is_ascii_digit() && bytes[i - 1] != b'.');
+            let is_start = i == 0 || (!bytes[i - 1].is_ascii_digit() && bytes[i - 1] != b'.');
 
             if is_start {
                 let after = i + 1;
@@ -118,7 +117,12 @@ mod tests {
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_decl(prop: &str, val: &str) -> CssNode {
@@ -144,16 +148,28 @@ mod tests {
 
     #[test]
     fn allows_zero_without_unit() {
-        assert!(LengthZeroNoUnit.check(&style_decl("margin", "0"), &ctx()).is_empty());
+        assert!(
+            LengthZeroNoUnit
+                .check(&style_decl("margin", "0"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn allows_non_zero_with_unit() {
-        assert!(LengthZeroNoUnit.check(&style_decl("margin", "10px"), &ctx()).is_empty());
+        assert!(
+            LengthZeroNoUnit
+                .check(&style_decl("margin", "10px"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn skips_custom_properties() {
-        assert!(LengthZeroNoUnit.check(&style_decl("--my-var", "0px"), &ctx()).is_empty());
+        assert!(
+            LengthZeroNoUnit
+                .check(&style_decl("--my-var", "0px"), &ctx())
+                .is_empty()
+        );
     }
 }

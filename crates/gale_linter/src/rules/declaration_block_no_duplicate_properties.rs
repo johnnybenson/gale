@@ -40,9 +40,7 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
             })
             .unwrap_or_default();
 
-        let ignore_consecutive = ignore_list
-            .iter()
-            .any(|s| s == "consecutive-duplicates");
+        let ignore_consecutive = ignore_list.iter().any(|s| s == "consecutive-duplicates");
         let ignore_consecutive_diff_syntaxes = ignore_list
             .iter()
             .any(|s| s == "consecutive-duplicates-with-different-syntaxes");
@@ -136,11 +134,17 @@ fn has_vendor_prefix(value: &str) -> bool {
 }
 
 fn extract_vendor_prefix(value: &str) -> &str {
-    if value.contains("-webkit-") { "-webkit-" }
-    else if value.contains("-moz-") { "-moz-" }
-    else if value.contains("-ms-") { "-ms-" }
-    else if value.contains("-o-") { "-o-" }
-    else { "" }
+    if value.contains("-webkit-") {
+        "-webkit-"
+    } else if value.contains("-moz-") {
+        "-moz-"
+    } else if value.contains("-ms-") {
+        "-ms-"
+    } else if value.contains("-o-") {
+        "-o-"
+    } else {
+        ""
+    }
 }
 
 #[cfg(test)]
@@ -152,7 +156,9 @@ mod tests {
         RuleContext {
             file_path: "test.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     #[test]
@@ -185,10 +191,7 @@ mod tests {
         });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
-        assert_eq!(
-            diags[0].message,
-            "Unexpected duplicate property \"color\""
-        );
+        assert_eq!(diags[0].message, "Unexpected duplicate property \"color\"");
     }
 
     #[test]

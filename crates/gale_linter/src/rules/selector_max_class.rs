@@ -37,7 +37,12 @@ impl Rule for SelectorMaxClass {
             .unwrap_or(MAX_CLASS);
 
         // Strip SCSS line comments from the selector text
-        let selector = if matches!(ctx.syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less) {
+        let selector = if matches!(
+            ctx.syntax,
+            gale_css_parser::Syntax::Scss
+                | gale_css_parser::Syntax::Sass
+                | gale_css_parser::Syntax::Less
+        ) {
             strip_scss_line_comments(&rule.selector)
         } else {
             rule.selector.clone()
@@ -101,7 +106,9 @@ mod tests {
         RuleContext {
             file_path: "t.css",
             source: "",
-            syntax: Syntax::Css, options: None }
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_selector(sel: &str) -> CssNode {

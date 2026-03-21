@@ -52,10 +52,7 @@ impl Rule for ShorthandPropertyNoRedundantValues {
 
                 let mut diag = Diagnostic::new(
                     self.name(),
-                    format!(
-                        "Expected \"{}\" instead of \"{}\"",
-                        shortened, decl.value
-                    ),
+                    format!("Expected \"{}\" instead of \"{}\"", shortened, decl.value),
                 )
                 .severity(self.default_severity())
                 .span(Span::new(decl.span.offset, decl.span.length));
@@ -95,7 +92,10 @@ fn find_value_and_build_fix(
     // The value ends before any trailing semicolon/whitespace/!important.
     let trimmed_val = after_colon.trim();
     // Strip trailing semicolon if present.
-    let val_text = trimmed_val.trim_end_matches(';').trim_end_matches("!important").trim();
+    let val_text = trimmed_val
+        .trim_end_matches(';')
+        .trim_end_matches("!important")
+        .trim();
     let value_end_in_source = value_start_in_source + val_text.len();
 
     Some(Fix::new(
@@ -152,7 +152,12 @@ mod tests {
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_decl(prop: &str, val: &str) -> CssNode {
@@ -171,20 +176,16 @@ mod tests {
 
     #[test]
     fn reports_four_identical_values() {
-        let d = ShorthandPropertyNoRedundantValues.check(
-            &style_decl("margin", "1px 1px 1px 1px"),
-            &ctx(),
-        );
+        let d = ShorthandPropertyNoRedundantValues
+            .check(&style_decl("margin", "1px 1px 1px 1px"), &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("1px"));
     }
 
     #[test]
     fn reports_two_identical_values() {
-        let d = ShorthandPropertyNoRedundantValues.check(
-            &style_decl("padding", "10px 10px"),
-            &ctx(),
-        );
+        let d =
+            ShorthandPropertyNoRedundantValues.check(&style_decl("padding", "10px 10px"), &ctx());
         assert_eq!(d.len(), 1);
     }
 
@@ -223,7 +224,9 @@ mod tests {
         let context = RuleContext {
             file_path: "t.css",
             source,
-            syntax: Syntax::Css, options: None };
+            syntax: Syntax::Css,
+            options: None,
+        };
         let diags = rule.check(&node, &context);
         assert_eq!(diags.len(), 1);
         let fix = diags[0].fix.as_ref().expect("should have a fix");
@@ -254,7 +257,9 @@ mod tests {
         let context = RuleContext {
             file_path: "t.css",
             source,
-            syntax: Syntax::Css, options: None };
+            syntax: Syntax::Css,
+            options: None,
+        };
         let diags = ShorthandPropertyNoRedundantValues.check(&node, &context);
         assert_eq!(diags.len(), 1);
         let (fixed, count) = gale_diagnostics::apply_fixes(source, &diags);

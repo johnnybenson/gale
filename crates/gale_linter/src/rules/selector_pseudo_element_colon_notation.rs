@@ -59,8 +59,8 @@ impl Rule for SelectorPseudoElementColonNotation {
                 let is_double = abs_idx > 0 && lower_search.as_bytes()[abs_idx - 1] == b':';
                 // Check it's actually a pseudo-element boundary (next char after name is not alphanumeric)
                 let end_idx = abs_idx + pattern.len();
-                let at_boundary =
-                    end_idx >= lower_search.len() || !lower_search.as_bytes()[end_idx].is_ascii_alphanumeric();
+                let at_boundary = end_idx >= lower_search.len()
+                    || !lower_search.as_bytes()[end_idx].is_ascii_alphanumeric();
 
                 if !is_double && at_boundary {
                     let fix_offset = rule.span.offset + abs_idx;
@@ -108,7 +108,10 @@ mod tests {
     use super::*;
     use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
-    fn style_with_selector_and_source(sel: &str, source: &'static str) -> (CssNode, RuleContext<'static>) {
+    fn style_with_selector_and_source(
+        sel: &str,
+        source: &'static str,
+    ) -> (CssNode, RuleContext<'static>) {
         let node = CssNode::Style(StyleRule {
             selector: sel.to_string(),
             declarations: vec![Declaration {
@@ -123,7 +126,9 @@ mod tests {
         let ctx = RuleContext {
             file_path: "t.css",
             source,
-            syntax: Syntax::Css, options: None };
+            syntax: Syntax::Css,
+            options: None,
+        };
         (node, ctx)
     }
 

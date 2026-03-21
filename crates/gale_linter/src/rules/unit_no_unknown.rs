@@ -64,8 +64,14 @@ fn extract_units(value: &str) -> Vec<String> {
         // number+letter sequences that aren't actual CSS units.
         // Also skip url(…) — data URLs contain embedded content.
         if i + 3 < len
-            && ((chars[i] == 'v' && chars[i + 1] == 'a' && chars[i + 2] == 'r' && chars[i + 3] == '(')
-                || (chars[i] == 'u' && chars[i + 1] == 'r' && chars[i + 2] == 'l' && chars[i + 3] == '('))
+            && ((chars[i] == 'v'
+                && chars[i + 1] == 'a'
+                && chars[i + 2] == 'r'
+                && chars[i + 3] == '(')
+                || (chars[i] == 'u'
+                    && chars[i + 1] == 'r'
+                    && chars[i + 2] == 'l'
+                    && chars[i + 3] == '('))
         {
             i += 4;
             let mut depth = 1;
@@ -126,9 +132,7 @@ fn extract_units(value: &str) -> Vec<String> {
             {
                 // Skip the rest of this identifier
                 while i < len
-                    && (chars[i].is_ascii_alphanumeric()
-                        || chars[i] == '-'
-                        || chars[i] == '_')
+                    && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
                 {
                     i += 1;
                 }
@@ -157,9 +161,7 @@ fn extract_units(value: &str) -> Vec<String> {
                 {
                     // Skip rest of identifier
                     while i < len
-                        && (chars[i].is_ascii_alphanumeric()
-                            || chars[i] == '-'
-                            || chars[i] == '_')
+                        && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
                     {
                         i += 1;
                     }
@@ -182,7 +184,12 @@ mod tests {
     use gale_css_parser::{CssNode, Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
-        RuleContext { file_path: "t.css", source: "", syntax: Syntax::Css, options: None }
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: None,
+        }
     }
 
     fn style_with_value(val: &str) -> CssNode {
@@ -208,9 +215,21 @@ mod tests {
 
     #[test]
     fn allows_known_units() {
-        assert!(UnitNoUnknown.check(&style_with_value("10px"), &ctx()).is_empty());
-        assert!(UnitNoUnknown.check(&style_with_value("2rem"), &ctx()).is_empty());
-        assert!(UnitNoUnknown.check(&style_with_value("50%"), &ctx()).is_empty());
+        assert!(
+            UnitNoUnknown
+                .check(&style_with_value("10px"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            UnitNoUnknown
+                .check(&style_with_value("2rem"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            UnitNoUnknown
+                .check(&style_with_value("50%"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
