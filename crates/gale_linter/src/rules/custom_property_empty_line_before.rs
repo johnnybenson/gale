@@ -444,9 +444,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, src.len()),
-        });
+span: ParserSpan::new(0, src.len()),
+            ..Default::default()
+});
         let d = CustomPropertyEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("--my-var"));
@@ -473,9 +473,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, src.len()),
-        });
+span: ParserSpan::new(0, src.len()),
+            ..Default::default()
+});
         let d = CustomPropertyEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
         assert!(d.is_empty());
     }
@@ -501,9 +501,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, src.len()),
-        });
+span: ParserSpan::new(0, src.len()),
+            ..Default::default()
+});
         let d = CustomPropertyEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("Unexpected"));

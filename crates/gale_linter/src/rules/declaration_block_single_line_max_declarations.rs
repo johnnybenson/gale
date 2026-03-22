@@ -96,9 +96,9 @@ mod tests {
                     important: false,
                 })
                 .collect(),
-            children: vec![],
-            span: ParserSpan::new(span_offset, span_len),
-        })
+span: ParserSpan::new(span_offset, span_len),
+            ..Default::default()
+})
     }
 
     #[test]

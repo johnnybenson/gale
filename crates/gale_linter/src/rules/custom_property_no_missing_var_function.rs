@@ -147,9 +147,9 @@ mod tests {
                 span: ParserSpan::new(4, 18),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, 24),
-        });
+span: ParserSpan::new(0, 24),
+            ..Default::default()
+});
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
         assert!(
@@ -170,9 +170,9 @@ mod tests {
                 span: ParserSpan::new(4, 22),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, 28),
-        });
+span: ParserSpan::new(0, 28),
+            ..Default::default()
+});
         let diags = rule.check(&node, &make_context());
         assert!(diags.is_empty());
     }
@@ -188,9 +188,9 @@ mod tests {
                 span: ParserSpan::new(8, 16),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, 26),
-        });
+span: ParserSpan::new(0, 26),
+            ..Default::default()
+});
         let diags = rule.check(&node, &make_context());
         assert!(diags.is_empty());
     }

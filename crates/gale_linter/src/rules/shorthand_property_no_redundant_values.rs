@@ -568,9 +568,9 @@ mod tests {
                 span: ParserSpan::new(prop_start, decl_end - prop_start + 1),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, source.len()),
-        });
+span: ParserSpan::new(0, source.len()),
+            ..Default::default()
+});
 
         // Leak the source string so we get a 'static lifetime for tests.
         let source_leaked: &'static str = Box::leak(source.to_string().into_boxed_str());

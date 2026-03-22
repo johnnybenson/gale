@@ -1225,9 +1225,9 @@ mod tests {
                 span: ParserSpan::new(prop_start, decl_text.len()),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, source.len()),
-        });
+span: ParserSpan::new(0, source.len()),
+            ..Default::default()
+});
         (node, source)
     }
 

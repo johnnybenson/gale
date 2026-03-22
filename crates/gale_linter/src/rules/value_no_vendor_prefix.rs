@@ -86,33 +86,55 @@ impl Rule for ValueNoVendorPrefix {
                     if ignore_values.iter().any(|v| v == &unprefixed) {
                         continue;
                     }
-                    // Try to build a fix by finding the prefixed value in source
+                    // Build the vendor-prefixed identifier (e.g. "-moz-radial-gradient")
+                    let prefixed_ident = {
+                        let pos = lower.find(prefix).unwrap();
+                        let after_prefix = &lower[pos + prefix.len()..];
+                        let ident_end = after_prefix
+                            .find(|c: char| {
+                                c.is_ascii_whitespace() || c == ',' || c == ')' || c == '('
+                            })
+                            .unwrap_or(after_prefix.len());
+                        // Use original (non-lowered) value to preserve case
+                        let orig_pos = pos;
+                        let orig_end = pos + prefix.len() + ident_end;
+                        decl.value[orig_pos..orig_end].to_string()
+                    };
+
+                    // Try to find the prefixed value in source for span + fix
                     let decl_start = decl.span.offset;
                     let decl_end = decl_start + decl.span.length;
-                    let fix = if decl_end <= ctx.source.len() && decl_start < decl_end {
-                        let search_area = &ctx.source[decl_start..decl_end];
-                        let lower_search = search_area.to_ascii_lowercase();
-                        // Find the vendor prefix in the source and remove it
-                        lower_search.find(prefix).map(|rel_offset| {
-                            let abs_offset = decl_start + rel_offset;
-                            Fix::new(
-                                format!(
-                                    "Remove vendor prefix \"{}\"",
-                                    prefix.trim_end_matches('-')
-                                ),
-                                vec![Edit::new(Span::new(abs_offset, prefix.len()), "")],
-                            )
-                        })
-                    } else {
-                        None
-                    };
+                    let (vendor_span, fix) =
+                        if decl_end <= ctx.source.len() && decl_start < decl_end {
+                            let search_area = &ctx.source[decl_start..decl_end];
+                            let lower_search = search_area.to_ascii_lowercase();
+                            if let Some(rel_offset) = lower_search.find(prefix) {
+                                let abs_offset = decl_start + rel_offset;
+                                let span = Span::new(abs_offset, prefixed_ident.len());
+                                let fix = Fix::new(
+                                    format!(
+                                        "Remove vendor prefix \"{}\"",
+                                        prefix.trim_end_matches('-')
+                                    ),
+                                    vec![Edit::new(Span::new(abs_offset, prefix.len()), "")],
+                                );
+                                (Some(span), Some(fix))
+                            } else {
+                                (None, None)
+                            }
+                        } else {
+                            (None, None)
+                        };
+
+                    let diag_span = vendor_span
+                        .unwrap_or_else(|| Span::new(decl.span.offset, decl.span.length));
 
                     let mut diag = Diagnostic::new(
                         self.name(),
-                        format!("Unexpected vendor-prefixed value \"{}\"", decl.value),
+                        format!("Unexpected vendor-prefixed value \"{}\"", prefixed_ident),
                     )
                     .severity(self.default_severity())
-                    .span(Span::new(decl.span.offset, decl.span.length));
+                    .span(diag_span);
 
                     if let Some(f) = fix {
                         diag = diag.fix(f);
@@ -166,16 +188,25 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, 0),
-        })
+span: ParserSpan::new(0, 0),
+            ..Default::default()
+})
     }
 
     #[test]
     fn reports_webkit_prefix_value() {
         let d = ValueNoVendorPrefix.check(&style_decl("-webkit-flex"), &ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("-webkit-flex"));
+        assert!(
+            d[0].message.contains("-webkit-flex"),
+            "message was: {}",
+            d[0].message
+        );
+        // Message should contain just the identifier, not trailing args
+        assert!(
+            !d[0].message.contains("("),
+            "message should not contain function args"
+        );
     }
 
     #[test]
@@ -210,9 +241,9 @@ mod tests {
                 span: ParserSpan::new(4, 22),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, source.len()),
-        });
+span: ParserSpan::new(0, source.len()),
+            ..Default::default()
+});
         let d = ValueNoVendorPrefix.check(&node, &ctx);
         assert_eq!(d.len(), 1);
         assert!(d[0].fix.is_some());
@@ -221,5 +252,46 @@ mod tests {
         // The fix removes the "-webkit-" prefix, leaving "flex"
         assert_eq!(fix.edits[0].new_text, "");
         assert_eq!(fix.edits[0].span.length, "-webkit-".len());
+    }
+
+    #[test]
+    fn span_points_to_vendor_value_not_property() {
+        // Simulates: "a {\n  background: -moz-radial-gradient(center, ellipse cover, #f1f1f1 0, #ee2a00 100%);\n}"
+        let source = "a {\n  background: -moz-radial-gradient(center, ellipse cover, #f1f1f1 0, #ee2a00 100%);\n}";
+        // "background: -moz-..." starts at offset 6
+        let decl_offset = 6;
+        let decl_text =
+            "background: -moz-radial-gradient(center, ellipse cover, #f1f1f1 0, #ee2a00 100%)";
+        let ctx = RuleContext {
+            file_path: "t.css",
+            source,
+            syntax: Syntax::Css,
+            options: None,
+        };
+        let node = CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![Declaration {
+                property: "background".to_string(),
+                value: "-moz-radial-gradient(center, ellipse cover, #f1f1f1 0, #ee2a00 100%)"
+                    .to_string(),
+                span: ParserSpan::new(decl_offset, decl_text.len()),
+                important: false,
+            }],
+span: ParserSpan::new(0, source.len()),
+            ..Default::default()
+});
+        let d = ValueNoVendorPrefix.check(&node, &ctx);
+        assert_eq!(d.len(), 1);
+
+        // Message should contain only the function name, not the full value with arguments
+        assert_eq!(
+            d[0].message,
+            "Unexpected vendor-prefixed value \"-moz-radial-gradient\""
+        );
+
+        // Span should point to "-moz-radial-gradient" (offset 18 = 6 + len("background: "))
+        let expected_offset = decl_offset + "background: ".len();
+        assert_eq!(d[0].span.offset, expected_offset);
+        assert_eq!(d[0].span.length, "-moz-radial-gradient".len());
     }
 }

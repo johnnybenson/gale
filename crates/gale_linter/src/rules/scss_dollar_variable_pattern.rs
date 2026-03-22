@@ -128,10 +128,7 @@ impl ScssDollarVariablePattern {
                     diagnostics.push(
                         Diagnostic::new(
                             self.name(),
-                            format!(
-                                "Expected ${} to match pattern \"{}\"",
-                                var_name, pattern_str
-                            ),
+                            "Expected $ variable name to match specified pattern".to_string(),
                         )
                         .severity(self.default_severity())
                         .span(Span::new(decl.span.offset, decl.span.length)),
@@ -284,7 +281,7 @@ mod tests {
         let nodes = vec![dollar_var("$myVar")];
         let d = ScssDollarVariablePattern.check_root(&nodes, &scss_ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("myVar"));
+        assert!(d[0].message.contains("Expected $ variable name"));
     }
 
     #[test]
@@ -461,7 +458,7 @@ mod tests {
         let nodes = vec![dollar_var("$bad-name")];
         let d = ScssDollarVariablePattern.check_root(&nodes, &ctx);
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("bad-name"));
+        assert!(d[0].message.contains("Expected $ variable name"));
     }
 
     #[test]
@@ -628,7 +625,7 @@ mod tests {
         let d = ScssDollarVariablePattern.check_root(&nodes, &scss_ctx());
         // Only the top-level $myBadVar should be reported, not $localVar inside @each
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("myBadVar"));
+        assert!(d[0].message.contains("Expected $ variable name"));
     }
 
     #[test]
@@ -647,6 +644,6 @@ mod tests {
         })];
         let d = ScssDollarVariablePattern.check_root(&nodes, &scss_ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("myBadVar"));
+        assert!(d[0].message.contains("Expected $ variable name"));
     }
 }

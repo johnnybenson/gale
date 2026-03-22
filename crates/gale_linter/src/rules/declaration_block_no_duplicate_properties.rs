@@ -988,9 +988,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 45),
-        });
+span: ParserSpan::new(0, 45),
+            ..Default::default()
+});
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].message, "Unexpected duplicate \"color\"");
@@ -1015,9 +1015,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 30),
-        });
+span: ParserSpan::new(0, 30),
+            ..Default::default()
+});
         let diags = rule.check(&node, &make_context());
         assert!(diags.is_empty());
     }
@@ -1041,9 +1041,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 30),
-        });
+span: ParserSpan::new(0, 30),
+            ..Default::default()
+});
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
     }
@@ -1068,9 +1068,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 30),
-        });
+span: ParserSpan::new(0, 30),
+            ..Default::default()
+});
         let diags = rule.check(&node, &make_context());
         assert_eq!(
             diags.len(),
@@ -1104,9 +1104,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 45),
-        });
+span: ParserSpan::new(0, 45),
+            ..Default::default()
+});
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
     }
@@ -1159,9 +1159,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 30),
-        });
+span: ParserSpan::new(0, 30),
+            ..Default::default()
+});
         let opts = serde_json::json!({
             "ignore": "consecutive-duplicates-with-different-values"
         });

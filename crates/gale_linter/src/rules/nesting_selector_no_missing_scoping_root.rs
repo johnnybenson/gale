@@ -148,9 +148,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, 0),
-        })
+span: ParserSpan::new(0, 0),
+            ..Default::default()
+})
     }
 
     fn nested_style(parent_sel: &str, child_sel: &str) -> CssNode {
@@ -165,10 +165,11 @@ mod tests {
                     span: ParserSpan::new(0, 0),
                     important: false,
                 }],
-                children: vec![],
                 span: ParserSpan::new(0, 0),
+                ..Default::default()
             }],
             span: ParserSpan::new(0, 0),
+            ..Default::default()
         })
     }
 

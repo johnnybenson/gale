@@ -42,7 +42,7 @@ pub fn detect_syntax(file_path: &str) -> Syntax {
 // ---------------------------------------------------------------------------
 
 /// A source span with byte offsets into the source text.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Span {
     /// Byte offset from the start of the source.
     pub offset: usize,
@@ -83,6 +83,23 @@ pub struct StyleRule {
     pub declarations: Vec<Declaration>,
     pub span: Span,
     pub children: Vec<StyleRule>,
+    /// At-rules nested inside this style rule block (e.g. `@include`, `@if`,
+    /// `@media`).  These are kept here so they remain scoped to the style rule
+    /// rather than leaking out as siblings.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub nested_at_rules: Vec<CssNode>,
+}
+
+impl Default for StyleRule {
+    fn default() -> Self {
+        Self {
+            selector: String::new(),
+            declarations: Vec::new(),
+            span: Span::default(),
+            children: Vec::new(),
+            nested_at_rules: Vec::new(),
+        }
+    }
 }
 
 /// A CSS at-rule (`@media`, `@keyframes`, etc.).
@@ -596,7 +613,7 @@ fn convert_keyframes(
             selector,
             declarations,
             span: kf_span,
-            children: Vec::new(),
+            ..Default::default()
         }));
     }
 
@@ -762,6 +779,7 @@ fn convert_style_rule(
         declarations,
         span: rule_span,
         children,
+        ..Default::default()
     }
 }
 
@@ -978,7 +996,8 @@ fn convert_raffia_statements(stmts: &[raffia::ast::Statement<'_>], source: &str)
     for stmt in stmts {
         match stmt {
             Statement::QualifiedRule(qr) => {
-                nodes.push(CssNode::Style(convert_raffia_qualified_rule(qr, source)));
+                let style_rule = convert_raffia_qualified_rule(qr, source);
+                nodes.push(CssNode::Style(style_rule));
             }
 
             Statement::Declaration(decl) => {
@@ -1123,7 +1142,7 @@ fn convert_raffia_statements(stmts: &[raffia::ast::Statement<'_>], source: &str)
                     selector,
                     declarations,
                     span: raffia_span(&kf_block.span),
-                    children: Vec::new(),
+                    ..Default::default()
                 }));
             }
 
@@ -1142,11 +1161,22 @@ fn convert_raffia_block_statements(
     convert_raffia_statements(&block.statements, source)
 }
 
-fn convert_raffia_qualified_rule(qr: &raffia::ast::QualifiedRule<'_>, source: &str) -> StyleRule {
+/// Convert a raffia `QualifiedRule` into a `StyleRule`.
+///
+/// At-rules nested inside style rule blocks (`@include`, `@if`/`@else`,
+/// `@media`, etc.) are stored in `StyleRule.nested_at_rules` so they remain
+/// scoped to the style rule.  This prevents SCSS at-rule content blocks from
+/// leaking to sibling scope and causing false positives in rules like
+/// `no-invalid-position-declaration`.
+fn convert_raffia_qualified_rule(
+    qr: &raffia::ast::QualifiedRule<'_>,
+    source: &str,
+) -> StyleRule {
     let selector = source_slice(source, &qr.selector.span);
 
     let mut declarations = Vec::new();
     let mut children = Vec::new();
+    let mut nested_at_rules: Vec<CssNode> = Vec::new();
 
     for stmt in &qr.block.statements {
         match stmt {
@@ -1154,7 +1184,8 @@ fn convert_raffia_qualified_rule(qr: &raffia::ast::QualifiedRule<'_>, source: &s
                 declarations.push(convert_raffia_declaration(decl, source));
             }
             raffia::ast::Statement::QualifiedRule(nested) => {
-                children.push(convert_raffia_qualified_rule(nested, source));
+                let child_rule = convert_raffia_qualified_rule(nested, source);
+                children.push(child_rule);
             }
             raffia::ast::Statement::SassVariableDeclaration(var) => {
                 let name = format!("${}", var.name.name.name);
@@ -1167,8 +1198,57 @@ fn convert_raffia_qualified_rule(qr: &raffia::ast::QualifiedRule<'_>, source: &s
                     important: false,
                 });
             }
-            // Other nested constructs (at-rules, etc.) — skip for now.
-            // They'll get picked up if we extend coverage later.
+            raffia::ast::Statement::AtRule(at) => {
+                nested_at_rules.push(CssNode::AtRule(convert_raffia_at_rule(at, source)));
+            }
+            raffia::ast::Statement::UnknownSassAtRule(unknown) => {
+                let name = raffia_interpolable_ident_to_string(&unknown.name, source);
+                let params = unknown
+                    .prelude
+                    .as_ref()
+                    .map(|p| source_slice(source, p.span()))
+                    .unwrap_or_default();
+                let at_children = unknown
+                    .block
+                    .as_ref()
+                    .map(|b| convert_raffia_block_statements(b, source))
+                    .unwrap_or_default();
+                nested_at_rules.push(CssNode::AtRule(AtRule {
+                    name,
+                    params,
+                    span: raffia_span(&unknown.span),
+                    children: at_children,
+                }));
+            }
+            raffia::ast::Statement::SassIfAtRule(sass_if) => {
+                let mut if_children =
+                    convert_raffia_block_statements(&sass_if.if_clause.block, source);
+                for else_if in &sass_if.else_if_clauses {
+                    let ec = convert_raffia_block_statements(&else_if.block, source);
+                    if_children.push(CssNode::AtRule(AtRule {
+                        name: "else if".to_string(),
+                        params: String::new(),
+                        span: raffia_span(&else_if.span),
+                        children: ec,
+                    }));
+                }
+                if let Some(else_block) = &sass_if.else_clause {
+                    let ec = convert_raffia_block_statements(else_block, source);
+                    if_children.push(CssNode::AtRule(AtRule {
+                        name: "else".to_string(),
+                        params: String::new(),
+                        span: raffia_span(&else_block.span),
+                        children: ec,
+                    }));
+                }
+                nested_at_rules.push(CssNode::AtRule(AtRule {
+                    name: "if".to_string(),
+                    params: String::new(),
+                    span: raffia_span(&sass_if.span),
+                    children: if_children,
+                }));
+            }
+            // Other constructs (e.g. LessVariableDeclaration) — skip.
             _ => {}
         }
     }
@@ -1178,6 +1258,7 @@ fn convert_raffia_qualified_rule(qr: &raffia::ast::QualifiedRule<'_>, source: &s
         declarations,
         span: raffia_span(&qr.span),
         children,
+        nested_at_rules,
     }
 }
 
@@ -1417,6 +1498,91 @@ mod tests {
         // Since we only extract declarations and nested rules from qualified rules,
         // the @include is handled at the statement level.
         assert!(!result.nodes.is_empty());
+    }
+
+    #[test]
+    fn test_parse_scss_include_content_block() {
+        // @include with a content block should keep at-rules inside the
+        // parent StyleRule's nested_at_rules (not as top-level siblings),
+        // so that declarations inside @include don't leak to the wrong scope.
+        let scss = r#".parent {
+  @include rtl() {
+    -webkit-transform: rotate(90deg);
+    transform: rotate(90deg);
+  }
+  @include mq-medium {
+    .child {
+      left: 10px;
+    }
+  }
+}"#;
+        let result = parse(scss, Syntax::Scss).expect("should parse SCSS @include content block");
+
+        // There should be exactly 1 top-level node: the .parent StyleRule.
+        assert_eq!(
+            result.nodes.len(),
+            1,
+            "should have 1 top-level node (.parent), got: {:?}",
+            result
+                .nodes
+                .iter()
+                .map(|n| match n {
+                    CssNode::Style(_) => "Style",
+                    CssNode::AtRule(_) => "AtRule",
+                    CssNode::Comment(_) => "Comment",
+                    CssNode::Declaration(_) => "Declaration",
+                })
+                .collect::<Vec<_>>()
+        );
+
+        let CssNode::Style(ref parent) = result.nodes[0] else {
+            panic!("expected Style node");
+        };
+
+        // The @include blocks should be inside nested_at_rules.
+        assert_eq!(
+            parent.nested_at_rules.len(),
+            2,
+            "should have 2 @include at-rule nodes in nested_at_rules"
+        );
+
+        // First @include should have declarations as children.
+        if let CssNode::AtRule(at) = &parent.nested_at_rules[0] {
+            assert_eq!(at.name, "include");
+            assert!(
+                !at.children.is_empty(),
+                "first @include should have children (declarations)"
+            );
+            let decls: Vec<_> = at
+                .children
+                .iter()
+                .filter(|n| matches!(n, CssNode::Declaration(_)))
+                .collect();
+            assert_eq!(
+                decls.len(),
+                2,
+                "should have 2 declarations inside @include rtl()"
+            );
+        } else {
+            panic!("expected AtRule");
+        }
+
+        // Second @include should have a nested style rule as a child.
+        if let CssNode::AtRule(at) = &parent.nested_at_rules[1] {
+            assert_eq!(at.name, "include");
+            let styles: Vec<_> = at
+                .children
+                .iter()
+                .filter(|n| matches!(n, CssNode::Style(_)))
+                .collect();
+            assert_eq!(
+                styles.len(),
+                1,
+                "should have 1 style rule inside @include mq-medium"
+            );
+        } else {
+            panic!("expected AtRule");
+        }
     }
 
     #[test]

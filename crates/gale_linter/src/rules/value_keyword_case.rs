@@ -866,7 +866,15 @@ impl Rule for ValueKeywordCase {
                 let text = &token.text;
                 let abs_offset = value_abs_start + token.offset;
 
-                // SVG camelCase keywords
+                // Keywords with canonical camelCase forms.
+                // `currentColor` is always exempt -- it's a CSS keyword (not just
+                // SVG) whose canonical mixed-case form is accepted by every
+                // browser and by Stylelint regardless of options.
+                if text.eq_ignore_ascii_case("currentColor") {
+                    continue;
+                }
+
+                // Other SVG camelCase keywords (optimizeSpeed, crispEdges, etc.)
                 if is_svg_camel_case_keyword(text) {
                     if camel_case_svg && !expect_upper {
                         // "lower" + camelCaseSvgKeywords: expected = camelCase canonical
@@ -967,9 +975,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, 0),
-        })
+span: ParserSpan::new(0, 0),
+            ..Default::default()
+})
     }
 
     #[test]
@@ -1023,6 +1031,28 @@ mod tests {
     fn reports_font_family_generic() {
         let d = ValueKeywordCase.check(&style_with_decl("font-family", "MONOSPACE"), &ctx());
         assert_eq!(d.len(), 1);
+    }
+
+    #[test]
+    fn skips_current_color_always() {
+        // currentColor should always be exempt, regardless of camelCaseSvgKeywords
+        let d = ValueKeywordCase.check(&style_with_decl("color", "currentColor"), &ctx());
+        assert!(d.is_empty(), "currentColor should not be flagged");
+    }
+
+    #[test]
+    fn skips_currentcolor_lowercase() {
+        let d = ValueKeywordCase.check(&style_with_decl("color", "currentcolor"), &ctx());
+        assert!(d.is_empty(), "currentcolor should not be flagged");
+    }
+
+    #[test]
+    fn skips_current_color_in_border() {
+        let d = ValueKeywordCase.check(&style_with_decl("border-color", "currentColor"), &ctx());
+        assert!(
+            d.is_empty(),
+            "currentColor in border-color should not be flagged"
+        );
     }
 
     #[test]

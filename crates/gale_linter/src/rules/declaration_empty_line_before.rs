@@ -671,9 +671,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, src.len()),
-        });
+span: ParserSpan::new(0, src.len()),
+            ..Default::default()
+});
         let d = DeclarationEmptyLineBefore.check(&node, &make_ctx(src));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("display"));
@@ -698,9 +698,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, src.len()),
-        });
+span: ParserSpan::new(0, src.len()),
+            ..Default::default()
+});
         let d = DeclarationEmptyLineBefore.check(&node, &make_ctx(src));
         assert!(d.is_empty());
     }
@@ -726,9 +726,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, src.len()),
-        });
+span: ParserSpan::new(0, src.len()),
+            ..Default::default()
+});
         let d = DeclarationEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
         // First decl: except first-nested flips "always" to "never", so no empty line needed — OK
         // Second decl: ignore after-declaration skips it entirely — OK
@@ -759,9 +759,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, src.len()),
-        });
+span: ParserSpan::new(0, src.len()),
+            ..Default::default()
+});
         let d = DeclarationEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
         // Both should be reported: first (after {) and second (after declaration)
         assert_eq!(d.len(), 2, "Expected 2 diagnostics, got {}", d.len());
@@ -787,9 +787,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, src.len()),
-        });
+span: ParserSpan::new(0, src.len()),
+            ..Default::default()
+});
         let d = DeclarationEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
         // First decl: except first-nested flips "always" -> "never", no empty line, OK
         // Second decl: "always" mode, has empty line before, OK
@@ -820,9 +820,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, src.len()),
-        });
+span: ParserSpan::new(0, src.len()),
+            ..Default::default()
+});
         let d = DeclarationEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
         assert!(d.is_empty(), "Single-line block should be ignored");
     }
@@ -895,9 +895,9 @@ mod tests {
                     important: false,
                 },
             ],
-            children: vec![],
-            span: ParserSpan::new(0, src.len()),
-        });
+span: ParserSpan::new(0, src.len()),
+            ..Default::default()
+});
         let d = DeclarationEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
         assert!(
             d.is_empty(),

@@ -75,7 +75,8 @@ mod tests {
             declarations: vec![],
             children,
             span: ParserSpan::new(0, 50),
-        })
+            ..Default::default()
+})
     }
 
     fn child_rule(selector: &str) -> StyleRule {
@@ -87,8 +88,8 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-            children: vec![],
             span: ParserSpan::new(10, 30),
+            ..Default::default()
         }
     }
 

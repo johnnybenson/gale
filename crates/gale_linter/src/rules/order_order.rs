@@ -215,9 +215,9 @@ mod tests {
                 make_decl("display", "block", 4, 14),
                 make_decl("--my-var", "10px", 19, 16),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 40),
-        });
+span: ParserSpan::new(0, 40),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_no_options());
         assert!(diags.is_empty());
     }
@@ -232,9 +232,9 @@ mod tests {
                 make_decl("--my-var", "10px", 4, 16),
                 make_decl("display", "block", 21, 14),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 40),
-        });
+span: ParserSpan::new(0, 40),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -249,9 +249,9 @@ mod tests {
                 make_decl("display", "block", 4, 14),
                 make_decl("--my-var", "10px", 19, 16),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 40),
-        });
+span: ParserSpan::new(0, 40),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("custom properties"));
@@ -269,9 +269,9 @@ mod tests {
                 make_decl("--color", "red", 19, 13),
                 make_decl("display", "block", 33, 14),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 50),
-        });
+span: ParserSpan::new(0, 50),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -286,9 +286,9 @@ mod tests {
                 make_decl("display", "block", 4, 14),
                 make_decl("$my-var", "10px", 19, 14),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 40),
-        });
+span: ParserSpan::new(0, 40),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("dollar variables"));
@@ -304,11 +304,13 @@ mod tests {
             children: vec![StyleRule {
                 selector: "&:hover".to_string(),
                 declarations: vec![make_decl("color", "red", 30, 10)],
-                children: vec![],
                 span: ParserSpan::new(19, 25),
+                ..Default::default()
             }],
             span: ParserSpan::new(0, 50),
-        });
+        
+            nested_at_rules: Vec::new(),
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -323,11 +325,13 @@ mod tests {
             children: vec![StyleRule {
                 selector: "&:hover".to_string(),
                 declarations: vec![make_decl("color", "red", 10, 10)],
-                children: vec![],
                 span: ParserSpan::new(4, 25),
+                ..Default::default()
             }],
             span: ParserSpan::new(0, 50),
-        });
+        
+            nested_at_rules: Vec::new(),
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         // The declaration at offset 30 comes after the nested rule at offset 4 in source,
         // but in the expected order declarations should come before rules.
@@ -360,11 +364,13 @@ mod tests {
             children: vec![StyleRule {
                 selector: "&:hover".to_string(),
                 declarations: vec![],
-                children: vec![],
                 span: ParserSpan::new(33, 15),
+                ..Default::default()
             }],
             span: ParserSpan::new(0, 50),
-        });
+        
+            nested_at_rules: Vec::new(),
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -382,9 +388,9 @@ mod tests {
                 make_decl("--my-var", "10px", 19, 16),
                 make_decl("color", "red", 36, 10),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 50),
-        });
+span: ParserSpan::new(0, 50),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -408,11 +414,13 @@ mod tests {
             children: vec![StyleRule {
                 selector: "&:hover".to_string(),
                 declarations: vec![],
-                children: vec![],
                 span: ParserSpan::new(53, 15),
+                ..Default::default()
             }],
             span: ParserSpan::new(0, 70),
-        });
+        
+            nested_at_rules: Vec::new(),
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }

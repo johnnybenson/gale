@@ -184,15 +184,6 @@ impl Rule for LengthZeroNoUnit {
                         // Custom properties are checked only if not ignored
                     }
 
-                    // Skip values containing SCSS interpolation
-                    if decl.value.contains("#{") || decl.value.contains("@{") {
-                        continue;
-                    }
-                    // Detect SCSS module function calls
-                    if has_scss_module_function(&decl.value) {
-                        continue;
-                    }
-
                     // Skip exempt properties
                     if is_exempt_property(&decl.property) {
                         continue;
@@ -238,12 +229,6 @@ impl Rule for LengthZeroNoUnit {
                 if decl.property.starts_with("--") && opts.ignore_custom_properties {
                     return vec![];
                 }
-                if decl.value.contains("#{") || decl.value.contains("@{") {
-                    return vec![];
-                }
-                if has_scss_module_function(&decl.value) {
-                    return vec![];
-                }
                 if is_exempt_property(&decl.property) {
                     return vec![];
                 }
@@ -270,24 +255,6 @@ impl Rule for LengthZeroNoUnit {
         }
         diags
     }
-}
-
-/// Check if a value contains a SCSS module-style function call like
-/// `namespace.function-name(...)` where the dot indicates a SCSS module call.
-fn has_scss_module_function(value: &str) -> bool {
-    let bytes = value.as_bytes();
-    for i in 0..bytes.len().saturating_sub(1) {
-        if bytes[i] == b'.'
-            && i > 0
-            && (bytes[i - 1].is_ascii_alphanumeric()
-                || bytes[i - 1] == b'-'
-                || bytes[i - 1] == b'_')
-            && (bytes[i + 1].is_ascii_alphabetic() || bytes[i + 1] == b'-' || bytes[i + 1] == b'_')
-        {
-            return true;
-        }
-    }
-    false
 }
 
 /// Find `0<unit>` patterns in a value string, respecting function context.
@@ -355,6 +322,21 @@ fn find_zero_units_contextual(
             continue;
         }
 
+        // --- Skip SCSS/Less interpolation blocks ---
+        if i + 1 < len && ((chars[i] == '#' || chars[i] == '@') && chars[i + 1] == '{') {
+            i += 2;
+            let mut depth = 1;
+            while i < len && depth > 0 {
+                if chars[i] == '{' {
+                    depth += 1;
+                } else if chars[i] == '}' {
+                    depth -= 1;
+                }
+                i += 1;
+            }
+            continue;
+        }
+
         // --- Track function calls ---
         if chars[i] == '(' {
             let fn_end = i;
@@ -365,7 +347,8 @@ fn find_zero_units_contextual(
                 while j >= 0
                     && (chars[j as usize].is_ascii_alphanumeric()
                         || chars[j as usize] == '-'
-                        || chars[j as usize] == '_')
+                        || chars[j as usize] == '_'
+                        || chars[j as usize] == '.')
                 {
                     fn_start = j as usize;
                     j -= 1;
@@ -484,6 +467,14 @@ fn find_zero_units_contextual(
                             continue;
                         }
 
+                        // Check if inside a SCSS module function (namespace.func) — skip.
+                        // Stylelint doesn't parse inside these.
+                        let in_scss_module = func_stack.iter().any(|f| f.contains('.'));
+                        if in_scss_module {
+                            i = unit_end;
+                            continue;
+                        }
+
                         // Check ignoreFunctions
                         let in_ignored_func = func_stack
                             .iter()
@@ -569,6 +560,11 @@ fn find_zero_units_contextual(
                             i = unit_end;
                             continue;
                         }
+                        let in_scss_module = func_stack.iter().any(|f| f.contains('.'));
+                        if in_scss_module {
+                            i = unit_end;
+                            continue;
+                        }
                         let in_ignored_func = func_stack
                             .iter()
                             .any(|f| function_is_ignored(f, &opts.ignore_functions));
@@ -638,9 +634,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, 0),
-        })
+span: ParserSpan::new(0, 0),
+            ..Default::default()
+})
     }
 
     #[test]
@@ -695,5 +691,25 @@ mod tests {
     fn allows_zero_in_flex() {
         let d = LengthZeroNoUnit.check(&style_decl("flex", "0px"), &ctx());
         assert!(d.is_empty());
+    }
+
+    #[test]
+    fn reports_zero_unit_before_scss_interpolation() {
+        let d = LengthZeroNoUnit.check(&style_decl("padding", "0px #{$var}"), &ctx());
+        assert_eq!(
+            d.len(),
+            1,
+            "Should report 0px even when SCSS interpolation follows"
+        );
+    }
+
+    #[test]
+    fn reports_zero_unit_after_scss_interpolation() {
+        let d = LengthZeroNoUnit.check(&style_decl("margin", "#{$var} 0px"), &ctx());
+        assert_eq!(
+            d.len(),
+            1,
+            "Should report 0px even when SCSS interpolation precedes"
+        );
     }
 }

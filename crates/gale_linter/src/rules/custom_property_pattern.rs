@@ -32,15 +32,21 @@ impl Rule for CustomPropertyPattern {
         };
 
         // Read the user-supplied regex pattern from options, or use the default kebab-case pattern.
-        let pattern_str = ctx
-            .options
-            .and_then(|v| v.as_str())
-            .unwrap_or(DEFAULT_PATTERN);
+        // Options may be a plain string (`"^pattern$"`) or an array where the
+        // first element is the pattern and the second is a secondary options
+        // object (e.g. `["^pattern$", { "message": "..." }]`).
+        let pattern_str = ctx.primary_option_str().unwrap_or(DEFAULT_PATTERN);
 
         let re = match Regex::new(pattern_str) {
             Ok(r) => r,
             Err(_) => return vec![],
         };
+
+        // Check for custom message in secondary options
+        let custom_message = ctx
+            .secondary_options()
+            .and_then(|v| v.get("message"))
+            .and_then(|v| v.as_str());
 
         let mut diags = Vec::new();
         for decl in &rule.declarations {
@@ -54,15 +60,17 @@ impl Rule for CustomPropertyPattern {
                     continue;
                 }
                 if !re.is_match(name) {
-                    diags.push(
-                        Diagnostic::new(
-                            self.name(),
-                            format!(
-                                "Expected custom property \"--{name}\" to match pattern \"{pattern_str}\""
-                            ),
+                    let message = if let Some(msg) = custom_message {
+                        msg.to_string()
+                    } else {
+                        format!(
+                            "Expected custom property \"--{name}\" to match pattern \"{pattern_str}\""
                         )
-                        .severity(self.default_severity())
-                        .span(Span::new(decl.span.offset, decl.span.length)),
+                    };
+                    diags.push(
+                        Diagnostic::new(self.name(), message)
+                            .severity(self.default_severity())
+                            .span(Span::new(decl.span.offset, decl.span.length)),
                     );
                 }
             }
@@ -103,9 +111,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, 0),
-        })
+span: ParserSpan::new(0, 0),
+            ..Default::default()
+})
     }
 
     #[test]
@@ -148,5 +156,22 @@ mod tests {
         let c = ctx_with_options(&opts);
         let d = CustomPropertyPattern.check(&style_with_property("--my-color"), &c);
         assert!(d[0].message.contains("^pf-"));
+    }
+
+    #[test]
+    fn array_format_options_with_secondary() {
+        // Config like: ["^sds|slds-c|kx-...", { "message": "..." }]
+        let opts = serde_json::json!(["^sds|slds-c|kx-([a-z][a-z0-9]*)(-[a-z0-9]+)*$", { "message": "Custom msg" }]);
+        let c = ctx_with_options(&opts);
+        // _slds-c-... should match via the `slds-c` alternative
+        assert!(
+            CustomPropertyPattern
+                .check(&style_with_property("--_slds-c-accordion-spacing"), &c)
+                .is_empty(),
+            "Should not flag --_slds-c-... with the SLDS pattern"
+        );
+        // my-color should be flagged (doesn't match the pattern)
+        let d = CustomPropertyPattern.check(&style_with_property("--my-color"), &c);
+        assert_eq!(d.len(), 1);
     }
 }

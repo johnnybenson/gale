@@ -817,9 +817,9 @@ mod tests {
                 make_decl("display", "block", 4, 14),
                 make_decl("position", "relative", 19, 19),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 40),
-        });
+span: ParserSpan::new(0, 40),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_no_options());
         assert!(diags.is_empty());
     }
@@ -836,9 +836,9 @@ mod tests {
                 make_decl("display", "block", 31, 14),
                 make_decl("width", "100%", 46, 12),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 60),
-        });
+span: ParserSpan::new(0, 60),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -853,9 +853,9 @@ mod tests {
                 make_decl("display", "block", 4, 14),
                 make_decl("position", "relative", 19, 19),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 40),
-        });
+span: ParserSpan::new(0, 40),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("position"));
@@ -878,9 +878,9 @@ mod tests {
                 make_decl("display", "flex", 31, 13),
                 make_decl("width", "100px", 45, 13),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 60),
-        });
+span: ParserSpan::new(0, 60),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -899,9 +899,9 @@ mod tests {
                 make_decl("width", "100px", 4, 13),
                 make_decl("position", "absolute", 18, 19),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 40),
-        });
+span: ParserSpan::new(0, 40),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("position"));
@@ -922,9 +922,9 @@ mod tests {
                 make_decl("display", "flex", 24, 13),
                 make_decl("color", "red", 38, 10),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 50),
-        });
+span: ParserSpan::new(0, 50),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -940,9 +940,9 @@ mod tests {
                 make_decl("unknown-prop", "foo", 24, 18),
                 make_decl("display", "block", 43, 14),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 60),
-        });
+span: ParserSpan::new(0, 60),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -958,9 +958,9 @@ mod tests {
                 make_decl("$my-var", "10px", 19, 14),
                 make_decl("position", "relative", 34, 19),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 55),
-        });
+span: ParserSpan::new(0, 55),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
     }
@@ -976,9 +976,9 @@ mod tests {
                 make_decl("--my-var", "10px", 24, 16),
                 make_decl("display", "block", 41, 14),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 60),
-        });
+span: ParserSpan::new(0, 60),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -993,9 +993,9 @@ mod tests {
                 make_decl("color", "pink", 4, 11),
                 make_decl("-webkit-font-smoothing", "antialiased", 16, 38),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 60),
-        });
+span: ParserSpan::new(0, 60),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
     }
@@ -1010,9 +1010,9 @@ mod tests {
                 make_decl("bottom", "0", 4, 9),
                 make_decl("height", "1px", 14, 12),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 30),
-        });
+span: ParserSpan::new(0, 30),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
     }
@@ -1027,9 +1027,9 @@ mod tests {
                 make_decl("height", "1px", 4, 12),
                 make_decl("top", "0", 17, 6),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 30),
-        });
+span: ParserSpan::new(0, 30),
+            ..Default::default()
+});
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
     }
@@ -1062,9 +1062,9 @@ mod tests {
                 make_decl("display", "block", 4, 14),
                 make_decl("animation-name", "fade", 19, 21),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 45),
-        });
+span: ParserSpan::new(0, 45),
+            ..Default::default()
+});
         // Correct order: display then animation-name (matches /^animation/).
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
@@ -1080,9 +1080,9 @@ mod tests {
                 make_decl("display", "block", 4, 14),
                 make_decl("animation-name", "fade", 19, 21),
             ],
-            children: vec![],
-            span: ParserSpan::new(0, 45),
-        });
+span: ParserSpan::new(0, 45),
+            ..Default::default()
+});
         // Wrong order: display before animation-name, but /^animation/ should come first.
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);

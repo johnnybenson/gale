@@ -4,6 +4,33 @@ use gale_diagnostics::{Diagnostic, Severity, Span};
 use crate::data::is_known_property;
 use crate::rule::{Rule, RuleContext};
 
+/// Pattern matcher for ignoreProperties — supports plain strings and regex-like "/pattern/".
+enum PropertyMatcher {
+    Exact(String),
+    Regex(regex::Regex),
+}
+
+impl PropertyMatcher {
+    fn from_pattern(pattern: &str) -> Self {
+        if pattern.starts_with('/') && pattern.ends_with('/') && pattern.len() > 2 {
+            let re_str = &pattern[1..pattern.len() - 1];
+            match regex::Regex::new(re_str) {
+                Ok(re) => PropertyMatcher::Regex(re),
+                Err(_) => PropertyMatcher::Exact(pattern.to_ascii_lowercase()),
+            }
+        } else {
+            PropertyMatcher::Exact(pattern.to_ascii_lowercase())
+        }
+    }
+
+    fn matches(&self, lower_prop: &str, original_prop: &str) -> bool {
+        match self {
+            PropertyMatcher::Exact(s) => lower_prop == s,
+            PropertyMatcher::Regex(re) => re.is_match(original_prop) || re.is_match(lower_prop),
+        }
+    }
+}
+
 pub struct PropertyNoUnknown;
 
 impl Rule for PropertyNoUnknown {
@@ -25,13 +52,14 @@ impl Rule for PropertyNoUnknown {
         };
 
         // Check for `ignoreProperties` option (may be in secondary options object).
+        // Supports plain strings (exact match) and regex patterns like "/^mso-/".
         let secondary = ctx.secondary_options().or(ctx.options);
-        let ignore_properties: Vec<String> = secondary
+        let ignore_properties: Vec<PropertyMatcher> = secondary
             .and_then(|v| v.get("ignoreProperties"))
             .and_then(|v| v.as_array())
             .map(|arr| {
                 arr.iter()
-                    .filter_map(|item| item.as_str().map(|s| s.to_ascii_lowercase()))
+                    .filter_map(|item| item.as_str().map(PropertyMatcher::from_pattern))
                     .collect()
             })
             .unwrap_or_default();
@@ -63,8 +91,12 @@ impl Rule for PropertyNoUnknown {
             if ctx.syntax == gale_css_parser::Syntax::Less && prop.starts_with('@') {
                 continue;
             }
-            // Skip explicitly ignored properties
-            if ignore_properties.contains(&prop.to_ascii_lowercase()) {
+            // Skip explicitly ignored properties (exact match or regex pattern)
+            let prop_lower = prop.to_ascii_lowercase();
+            if ignore_properties
+                .iter()
+                .any(|m| m.matches(&prop_lower, prop))
+            {
                 continue;
             }
             if !is_known_property(prop) {
@@ -120,6 +152,42 @@ mod tests {
         assert!(rule.check(&node, &ctx()).is_empty());
     }
 
+    #[test]
+    fn ignore_properties_exact() {
+        let rule = PropertyNoUnknown;
+        let node = style_node("a", &[("mso-padding-alt", "0")]);
+        let opts = serde_json::json!({ "ignoreProperties": ["mso-padding-alt"] });
+        let c = RuleContext {
+            options: Some(&opts),
+            ..ctx()
+        };
+        assert!(rule.check(&node, &c).is_empty());
+    }
+
+    #[test]
+    fn ignore_properties_regex_pattern() {
+        let rule = PropertyNoUnknown;
+        let node = style_node("a", &[("mso-padding-alt", "0"), ("mso-table-lspace", "0")]);
+        let opts = serde_json::json!({ "ignoreProperties": ["/^mso-/"] });
+        let c = RuleContext {
+            options: Some(&opts),
+            ..ctx()
+        };
+        assert!(rule.check(&node, &c).is_empty());
+    }
+
+    #[test]
+    fn ignore_properties_regex_does_not_match_other() {
+        let rule = PropertyNoUnknown;
+        let node = style_node("a", &[("colr", "red")]);
+        let opts = serde_json::json!({ "ignoreProperties": ["/^mso-/"] });
+        let c = RuleContext {
+            options: Some(&opts),
+            ..ctx()
+        };
+        assert_eq!(rule.check(&node, &c).len(), 1);
+    }
+
     mod gale_linter_test_helper {
         use gale_css_parser::*;
         pub fn style_node(sel: &str, props: &[(&str, &str)]) -> CssNode {
@@ -134,9 +202,9 @@ mod tests {
                         important: false,
                     })
                     .collect(),
-                children: vec![],
-                span: Span::new(0, 0),
-            })
+span: Span::new(0, 0),
+                ..Default::default()
+})
         }
     }
 }

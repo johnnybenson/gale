@@ -88,9 +88,9 @@ mod tests {
                         span: ParserSpan::new(25, 10),
                         important: false,
                     }],
-                    children: vec![],
-                    span: ParserSpan::new(19, 20),
-                }),
+span: ParserSpan::new(19, 20),
+                    ..Default::default()
+}),
                 CssNode::Style(StyleRule {
                     selector: "to".to_string(),
                     declarations: vec![Declaration {
@@ -99,9 +99,9 @@ mod tests {
                         span: ParserSpan::new(48, 10),
                         important: false,
                     }],
-                    children: vec![],
-                    span: ParserSpan::new(40, 20),
-                }),
+span: ParserSpan::new(40, 20),
+                    ..Default::default()
+}),
                 CssNode::Style(StyleRule {
                     selector: "from".to_string(),
                     declarations: vec![Declaration {
@@ -110,9 +110,9 @@ mod tests {
                         span: ParserSpan::new(68, 12),
                         important: false,
                     }],
-                    children: vec![],
-                    span: ParserSpan::new(61, 22),
-                }),
+span: ParserSpan::new(61, 22),
+                    ..Default::default()
+}),
             ],
         });
         let diags = rule.check(&node, &make_context());
@@ -134,15 +134,15 @@ mod tests {
                 CssNode::Style(StyleRule {
                     selector: "from".to_string(),
                     declarations: vec![],
-                    children: vec![],
-                    span: ParserSpan::new(19, 15),
-                }),
+span: ParserSpan::new(19, 15),
+                    ..Default::default()
+}),
                 CssNode::Style(StyleRule {
                     selector: "to".to_string(),
                     declarations: vec![],
-                    children: vec![],
-                    span: ParserSpan::new(35, 13),
-                }),
+span: ParserSpan::new(35, 13),
+                    ..Default::default()
+}),
             ],
         });
         let diags = rule.check(&node, &make_context());

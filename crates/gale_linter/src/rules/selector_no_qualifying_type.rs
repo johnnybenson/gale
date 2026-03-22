@@ -619,9 +619,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, 0),
-        })
+span: ParserSpan::new(0, 0),
+            ..Default::default()
+})
     }
 
     #[test]
@@ -707,11 +707,13 @@ mod tests {
                     span: ParserSpan::new(4, 15),
                     important: false,
                 }],
-                children: vec![],
                 span: ParserSpan::new(4, 15),
+                ..Default::default()
             }],
             span: ParserSpan::new(0, 20),
-        });
+        
+            nested_at_rules: Vec::new(),
+});
         let d = SelectorNoQualifyingType.check_root(&[parent], &ctx());
         assert_eq!(
             d.len(),
@@ -758,11 +760,13 @@ mod tests {
                     span: ParserSpan::new(0, 0),
                     important: false,
                 }],
-                children: vec![],
                 span: ParserSpan::new(0, 0),
+                ..Default::default()
             }],
             span: ParserSpan::new(0, 0),
-        });
+        
+            nested_at_rules: Vec::new(),
+});
         let d = SelectorNoQualifyingType.check_root(&[parent], &scss_ctx);
         assert!(
             d.is_empty(),

@@ -150,9 +150,9 @@ mod tests {
                 span: ParserSpan::new(0, value.len()),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, 0),
-        })
+span: ParserSpan::new(0, 0),
+            ..Default::default()
+})
     }
 
     #[test]

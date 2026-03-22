@@ -290,9 +290,9 @@ mod tests {
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![],
-            children: vec![],
-            span: ParserSpan::new(0, source.len()),
-        });
+span: ParserSpan::new(0, source.len()),
+            ..Default::default()
+});
         let ctx = make_context_with_source(source);
         let diags = rule.check(&node, &ctx);
         assert_eq!(diags.len(), 1);
@@ -313,9 +313,9 @@ mod tests {
                 span: ParserSpan::new(4, 10),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, source.len()),
-        });
+span: ParserSpan::new(0, source.len()),
+            ..Default::default()
+});
         let ctx = make_context_with_source(source);
         let diags = rule.check(&node, &ctx);
         assert!(diags.is_empty());
@@ -328,9 +328,9 @@ mod tests {
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![],
-            children: vec![],
-            span: ParserSpan::new(0, source.len()),
-        });
+span: ParserSpan::new(0, source.len()),
+            ..Default::default()
+});
         let ctx = make_context_with_source(source);
         let diags = rule.check(&node, &ctx);
         assert!(diags.is_empty());
@@ -343,9 +343,9 @@ mod tests {
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![],
-            children: vec![],
-            span: ParserSpan::new(0, source.len()),
-        });
+span: ParserSpan::new(0, source.len()),
+            ..Default::default()
+});
         let ctx = make_context_with_source(source);
         let diags = rule.check(&node, &ctx);
         assert!(diags.is_empty());
@@ -358,9 +358,9 @@ mod tests {
         let node = CssNode::Style(StyleRule {
             selector: ".btn".to_string(),
             declarations: vec![],
-            children: vec![],
-            span: ParserSpan::new(0, source.len()),
-        });
+span: ParserSpan::new(0, source.len()),
+            ..Default::default()
+});
         let ctx = RuleContext {
             file_path: "test.scss",
             source,
@@ -378,9 +378,9 @@ mod tests {
         let node = CssNode::Style(StyleRule {
             selector: ".btn".to_string(),
             declarations: vec![],
-            children: vec![],
-            span: ParserSpan::new(0, source.len()),
-        });
+span: ParserSpan::new(0, source.len()),
+            ..Default::default()
+});
         let ctx = RuleContext {
             file_path: "test.scss",
             source,

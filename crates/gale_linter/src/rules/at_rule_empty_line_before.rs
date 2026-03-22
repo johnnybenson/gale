@@ -151,9 +151,9 @@ mod tests {
             CssNode::Style(StyleRule {
                 selector: "a".to_string(),
                 declarations: vec![],
-                children: vec![],
-                span: ParserSpan::new(0, 17),
-            }),
+span: ParserSpan::new(0, 17),
+                ..Default::default()
+}),
             CssNode::AtRule(ParserAtRule {
                 name: "media".to_string(),
                 params: "screen".to_string(),
@@ -174,9 +174,9 @@ mod tests {
             CssNode::Style(StyleRule {
                 selector: "a".to_string(),
                 declarations: vec![],
-                children: vec![],
-                span: ParserSpan::new(0, 17),
-            }),
+span: ParserSpan::new(0, 17),
+                ..Default::default()
+}),
             CssNode::AtRule(ParserAtRule {
                 name: "media".to_string(),
                 params: "screen".to_string(),

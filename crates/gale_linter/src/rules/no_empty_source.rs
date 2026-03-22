@@ -70,9 +70,9 @@ mod tests {
                 span: gale_css_parser::Span::new(4, 10),
                 important: false,
             }],
-            children: vec![],
-            span: gale_css_parser::Span::new(0, 17),
-        })];
+span: gale_css_parser::Span::new(0, 17),
+            ..Default::default()
+})];
         let diags = rule.check_root(&nodes, &context);
         assert!(diags.is_empty());
     }

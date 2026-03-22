@@ -22,13 +22,10 @@ impl Rule for PropertyNoVendorPrefix {
     }
 
     fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
-        let CssNode::Style(rule) = node else {
-            return vec![];
-        };
-
         // Read ignoreProperties from options (secondary option object).
         let ignore_props: Vec<String> = ctx
-            .options
+            .secondary_options()
+            .or(ctx.options)
             .and_then(|v| v.get("ignoreProperties"))
             .and_then(|v| v.as_array())
             .map(|arr| {
@@ -38,8 +35,15 @@ impl Rule for PropertyNoVendorPrefix {
             })
             .unwrap_or_default();
 
+        // Collect declarations to check from both Style rules and standalone Declaration nodes
+        let decls: Vec<&gale_css_parser::Declaration> = match node {
+            CssNode::Style(rule) => rule.declarations.iter().collect(),
+            CssNode::Declaration(decl) => vec![decl],
+            _ => return vec![],
+        };
+
         let mut diags = Vec::new();
-        for decl in &rule.declarations {
+        for decl in decls {
             if is_vendor_prefixed(&decl.property) {
                 // Skip properties in the ignore list
                 let prop_lower = decl.property.to_ascii_lowercase();
@@ -265,9 +269,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, 0),
-        })
+span: ParserSpan::new(0, 0),
+            ..Default::default()
+})
     }
 
     #[test]
@@ -312,9 +316,9 @@ mod tests {
                 span: ParserSpan::new(4, 24),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, source.len()),
-        });
+span: ParserSpan::new(0, source.len()),
+            ..Default::default()
+});
         let d = PropertyNoVendorPrefix.check(&node, &ctx);
         assert_eq!(d.len(), 1);
         assert!(d[0].fix.is_some());

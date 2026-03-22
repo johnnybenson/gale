@@ -107,8 +107,8 @@ mod tests {
             selector: selector.to_string(),
             declarations: vec![],
             span: ParserSpan::new(0, 20),
-            children: vec![],
-        })
+            ..Default::default()
+})
     }
 
     #[test]

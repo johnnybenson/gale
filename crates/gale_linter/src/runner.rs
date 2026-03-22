@@ -181,7 +181,27 @@ fn handle_directive(
     } else if let Some(rule_part) = rest.strip_prefix("disable") {
         // disable [rule-name, ...]
         let rule_names = parse_rule_names(rule_part);
+
+        // If the disable comment is inline (on the same line as code), also
+        // disable from the start of the current line so that code preceding
+        // the comment on the same line is covered. This matches Stylelint's
+        // behavior where `property: value; // stylelint-disable rule` suppresses
+        // the diagnostic on the declaration.
+        let (comment_line, _) = line_index.offset_to_location(comment_start);
+        let (line_start, line_end) = line_byte_range(source, comment_line);
+        let before_comment = &source[line_start..comment_start];
+        let is_inline = !before_comment.trim().is_empty();
+
         for rule_name in rule_names {
+            if is_inline {
+                // Add a range covering the current line in addition to the
+                // open-ended disable.
+                ranges.push(DisabledRange {
+                    start: line_start,
+                    end: line_end,
+                    rule: rule_name.clone(),
+                });
+            }
             open_disables.push((comment_end, rule_name));
         }
     }
@@ -588,6 +608,19 @@ fn walk_node(
                 let child_node = CssNode::Style(child.clone());
                 walk_node(
                     &child_node,
+                    rules,
+                    file_path,
+                    source,
+                    syntax,
+                    rule_options,
+                    diagnostics,
+                );
+            }
+            // Walk at-rules nested inside the style rule (e.g. @include,
+            // @if/@else, @media) so lint rules can inspect their contents.
+            for at_node in &style_rule.nested_at_rules {
+                walk_node(
+                    at_node,
                     rules,
                     file_path,
                     source,

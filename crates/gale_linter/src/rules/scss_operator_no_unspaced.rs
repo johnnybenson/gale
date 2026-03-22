@@ -512,6 +512,8 @@ fn check_value_inner(
     let mut calc_depth: i32 = 0;
     let mut in_url = false;
     let mut url_depth: i32 = 0;
+    let mut in_color_fn = false;
+    let mut color_fn_depth: i32 = 0;
 
     while i < len {
         let ch = b[i];
@@ -521,6 +523,17 @@ fn check_value_inner(
             i += 2;
             while i < len && b[i] != b'\n' {
                 i += 1;
+            }
+            continue;
+        }
+        // Skip block comments /* ... */
+        if ch == b'/' && i + 1 < len && b[i + 1] == b'*' {
+            i += 2;
+            while i + 1 < len && !(b[i] == b'*' && b[i + 1] == b'/') {
+                i += 1;
+            }
+            if i + 1 < len {
+                i += 2;
             }
             continue;
         }
@@ -570,6 +583,16 @@ fn check_value_inner(
             i += 4;
             continue;
         }
+        // Color functions — `/` is the alpha separator, not division
+        if ch.is_ascii_alphabetic()
+            && let Some(fn_len) = is_color_function_at(value, i)
+        {
+            in_color_fn = true;
+            color_fn_depth = paren_depth + 1;
+            paren_depth += 1;
+            i += fn_len;
+            continue;
+        }
         if ch == b'(' {
             paren_depth += 1;
             i += 1;
@@ -581,6 +604,9 @@ fn check_value_inner(
             }
             if in_url && paren_depth == url_depth {
                 in_url = false;
+            }
+            if in_color_fn && paren_depth == color_fn_depth {
+                in_color_fn = false;
             }
             paren_depth -= 1;
             i += 1;
@@ -702,6 +728,11 @@ fn check_value_inner(
             }
             // Slash in shorthand properties
             if ch == b'/' && slash_is_sep {
+                i += 1;
+                continue;
+            }
+            // Slash as alpha separator in CSS color functions
+            if ch == b'/' && in_color_fn && paren_depth >= color_fn_depth {
                 i += 1;
                 continue;
             }
@@ -1284,6 +1315,23 @@ fn has_operator_before_token(b: &[u8], slash_pos: usize) -> bool {
     c == b'+' || c == b'-' || c == b'*'
 }
 
+/// Check if position `i` in `value` is the start of a CSS color function name
+/// followed by `(`. Returns `Some(len)` where `len` includes the `(` character,
+/// or `None` if not a color function.
+fn is_color_function_at(value: &str, i: usize) -> Option<usize> {
+    const COLOR_FNS: &[&str] = &[
+        "rgb(", "rgba(", "hsl(", "hsla(", "hwb(", "lab(", "lch(", "oklch(", "oklab(", "color(",
+    ];
+    let rest = &value[i..];
+    let lower = rest.to_ascii_lowercase();
+    for &f in COLOR_FNS {
+        if lower.starts_with(f) {
+            return Some(f.len());
+        }
+    }
+    None
+}
+
 fn is_modulo(b: &[u8], i: usize) -> bool {
     let len = b.len();
     let mut ap = i + 1;
@@ -1445,9 +1493,9 @@ mod tests {
                 span: ParserSpan::new(4, value.len()),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, value.len() + 20),
-        })
+span: ParserSpan::new(0, value.len() + 20),
+            ..Default::default()
+})
     }
 
     #[test]
@@ -1620,5 +1668,122 @@ mod tests {
         let rule = ScssOperatorNoUnspaced;
         let node = make_node("border-radius", "$a+$b");
         assert!(!rule.check(&node, &scss_context()).is_empty());
+    }
+    #[test]
+    fn skips_slash_alpha_separator_in_rgb() {
+        let rule = ScssOperatorNoUnspaced;
+        let node = make_node("color", "rgb(255 0 0 / 0.5)");
+        assert!(rule.check(&node, &scss_context()).is_empty());
+    }
+    #[test]
+    fn skips_slash_alpha_separator_in_rgb_unspaced() {
+        let rule = ScssOperatorNoUnspaced;
+        let node = make_node("color", "rgb(255 0 0/0.5)");
+        assert!(rule.check(&node, &scss_context()).is_empty());
+    }
+    #[test]
+    fn skips_slash_alpha_separator_in_rgba() {
+        let rule = ScssOperatorNoUnspaced;
+        let node = make_node("color", "rgba(255 0 0 / 50%)");
+        assert!(rule.check(&node, &scss_context()).is_empty());
+    }
+    #[test]
+    fn skips_slash_alpha_separator_in_hsl() {
+        let rule = ScssOperatorNoUnspaced;
+        let node = make_node("color", "hsl(120 100% 50% / .5)");
+        assert!(rule.check(&node, &scss_context()).is_empty());
+    }
+    #[test]
+    fn skips_slash_alpha_separator_in_hsla() {
+        let rule = ScssOperatorNoUnspaced;
+        let node = make_node("color", "hsla(120 100% 50% / 0.5)");
+        assert!(rule.check(&node, &scss_context()).is_empty());
+    }
+    #[test]
+    fn skips_slash_alpha_separator_in_hwb() {
+        let rule = ScssOperatorNoUnspaced;
+        let node = make_node("color", "hwb(120 0% 0% / 0.5)");
+        assert!(rule.check(&node, &scss_context()).is_empty());
+    }
+    #[test]
+    fn skips_slash_alpha_separator_in_oklch() {
+        let rule = ScssOperatorNoUnspaced;
+        let node = make_node("color", "oklch(0.5 0.2 240 / 0.5)");
+        assert!(rule.check(&node, &scss_context()).is_empty());
+    }
+    #[test]
+    fn skips_slash_alpha_separator_in_rgb_with_var() {
+        let rule = ScssOperatorNoUnspaced;
+        let node = make_node("color", "rgb(from var(--color) r g b / 50%)");
+        assert!(rule.check(&node, &scss_context()).is_empty());
+    }
+    #[test]
+    fn skips_slash_alpha_separator_in_color_function() {
+        let rule = ScssOperatorNoUnspaced;
+        let node = make_node("color", "color(srgb 1 0 0 / 0.5)");
+        assert!(rule.check(&node, &scss_context()).is_empty());
+    }
+    #[test]
+    fn still_reports_unspaced_division_outside_color_fn() {
+        let rule = ScssOperatorNoUnspaced;
+        let node = make_node("width", "$a/2");
+        assert!(!rule.check(&node, &scss_context()).is_empty());
+    }
+    #[test]
+    fn skips_slash_alpha_in_rgb_variable_assignment() {
+        let rule = ScssOperatorNoUnspaced;
+        let source = "$color: rgb(255 0 0 / 0.5);\n";
+        let ctx = RuleContext {
+            file_path: "test.scss",
+            source,
+            syntax: Syntax::Scss,
+            options: None,
+        };
+        let diags = rule.check_root(&[], &ctx);
+        assert!(
+            diags.is_empty(),
+            "Expected no diagnostics for rgb alpha separator in variable assignment, got: {:?}",
+            diags
+        );
+    }
+
+    #[test]
+    fn skips_block_comments_in_values() {
+        let rule = ScssOperatorNoUnspaced;
+        // Block comment inside a value should not trigger on * or /
+        let node = make_node("color", "red /* fallback */ blue");
+        assert!(
+            rule.check(&node, &scss_context()).is_empty(),
+            "Block comment content should not trigger operator spacing"
+        );
+    }
+
+    #[test]
+    fn skips_jsdoc_style_comments_at_source_level() {
+        let rule = ScssOperatorNoUnspaced;
+        let source = "/**\n * @summary Focus state\n * @selector .slds-has-focus\n */\n.foo { color: red; }\n";
+        let ctx = RuleContext {
+            file_path: "test.scss",
+            source,
+            syntax: Syntax::Scss,
+            options: None,
+        };
+        let diags = rule.check_root(&[], &ctx);
+        assert!(
+            diags.is_empty(),
+            "JSDoc-style block comments should not trigger operator spacing, got: {:?}",
+            diags
+        );
+    }
+
+    #[test]
+    fn skips_block_comment_with_asterisks_in_value() {
+        let rule = ScssOperatorNoUnspaced;
+        // Simulates a value containing a block comment with star-prefixed lines
+        let node = make_node("color", "/* * * * */ red");
+        assert!(
+            rule.check(&node, &scss_context()).is_empty(),
+            "Stars inside block comments should not be flagged"
+        );
     }
 }

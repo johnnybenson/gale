@@ -48,6 +48,40 @@ impl Rule for ScssDollarVariableColonSpaceAfter {
         let mut i = 0;
 
         while i < len {
+            // Skip line comments (`// ...`)
+            if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                continue;
+            }
+            // Skip block comments (`/* ... */`)
+            if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+                i += 2;
+                while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                    i += 1;
+                }
+                if i + 1 < len {
+                    i += 2;
+                }
+                continue;
+            }
+            // Skip string literals
+            if bytes[i] == b'"' || bytes[i] == b'\'' {
+                let quote = bytes[i];
+                i += 1;
+                while i < len && bytes[i] != quote {
+                    if bytes[i] == b'\\' {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                if i < len {
+                    i += 1;
+                }
+                continue;
+            }
+
             // Look for `$`
             if bytes[i] != b'$' {
                 i += 1;

@@ -70,40 +70,52 @@ impl Rule for ScssSelectorNoRedundantNestingSelector {
         //   `& + .baz` → `+ .baz`
         //   `& ~ .qux` → `~ .qux`
         for child in &rule.children {
-            let selector = child.selector.trim();
+            // Split selector list by commas and check each individual selector.
+            // This handles cases like `.other, & .child` where only one part of
+            // the comma-separated list contains a redundant `&`.
+            //
+            // We report one diagnostic per redundant `&` selector part, with
+            // the span pointing to the `&` character in the source.  To find
+            // the byte offset of each part we track our position through the
+            // original selector string.
+            let full_selector = &child.selector;
+            let mut search_start: usize = 0;
 
-            // Skip standalone `&` — it's a scoping block, not redundant.
-            if selector == "&" {
-                continue;
-            }
+            for selector_part in full_selector.split(',') {
+                let part_len = selector_part.len();
+                // Offset of this part within `full_selector`.
+                let part_offset_in_selector = search_start;
+                // Move past this part + the comma delimiter.
+                search_start += part_len + 1; // +1 for the comma
 
-            // Flag `& <combinator-or-descendant> ...` patterns where the leading
-            // `&` is unnecessary.
-            if let Some(rest) = selector.strip_prefix('&') {
-                let after = rest.trim_start();
-                // After stripping `&` and whitespace the remainder must start with
-                // a simple selector or combinator — i.e. the `&` was at the
-                // beginning of a compound/complex selector.
-                // If the very first char after `&` is NOT a combinator char, class
-                // selector, id selector, pseudo-class/element, or attribute
-                // selector, then the `&` was concatenated (e.g. `&__element`) which
-                // is fine.
-                let redundant = if rest.starts_with(char::is_whitespace) {
-                    // `& .foo`, `& > .bar`, etc. — descendant / combinator after
-                    // whitespace: `&` is redundant.
-                    !after.is_empty()
-                } else {
-                    false
-                };
-                if redundant {
-                    diags.push(
-                        Diagnostic::new(
-                            self.name(),
-                            "Unexpected redundant nesting selector (&)".to_string(),
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(child.span.offset, child.span.length)),
-                    );
+                let selector = selector_part.trim();
+                let trim_offset = selector_part.len() - selector_part.trim_start().len();
+
+                // Skip standalone `&` — it's a scoping block, not redundant.
+                if selector == "&" {
+                    continue;
+                }
+
+                if let Some(rest) = selector.strip_prefix('&') {
+                    let redundant = if rest.starts_with(char::is_whitespace) {
+                        let after = rest.trim_start();
+                        !after.is_empty()
+                    } else {
+                        false
+                    };
+                    if redundant {
+                        // Point the span at the `&` character in the source.
+                        let ampersand_offset =
+                            child.span.offset + part_offset_in_selector + trim_offset;
+                        diags.push(
+                            Diagnostic::new(
+                                self.name(),
+                                "Unnecessary nesting selector (&)".to_string(),
+                            )
+                            .severity(self.default_severity())
+                            .span(Span::new(ampersand_offset, 1)),
+                        );
+                    }
                 }
             }
         }
@@ -149,9 +161,11 @@ mod tests {
                     important: false,
                 }],
                 span: ParserSpan::new(5, 40),
-                children: vec![],
+                ..Default::default()
             }],
-        })
+        
+            nested_at_rules: Vec::new(),
+})
     }
 
     #[test]
@@ -181,7 +195,7 @@ mod tests {
         let node = nested_rule(".foo", "& .bar");
         let d = ScssSelectorNoRedundantNestingSelector.check(&node, &scss_ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("redundant"));
+        assert!(d[0].message.contains("Unnecessary nesting"));
     }
 
     #[test]
@@ -190,7 +204,7 @@ mod tests {
         let node = nested_rule(".foo", "& > .bar");
         let d = ScssSelectorNoRedundantNestingSelector.check(&node, &scss_ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("redundant"));
+        assert!(d[0].message.contains("Unnecessary nesting"));
     }
 
     #[test]
@@ -199,7 +213,7 @@ mod tests {
         let node = nested_rule(".foo", "& + .bar");
         let d = ScssSelectorNoRedundantNestingSelector.check(&node, &scss_ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("redundant"));
+        assert!(d[0].message.contains("Unnecessary nesting"));
     }
 
     #[test]
@@ -241,5 +255,44 @@ mod tests {
                 .check(&node, &scss_ctx())
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn reports_redundant_ampersand_in_selector_list() {
+        // `.other, & .child` — the `& .child` part is redundant.
+        let node = nested_rule(".foo", ".other, & .child");
+        let d = ScssSelectorNoRedundantNestingSelector.check(&node, &scss_ctx());
+        assert_eq!(d.len(), 1);
+        assert!(d[0].message.contains("Unnecessary nesting"));
+    }
+
+    #[test]
+    fn reports_redundant_ampersand_mixed_with_valid() {
+        // `&:hover, & .child` — `&:hover` is fine but `& .child` is redundant.
+        let node = nested_rule(".foo", "&:hover, & .child");
+        let d = ScssSelectorNoRedundantNestingSelector.check(&node, &scss_ctx());
+        assert_eq!(d.len(), 1);
+        assert!(d[0].message.contains("Unnecessary nesting"));
+    }
+
+    #[test]
+    fn allows_selector_list_with_no_redundant_parts() {
+        // `&:hover, &.active` — neither part is redundant.
+        let node = nested_rule(".foo", "&:hover, &.active");
+        assert!(
+            ScssSelectorNoRedundantNestingSelector
+                .check(&node, &scss_ctx())
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn reports_all_redundant_parts_in_selector_list() {
+        // Both `& .child1` and `& .child2` are redundant — report 2 diagnostics.
+        let node = nested_rule(".foo", "& .child1, & .child2");
+        let d = ScssSelectorNoRedundantNestingSelector.check(&node, &scss_ctx());
+        assert_eq!(d.len(), 2);
+        assert!(d[0].message.contains("Unnecessary nesting"));
+        assert!(d[1].message.contains("Unnecessary nesting"));
     }
 }

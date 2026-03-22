@@ -84,11 +84,13 @@ mod tests {
             children: vec![StyleRule {
                 selector: ".child".to_string(),
                 declarations: vec![make_decl()],
-                children: vec![],
                 span: ParserSpan::new(20, 15),
+                ..Default::default()
             }],
             span: ParserSpan::new(0, 40),
-        });
+        
+            nested_at_rules: Vec::new(),
+});
         let d = SelectorNestedPattern.check(&node, &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains(".child"));
@@ -102,11 +104,13 @@ mod tests {
             children: vec![StyleRule {
                 selector: "&:hover".to_string(),
                 declarations: vec![make_decl()],
-                children: vec![],
                 span: ParserSpan::new(20, 15),
+                ..Default::default()
             }],
             span: ParserSpan::new(0, 40),
-        });
+        
+            nested_at_rules: Vec::new(),
+});
         let d = SelectorNestedPattern.check(&node, &ctx());
         assert!(d.is_empty());
     }
@@ -116,9 +120,9 @@ mod tests {
         let node = CssNode::Style(StyleRule {
             selector: ".parent".to_string(),
             declarations: vec![make_decl()],
-            children: vec![],
-            span: ParserSpan::new(0, 20),
-        });
+span: ParserSpan::new(0, 20),
+            ..Default::default()
+});
         let d = SelectorNestedPattern.check(&node, &ctx());
         assert!(d.is_empty());
     }

@@ -118,9 +118,9 @@ mod tests {
                 span: ParserSpan::new(4, 10),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, source.len()),
-        });
+span: ParserSpan::new(0, source.len()),
+            ..Default::default()
+});
         let d = rule.check(&node, &ctx);
         assert!(d.is_empty());
     }
@@ -138,9 +138,9 @@ mod tests {
                 span: ParserSpan::new(4, 10),
                 important: false,
             }],
-            children: vec![],
-            span: ParserSpan::new(0, source.len()),
-        });
+span: ParserSpan::new(0, source.len()),
+            ..Default::default()
+});
         let d = rule.check(&node, &ctx);
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("trailing semicolon"));

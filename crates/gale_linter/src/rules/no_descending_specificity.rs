@@ -480,9 +480,9 @@ mod tests {
                     span: ParserSpan::new(6, 10),
                     important: false,
                 }],
-                children: vec![],
-                span: ParserSpan::new(0, 22),
-            }),
+span: ParserSpan::new(0, 22),
+                ..Default::default()
+}),
             CssNode::Style(StyleRule {
                 selector: ".bar".to_string(),
                 declarations: vec![Declaration {
@@ -491,9 +491,9 @@ mod tests {
                     span: ParserSpan::new(26, 11),
                     important: false,
                 }],
-                children: vec![],
-                span: ParserSpan::new(23, 16),
-            }),
+span: ParserSpan::new(23, 16),
+                ..Default::default()
+}),
         ];
         let diags = rule.check_root(&nodes, &make_context());
         assert_eq!(diags.len(), 1);
@@ -508,15 +508,15 @@ mod tests {
             CssNode::Style(StyleRule {
                 selector: "#id".to_string(),
                 declarations: vec![],
-                children: vec![],
-                span: ParserSpan::new(0, 18),
-            }),
+span: ParserSpan::new(0, 18),
+                ..Default::default()
+}),
             CssNode::Style(StyleRule {
                 selector: "a".to_string(),
                 declarations: vec![],
-                children: vec![],
-                span: ParserSpan::new(19, 16),
-            }),
+span: ParserSpan::new(19, 16),
+                ..Default::default()
+}),
         ];
         let diags = rule.check_root(&nodes, &make_context());
         assert!(
@@ -533,21 +533,21 @@ mod tests {
             CssNode::Style(StyleRule {
                 selector: "a".to_string(),
                 declarations: vec![],
-                children: vec![],
-                span: ParserSpan::new(0, 5),
-            }),
+span: ParserSpan::new(0, 5),
+                ..Default::default()
+}),
             CssNode::Style(StyleRule {
                 selector: ".cls".to_string(),
                 declarations: vec![],
-                children: vec![],
-                span: ParserSpan::new(6, 8),
-            }),
+span: ParserSpan::new(6, 8),
+                ..Default::default()
+}),
             CssNode::Style(StyleRule {
                 selector: "#id".to_string(),
                 declarations: vec![],
-                children: vec![],
-                span: ParserSpan::new(15, 7),
-            }),
+span: ParserSpan::new(15, 7),
+                ..Default::default()
+}),
         ];
         let diags = rule.check_root(&nodes, &make_context());
         assert!(diags.is_empty());
@@ -614,9 +614,9 @@ mod tests {
                     span: ParserSpan::new(6, 10),
                     important: false,
                 }],
-                children: vec![],
-                span: ParserSpan::new(0, 22),
-            }),
+span: ParserSpan::new(0, 22),
+                ..Default::default()
+}),
             CssNode::Style(StyleRule {
                 selector: ".bar".to_string(),
                 declarations: vec![Declaration {
@@ -625,9 +625,9 @@ mod tests {
                     span: ParserSpan::new(26, 11),
                     important: false,
                 }],
-                children: vec![],
-                span: ParserSpan::new(23, 16),
-            }),
+span: ParserSpan::new(23, 16),
+                ..Default::default()
+}),
         ];
         let diags = rule.check_root(&nodes, &make_scss_context());
         assert_eq!(
@@ -653,11 +653,13 @@ mod tests {
                     span: ParserSpan::new(12, 11),
                     important: false,
                 }],
-                children: vec![],
                 span: ParserSpan::new(8, 17),
+                ..Default::default()
             }],
             span: ParserSpan::new(0, 27),
-        })];
+        
+            nested_at_rules: Vec::new(),
+})];
         let diags = rule.check_root(&nodes, &make_scss_context());
         assert!(
             diags.is_empty(),
@@ -677,15 +679,15 @@ mod tests {
             CssNode::Style(StyleRule {
                 selector: "#id".to_string(),
                 declarations: vec![],
-                children: vec![],
-                span: ParserSpan::new(0, 10),
-            }),
+span: ParserSpan::new(0, 10),
+                ..Default::default()
+}),
             CssNode::Style(StyleRule {
                 selector: ".#{$var}".to_string(),
                 declarations: vec![],
-                children: vec![],
-                span: ParserSpan::new(11, 15),
-            }),
+span: ParserSpan::new(11, 15),
+                ..Default::default()
+}),
         ];
         let diags = rule.check_root(&nodes, &make_scss_context());
         assert!(
@@ -701,15 +703,15 @@ mod tests {
             CssNode::Style(StyleRule {
                 selector: "#id".to_string(),
                 declarations: vec![],
-                children: vec![],
-                span: ParserSpan::new(0, 10),
-            }),
+span: ParserSpan::new(0, 10),
+                ..Default::default()
+}),
             CssNode::Style(StyleRule {
                 selector: "&:hover".to_string(),
                 declarations: vec![],
-                children: vec![],
-                span: ParserSpan::new(11, 15),
-            }),
+span: ParserSpan::new(11, 15),
+                ..Default::default()
+}),
         ];
         let diags = rule.check_root(&nodes, &make_scss_context());
         assert!(diags.is_empty(), "should skip &-prefixed selectors in SCSS");
@@ -722,15 +724,15 @@ mod tests {
             CssNode::Style(StyleRule {
                 selector: "#id".to_string(),
                 declarations: vec![],
-                children: vec![],
-                span: ParserSpan::new(0, 10),
-            }),
+span: ParserSpan::new(0, 10),
+                ..Default::default()
+}),
             CssNode::Style(StyleRule {
                 selector: "%placeholder".to_string(),
                 declarations: vec![],
-                children: vec![],
-                span: ParserSpan::new(11, 20),
-            }),
+span: ParserSpan::new(11, 20),
+                ..Default::default()
+}),
         ];
         let diags = rule.check_root(&nodes, &make_scss_context());
         assert!(
@@ -747,15 +749,15 @@ mod tests {
             CssNode::Style(StyleRule {
                 selector: ".foo .bar".to_string(),
                 declarations: vec![],
-                children: vec![],
-                span: ParserSpan::new(0, 20),
-            }),
+span: ParserSpan::new(0, 20),
+                ..Default::default()
+}),
             CssNode::Style(StyleRule {
                 selector: ".bar".to_string(),
                 declarations: vec![],
-                children: vec![],
-                span: ParserSpan::new(21, 12),
-            }),
+span: ParserSpan::new(21, 12),
+                ..Default::default()
+}),
         ];
         let less_context = RuleContext {
             file_path: "test.less",

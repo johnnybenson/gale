@@ -130,9 +130,9 @@ mod tests {
         CssNode::Style(StyleRule {
             selector: sel.to_string(),
             declarations: vec![],
-            children: vec![],
-            span: ParserSpan::new(0, sel.len()),
-        })
+span: ParserSpan::new(0, sel.len()),
+            ..Default::default()
+})
     }
 
     #[test]
