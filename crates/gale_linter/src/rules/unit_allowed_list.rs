@@ -284,12 +284,29 @@ fn parse_options(ctx: &RuleContext) -> AllowedListOptions {
     let primary = ctx.primary_option();
     let secondary = ctx.secondary_options();
 
+    // The primary option is an array of unit strings, e.g. ["px", "em", "%"].
+    // But ctx.primary_option() returns arr.first() when options is an array,
+    // which is wrong when the array IS the primary (not [primary, secondary]).
+    // Handle both formats:
+    //   - ["px", "em"]              → options is the array directly
+    //   - [["px", "em"], {secondary}] → primary_option() returns the inner array
     let units: Vec<String> = match primary {
         Some(serde_json::Value::Array(arr)) => arr
             .iter()
             .filter_map(|v| v.as_str().map(|s| s.to_ascii_lowercase()))
             .collect(),
-        Some(serde_json::Value::String(s)) => vec![s.to_ascii_lowercase()],
+        Some(serde_json::Value::String(s)) => {
+            // primary_option() returned a string — the options array was
+            // ["px", "em", ...] and it returned just the first element.
+            // Use the full options array instead.
+            if let Some(serde_json::Value::Array(arr)) = ctx.options {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_ascii_lowercase()))
+                    .collect()
+            } else {
+                vec![s.to_ascii_lowercase()]
+            }
+        }
         _ => Vec::new(),
     };
 
