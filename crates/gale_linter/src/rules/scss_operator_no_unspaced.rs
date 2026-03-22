@@ -547,6 +547,8 @@ fn check_value_inner(
             }
             // Hyphen in identifier
             if ch == b'-' && is_ident_hyphen(b, i) { i += 1; continue; }
+            // Trailing/leading operator at edge of value is not an operator
+            if i == 0 || i + 1 >= len { i += 1; continue; }
             // Slash in shorthand properties
             if ch == b'/' && slash_is_sep { i += 1; continue; }
             // Unary

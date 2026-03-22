@@ -51,6 +51,12 @@ impl Rule for ScssPercentPlaceholderPattern {
             for segment in sel.split_whitespace() {
                 let segment = segment.trim_start_matches('&');
                 if let Some(rest) = segment.strip_prefix('%') {
+                    // If the placeholder contains SCSS interpolation #{}, skip validation
+                    // since the final name is dynamic
+                    if rest.contains("#{") {
+                        continue;
+                    }
+
                     // Strip any trailing pseudo-class or combinator chars
                     let placeholder_name = rest
                         .split(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_')
@@ -119,6 +125,15 @@ mod tests {
         assert!(
             ScssPercentPlaceholderPattern
                 .check(&style("%responsive-container-"), &scss_ctx())
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn skips_interpolated_placeholder() {
+        assert!(
+            ScssPercentPlaceholderPattern
+                .check(&style("%responsive-container-#{$breakpoint}"), &scss_ctx())
                 .is_empty()
         );
     }
