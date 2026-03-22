@@ -1,19 +1,53 @@
-# Gale -- An extremely fast CSS linter, written in Rust
+# Gale -- Technical Guide
+
+This document is a reference for AI assistants and developers working on the Gale codebase.
 
 ## Project overview
 
-Gale is a **drop-in replacement for [Stylelint](https://stylelint.io/)**, written in Rust for maximum performance. The goal is 100% compatibility with Stylelint's rule semantics, config format, CLI flags, and output -- so teams can switch from Stylelint to Gale with zero config changes.
+Gale is a **drop-in replacement for [Stylelint](https://stylelint.io/)**, written in Rust. The goal is 100% compatibility with Stylelint's rule semantics, config format, CLI flags, and output -- so teams can switch with zero config changes.
 
-- Reads `.stylelintrc.json`, `.stylelintrc.yml`, `.stylelintrc` (JSON or YAML), `gale.json`, `gale.toml`
-- Supports `extends` (built-in presets + npm packages + relative paths)
-- Matches Stylelint's JSON output format for tooling integration
-- Supports `/* stylelint-disable */` and `/* gale-disable */` inline comments
-- Parallel file linting via `rayon`
-- Auto-fix support (`--fix`)
-- File caching (`--cache`)
-- LSP server for editor integration (`--lsp`)
+**Current state (v0.1.1):**
+- 250 built-in rules (144 core, 44 SCSS, 59 stylistic, 3 order)
+- 0 false positives, 0 false negatives across 16 real-world repos
+- 100x-400x faster than Stylelint
+- Published on npm as `@lyricalstring/gale`
 
----
+## Build and test commands
+
+```sh
+# Build
+cargo build                          # debug
+cargo build --release                # release
+
+# Test
+cargo test --workspace               # all tests
+cargo test -p gale_linter            # specific crate
+cargo test -p gale_linter block_no_empty  # specific test
+
+# Lint the Rust code
+cargo clippy --workspace -- -D warnings
+cargo fmt --check
+
+# Run Gale
+cargo run -- "src/**/*.css"          # lint
+cargo run -- --fix "src/**/*.css"    # autofix
+cargo run -- --formatter json src/   # JSON output
+
+# Debug
+GALE_DEBUG_PERF=1 cargo run --release -- src/   # per-phase timings
+GALE_LOG=debug cargo run -- src/                # tracing output
+
+# Benchmarks
+bash benchmarks/benchmark.sh
+bash benchmarks/run-benchmark.sh
+
+# Differential testing against Stylelint
+python tests/differential/run.py                    # all repos
+python tests/differential/run.py bootstrap          # specific repo
+python tests/differential/run.py --benchmark        # with timing
+python tests/differential/run.py bootstrap --css-only  # skip SCSS/Less
+python tests/differential/run.py --skip-build       # use existing binary
+```
 
 ## Architecture
 
@@ -57,13 +91,63 @@ CLI args
 |-------|------|----------------|
 | **gale_css_parser** | `crates/gale_css_parser/` | Wraps **lightningcss** (CSS) and **raffia** (SCSS/Less) into a unified, lifetime-free AST (`CssNode` enum). Handles syntax detection from file extensions. |
 | **gale_diagnostics** | `crates/gale_diagnostics/` | Core types: `Span`, `SourceLocation`, `SourceLineIndex`, `Severity`, `Diagnostic`, `LintResult`, `Fix`, `Edit`. Also provides `apply_fixes()`. |
-| **gale_linter** | `crates/gale_linter/` | The `Rule` trait, `RuleRegistry`, `LintRunner`, inline disable-comment processing, known-identifier data tables, and all 50+ built-in rule implementations. |
+| **gale_linter** | `crates/gale_linter/` | The `Rule` trait, `RuleRegistry`, `LintRunner`, inline disable-comment processing, known-identifier data tables, and all 250 built-in rule implementations. |
 | **gale_config** | `crates/gale_config/` | Config file discovery (walks up directories), parsing (JSON/YAML/TOML), `extends` resolution (built-in presets, npm packages, relative paths), preset definitions (`gale:recommended`, `gale:all`). |
 | **gale_formatter** | `crates/gale_formatter/` | `Formatter` trait with `TextFormatter` (Stylelint-like), `JsonFormatter` (Stylelint-compatible JSON), and `CompactFormatter`. Factory function `create_formatter()`. |
 | **gale_cli** | `crates/gale_cli/` | Clap-based CLI, file discovery with `.galeignore`/`.gitignore` support, cache layer, `--fix` orchestration, `--init` scaffolding, `--lsp` delegation. |
 | **gale_lsp** | `crates/gale_lsp/` | LSP server for editor integration. Invoked via `gale --lsp`. |
 
----
+## File structure
+
+```
+gale/
+  Cargo.toml              Workspace root (version 0.1.1, Rust 2024 edition)
+  src/main.rs             Binary entrypoint (delegates to gale_cli::run)
+  crates/
+    gale_cli/             CLI, file discovery, orchestration, caching
+    gale_config/          Config loading, parsing, extends resolution, presets
+    gale_css_parser/      lightningcss + raffia wrapper, CssNode AST
+    gale_diagnostics/     Span, Diagnostic, LintResult, Fix/Edit, apply_fixes
+    gale_formatter/       Text/JSON/Compact output formatters
+    gale_linter/          Rule trait, registry, runner, built-in rules
+      src/
+        rule.rs           Rule trait + RuleContext
+        registry.rs       RuleRegistry
+        runner.rs         LintRunner + inline disable comment processing
+        data.rs           Known CSS identifiers (properties, units, etc.)
+        rules/
+          mod.rs          Module declarations + register_all()
+          block_no_empty.rs
+          scss_at_rule_no_unknown.rs
+          stylistic_indentation.rs
+          order_properties_order.rs
+          ... (250 rule files)
+    gale_lsp/             LSP server
+  editors/
+    vscode/               VS Code extension (gale-lint)
+  npm/
+    package.json          npm package (@lyricalstring/gale)
+    install.js            Post-install script (downloads platform binary from GitHub releases)
+    bin/                  Binary placeholder
+    README.md             npm page README
+  benchmarks/
+    benchmark.sh          Full benchmark suite
+    run-benchmark.sh      Quick benchmark (uses hyperfine)
+    generate-benchmark.sh Generate test fixtures
+    results.md            Latest benchmark results
+  tests/
+    differential/
+      run.py              Differential testing harness
+      repos.json          Test corpus (16 repos)
+      migration_test.py   Migration testing
+  scripts/
+    build-npm.sh          Build and package binaries for npm
+    generate-compatibility-matrix.py  Generate compatibility report from CI
+  .github/workflows/
+    ci.yml                Tests, clippy, fmt, benchmark on push/PR
+    release.yml           Build binaries + create GitHub release + publish npm on tag push
+    compatibility.yml     Weekly differential tests on 4 repos (Monday 6am UTC)
+```
 
 ## Key types and traits
 
@@ -123,84 +207,13 @@ pub struct Diagnostic {
 
 Builder pattern: `Diagnostic::new(rule, msg).severity(s).span(sp).fix(f)`
 
-### `LintResult`
+### Other key types
 
-```rust
-pub struct LintResult {
-    pub file_path: String,
-    pub diagnostics: Vec<Diagnostic>,
-    pub source: String,
-}
-```
-
-### `GaleConfig`
-
-```rust
-pub struct GaleConfig {
-    pub rules: HashMap<String, RuleConfig>,
-    pub ignore_patterns: Vec<String>,
-    pub formatter: FormatterType,
-}
-```
-
-### `RuleConfig`
-
-```rust
-pub struct RuleConfig {
-    pub severity: Option<Severity>,
-    pub options: Option<serde_json::Value>,
-}
-```
-
-### `RuleRegistry` and `LintRunner`
-
-- `RuleRegistry` -- stores `Vec<Box<dyn Rule>>`, created via `RuleRegistry::default()` (calls `register_all()`).
-- `LintRunner` -- holds a registry + list of enabled rule names. `lint_source(source, path, syntax) -> LintResult`.
-
----
-
-## Build and test commands
-
-```sh
-# Build (debug)
-cargo build
-
-# Build (release)
-cargo build --release
-
-# Run all tests
-cargo test --workspace
-
-# Run tests for a specific crate
-cargo test -p gale_linter
-cargo test -p gale_config
-
-# Run a specific test
-cargo test -p gale_linter block_no_empty
-
-# Benchmark (uses hyperfine if available, falls back to `time`)
-bash benchmarks/run-benchmark.sh
-
-# Differential testing against Stylelint
-python tests/differential/run.py                    # all repos
-python tests/differential/run.py bootstrap          # specific repo
-python tests/differential/run.py --benchmark        # with timing
-python tests/differential/run.py bootstrap --css-only  # skip SCSS/Less
-
-# Run the linter
-cargo run -- src/              # lint a directory
-cargo run -- file.css          # lint a file
-cargo run -- --fix src/        # auto-fix
-cargo run -- --formatter json src/  # JSON output
-
-# Debug performance (per-phase timings to stderr)
-GALE_DEBUG_PERF=1 cargo run --release -- src/
-
-# Tracing/logging
-GALE_LOG=debug cargo run -- src/
-```
-
----
+- **`LintResult`** -- `{ file_path, diagnostics, source }` -- output of linting one file.
+- **`GaleConfig`** -- `{ rules: HashMap<String, RuleConfig>, ignore_patterns, formatter }` -- resolved config.
+- **`RuleConfig`** -- `{ severity, options }` -- per-rule configuration.
+- **`RuleRegistry`** -- stores `Vec<Box<dyn Rule>>`, created via `RuleRegistry::default()` (calls `register_all()`).
+- **`LintRunner`** -- holds a registry + list of enabled rule names. `lint_source(source, path, syntax) -> LintResult`.
 
 ## How to add a new rule
 
@@ -275,15 +288,15 @@ registry.register(Box::new(your_rule_name::YourRuleName));
 
 ### Step 4 (if applicable): Add to config presets
 
-If the rule should be part of `gale:recommended` or `gale:all`, add the rule name to the appropriate constant in `crates/gale_config/src/lib.rs`:
+If the rule should be part of `gale:recommended` or `gale:all`, update the appropriate constant in `crates/gale_config/src/lib.rs`:
 
 - `ALL_RULE_NAMES` -- must be updated for any new rule
 - `RECOMMENDED_ERROR_RULES` or `RECOMMENDED_WARNING_RULES` -- if the rule should be in `gale:recommended`
 
 ### Per-node vs. document-level rules
 
-- **`check(node, ctx)`** -- called for every node during AST walk. Use for rules that inspect individual declarations, selectors, or at-rules (e.g., `block-no-empty`, `color-no-invalid-hex`).
-- **`check_root(nodes, ctx)`** -- called once with all top-level nodes. Use for rules that need cross-node context like duplicate detection (e.g., `no-duplicate-selectors`, `no-empty-source`).
+- **`check(node, ctx)`** -- called for every node during AST walk. Use for rules that inspect individual declarations, selectors, or at-rules.
+- **`check_root(nodes, ctx)`** -- called once with all top-level nodes. Use for rules that need cross-node context like duplicate detection.
 
 ### Rules with auto-fix
 
@@ -299,8 +312,6 @@ Diagnostic::new(self.name(), "message")
     ]))
 ```
 
----
-
 ## Config system
 
 ### Config file search order
@@ -314,25 +325,9 @@ Diagnostic::new(self.name(), "message")
 5. `.stylelintrc.yml`
 6. `.stylelintrc.yaml`
 
-### Config file formats
+Note: `stylelint.config.js` and `.cjs` are also supported.
 
-All formats support the same fields:
-
-```json
-{
-  "extends": "gale:recommended",
-  "rules": {
-    "block-no-empty": true,
-    "color-hex-length": "warning",
-    "number-max-precision": ["error", { "max": 4 }],
-    "declaration-no-important": "off"
-  },
-  "ignorePatterns": ["dist/**", "vendor/**"],
-  "formatter": "text"
-}
-```
-
-**Rule value formats** (matching Stylelint):
+### Rule value formats (matching Stylelint)
 
 | Format | Meaning |
 |--------|---------|
@@ -344,8 +339,6 @@ All formats support the same fields:
 | `["error", { options }]` | Enable with options |
 
 ### Extends resolution
-
-The `extends` field supports:
 
 | Value | Resolution |
 |-------|------------|
@@ -364,10 +357,6 @@ Resolution is recursive with cycle detection. Later `extends` entries override e
 
 - **Warning rules** (14): `color-hex-length`, `color-hex-case`, `length-zero-no-unit`, `declaration-no-important`, `selector-pseudo-element-colon-notation`, `no-invalid-double-slash-comments`, `function-name-case`, `shorthand-property-no-redundant-values`, `at-rule-no-vendor-prefix`, `property-no-vendor-prefix`, `value-no-vendor-prefix`, `value-keyword-case`, `function-url-quotes`, `number-max-precision`
 
-**`gale:all`** enables all rules at warning severity.
-
----
-
 ## Inline disable comments
 
 Both `gale-` and `stylelint-` prefixes are supported:
@@ -383,22 +372,32 @@ Both `gale-` and `stylelint-` prefixes are supported:
 /* stylelint-disable */       /* also works (compatibility) */
 ```
 
----
+## Deployment
+
+### CI/CD (GitHub Actions)
+
+Three workflows:
+
+1. **`ci.yml`** -- Runs on push/PR to `main`. Jobs: test, clippy, fmt check, benchmark.
+2. **`release.yml`** -- Triggered by `v*` tags. Builds Linux binaries (x64 + arm64 via cross), creates a GitHub Release, publishes the npm package.
+3. **`compatibility.yml`** -- Weekly (Monday 6am UTC) or manual. Runs differential tests against Bootstrap, Gutenberg, Grafana, and Primer CSS. Commits an updated `COMPATIBILITY.md`.
+
+### npm package
+
+The npm package (`@lyricalstring/gale`) uses a postinstall script (`npm/install.js`) that downloads the correct platform binary from GitHub Releases. Supported platforms: `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`.
+
+The `scripts/build-npm.sh` script handles building for all platforms and documents the publish workflow.
+
+### Releasing a new version
+
+1. Update `workspace.package.version` in `Cargo.toml`
+2. Commit and tag: `git tag v0.X.Y`
+3. Push: `git push && git push --tags`
+4. The release workflow handles everything else
 
 ## Differential testing
 
-The differential testing harness (`tests/differential/`) validates Gale as a drop-in replacement by comparing output against Stylelint on real-world repositories.
-
-### Quick start
-
-```bash
-python tests/differential/run.py              # all repos
-python tests/differential/run.py bootstrap    # specific repo
-python tests/differential/run.py --list       # list available repos
-python tests/differential/run.py --benchmark  # include timing comparison
-python tests/differential/run.py --css-only   # skip SCSS/Less files
-python tests/differential/run.py --skip-build # use existing binary
-```
+The differential testing harness (`tests/differential/`) validates Gale as a drop-in replacement by comparing output against Stylelint on 16 real-world repositories.
 
 ### How it works
 
@@ -410,14 +409,7 @@ python tests/differential/run.py --skip-build # use existing binary
 
 ### Test corpus
 
-| Name | Repo | Notes |
-|------|------|-------|
-| grafana | grafana/grafana | Simple config, mostly disabled rules |
-| bootstrap | twbs/bootstrap | Industry standard, mature SCSS config |
-| gutenberg | wordpress/gutenberg | Mix of legacy and modern CSS |
-| material-ui | mui/material-ui | Pure CSS, config in external package |
-| primer-css | primer/css | GitHub's design system, custom plugins |
-| carbon | carbon-design-system/carbon | IBM design system, very strict config |
+Bootstrap, Gutenberg, Carbon, Angular Components, wp-calypso, Discourse, GOV.UK Frontend, Spectrum CSS, Docusaurus, Grafana, Material UI, freeCodeCamp, PatternFly, Primer CSS, Elastic EUI, and Mattermost.
 
 ### Key metrics
 
@@ -425,145 +417,14 @@ python tests/differential/run.py --skip-build # use existing binary
 - **FN (False Negatives)** = Stylelint reports but Gale misses
 - **FP (False Positives)** = Gale reports but Stylelint does not
 
----
-
-## CLI flags
-
-| Flag | Description |
-|------|-------------|
-| `<files>` | Files or directories to lint |
-| `--config <path>` | Config file path (auto-detected if omitted) |
-| `--formatter <type>` | Output format: `text` (default), `json`, `compact` |
-| `--fix` | Auto-fix problems |
-| `--quiet` | Only report errors (suppress warnings) |
-| `--max-warnings <n>` | Exit with error if warnings exceed threshold |
-| `--stdin` | Read source from stdin |
-| `--stdin-filename <name>` | Virtual filename for stdin (default: `stdin.css`) |
-| `--ignore-path <file>` | Custom ignore file (gitignore syntax) |
-| `--no-ignore` | Disable all ignore file processing |
-| `--cache` | Enable file caching to skip unchanged files |
-| `--cache-location <path>` | Custom cache file path (default: `.gale_cache`) |
-| `--init` | Generate starter `gale.json` |
-| `--print-config <file>` | Print resolved config for a file as JSON |
-| `--lsp` | Start LSP server for editor integration |
-
----
-
-## Implemented rules (50+)
-
-| Rule | Category |
-|------|----------|
-| `alpha-value-notation` | Value |
-| `annotation-no-unknown` | Annotation |
-| `at-rule-no-unknown` | At-rule |
-| `at-rule-no-vendor-prefix` | At-rule |
-| `block-no-empty` | Block |
-| `color-hex-case` | Color |
-| `color-hex-length` | Color |
-| `color-named` | Color |
-| `color-no-invalid-hex` | Color |
-| `comment-empty-line-before` | Comment |
-| `comment-no-empty` | Comment |
-| `custom-property-no-missing-var-function` | Custom property |
-| `custom-property-pattern` | Custom property |
-| `declaration-block-no-duplicate-custom-properties` | Declaration block |
-| `declaration-block-no-duplicate-properties` | Declaration block |
-| `declaration-block-no-redundant-longhand-properties` | Declaration block |
-| `declaration-block-no-shorthand-property-overrides` | Declaration block |
-| `declaration-empty-line-before` | Declaration |
-| `declaration-no-important` | Declaration |
-| `font-family-no-duplicate-names` | Font family |
-| `font-family-no-missing-generic-family-keyword` | Font family |
-| `function-calc-no-unspaced-operator` | Function |
-| `function-name-case` | Function |
-| `function-url-quotes` | Function |
-| `import-notation` | Import |
-| `keyframe-block-no-duplicate-selectors` | Keyframe |
-| `keyframe-declaration-no-important` | Keyframe |
-| `length-zero-no-unit` | Length |
-| `max-nesting-depth` | Nesting |
-| `media-feature-name-no-unknown` | Media |
-| `media-query-no-invalid` | Media |
-| `no-descending-specificity` | Specificity |
-| `no-duplicate-at-import-rules` | Import |
-| `no-duplicate-selectors` | Selector |
-| `no-empty-source` | Source |
-| `no-invalid-double-slash-comments` | Comment |
-| `no-invalid-position-at-import-rule` | Import |
-| `no-invalid-position-declaration` | Declaration |
-| `no-irregular-whitespace` | Whitespace |
-| `no-unknown-animations` | Animation |
-| `number-max-precision` | Number |
-| `property-no-unknown` | Property |
-| `property-no-vendor-prefix` | Property |
-| `rule-empty-line-before` | Rule |
-| `selector-class-pattern` | Selector |
-| `selector-max-compound-selectors` | Selector |
-| `selector-max-id` | Selector |
-| `selector-no-qualifying-type` | Selector |
-| `selector-pseudo-class-no-unknown` | Selector |
-| `selector-pseudo-element-colon-notation` | Selector |
-| `selector-pseudo-element-no-unknown` | Selector |
-| `selector-type-no-unknown` | Selector |
-| `shorthand-property-no-redundant-values` | Shorthand |
-| `string-no-newline` | String |
-| `unit-no-unknown` | Unit |
-| `value-keyword-case` | Value |
-| `value-no-vendor-prefix` | Value |
-
----
-
-## Current status and known gaps
-
-### What works
-
-- Full CSS parsing via lightningcss (with nesting support and error recovery)
-- SCSS and Less parsing via raffia (basic support)
-- 50+ core Stylelint rules implemented
-- Config loading from all Stylelint config formats
-- `extends` with built-in presets (`gale:recommended`, `gale:all`)
-- `extends` with npm packages (reads from `node_modules/`)
-- `extends` with relative file paths
-- Inline disable comments (`gale-*` and `stylelint-*` prefixes)
-- Auto-fix for rules that support it
-- JSON/text/compact output formatters matching Stylelint format
-- File caching
-- LSP server
-- Parallel linting via rayon
-
-### What needs work
-
-1. **SCSS/Less rule accuracy** -- SCSS-specific syntax (`$variables`, `@include`, `@if`, `#{}` interpolation) triggers false positives in rules like `at-rule-no-unknown` and `comment-no-empty`
-2. **Plugin system** -- No support for custom/third-party rules (Stylelint plugins). This is a major gap for repos using `@stylistic/*`, `scss/*`, etc.
-3. **`cosmiconfig`-style resolution** -- Stylelint uses `cosmiconfig` which also checks `package.json` `stylelint` field; Gale does not
-4. **Sass (indented syntax)** -- Returns `UnsupportedSyntax` error
-5. **Rule options parity** -- Some rules accept options in Stylelint that Gale does not yet handle (e.g., `ignoreAtRules` for `at-rule-no-unknown`)
-6. **npm distribution** -- Set up following Biome's `optionalDependencies` pattern (`npm/gale-linter/` + `npm/@gale-linter/cli-*`). See `PUBLISHING.md` for details. Not yet published.
-
----
-
 ## Key decisions and constraints
 
 ### Parser: lightningcss + raffia
 
-- **lightningcss** is used for CSS parsing. It is extremely fast and production-grade. It uses `ParserFlags::NESTING` for CSS nesting support and `error_recovery: true` to continue parsing after errors.
-- **raffia** is used for SCSS and Less parsing. It provides a different AST that is converted to the same `CssNode` representation.
+- **lightningcss** for CSS parsing -- extremely fast, production-grade. Uses `ParserFlags::NESTING` and `error_recovery: true`.
+- **raffia** for SCSS and Less parsing -- different AST converted to the same `CssNode` representation.
 - The parser produces an **owned, lifetime-free AST** (`CssNode` enum) so nodes can be stored, cloned, and serialized freely.
-- `Span` uses **byte offsets** (not line/column). Line/column conversion is done via `SourceLineIndex` which uses binary search for O(log n) lookups.
-
-### Config compatibility
-
-- Gale reads Stylelint config files directly -- no migration needed
-- Rule names are identical to Stylelint's
-- Rule config format (`true`/`"error"`/`["error", options]`) is identical
-- `extends` supports the same patterns (built-in presets, npm packages, relative paths)
-- `ignorePatterns` field is supported
-
-### Output compatibility
-
-- JSON output format matches Stylelint's exactly (array of `{source, warnings}` objects)
-- Text output format mimics Stylelint's string formatter
-- Exit codes match: 0 for clean, 1 for errors
+- `Span` uses **byte offsets** (not line/column). Line/column conversion via `SourceLineIndex` uses binary search for O(log n) lookups.
 
 ### Performance
 
@@ -573,52 +434,28 @@ python tests/differential/run.py --skip-build # use existing binary
 - Optional file caching skips unchanged clean files
 - `GALE_DEBUG_PERF=1` emits per-phase timing to stderr
 
----
+### Output compatibility
+
+- JSON output format matches Stylelint's exactly (array of `{source, warnings}` objects)
+- Text output format mimics Stylelint's string formatter
+- Exit codes match: 0 for clean, 1 for errors
 
 ## Code conventions
 
 - **Rule struct names** are PascalCase versions of the kebab-case rule name (e.g., `block-no-empty` -> `BlockNoEmpty`)
 - **Rule files** use snake_case matching the struct name (e.g., `block_no_empty.rs`)
+- SCSS rules are prefixed `scss_` (e.g., `scss_at_rule_no_unknown.rs`), stylistic rules `stylistic_`, order rules `order_`
 - Every rule file includes `#[cfg(test)] mod tests` with unit tests
 - The `data.rs` module in `gale_linter` contains sorted arrays of known CSS identifiers (properties, at-rules, pseudo-classes, pseudo-elements, units) for validation rules, using case-insensitive binary search
 - Diagnostics use the builder pattern: `Diagnostic::new(name, msg).severity(s).span(sp)`
 - Spans always use **byte offsets** from the start of the source
 - The codebase uses Rust 2024 edition
-- Tracing is controlled via `GALE_LOG` env var (e.g., `GALE_LOG=debug`)
+- Tracing is controlled via `GALE_LOG` env var
 - File ignore supports `.galeignore` files (gitignore syntax) in addition to `.gitignore`
 
----
+## Known gaps
 
-## Project structure
-
-```
-gale/
-  Cargo.toml              Workspace root
-  src/main.rs             Binary entrypoint (delegates to gale_cli::run)
-  crates/
-    gale_cli/             CLI, file discovery, orchestration, caching
-    gale_config/          Config loading, parsing, extends resolution, presets
-    gale_css_parser/      lightningcss + raffia wrapper, CssNode AST
-    gale_diagnostics/     Span, Diagnostic, LintResult, Fix/Edit, apply_fixes
-    gale_formatter/       Text/JSON/Compact output formatters
-    gale_linter/          Rule trait, registry, runner, built-in rules
-      src/
-        rule.rs           Rule trait + RuleContext
-        registry.rs       RuleRegistry
-        runner.rs         LintRunner + inline disable comment processing
-        data.rs           Known CSS identifiers (properties, units, etc.)
-        rules/
-          mod.rs          Module declarations + register_all()
-          block_no_empty.rs
-          color_no_invalid_hex.rs
-          ... (50+ rule files)
-    gale_lsp/             LSP server
-  benchmarks/
-    run-benchmark.sh      Benchmark vs Stylelint (uses hyperfine)
-    generate-benchmark.sh Generate test fixtures
-  tests/
-    differential/
-      run.py              Differential testing harness
-      repos.json          Test corpus definition
-      README.md           Documentation
-```
+1. **Custom JavaScript plugins** -- No support for third-party rules. This is the biggest gap for repos using `@stylistic/*`, `scss/*`, etc. (though Gale has its own built-in versions of these).
+2. **`package.json` config** -- Stylelint uses `cosmiconfig` which also checks the `"stylelint"` field in `package.json`; Gale does not.
+3. **Sass indented syntax** -- `.sass` files return `UnsupportedSyntax` error (`.scss` works fine).
+4. **macOS/Windows release binaries** -- The release workflow currently only builds Linux binaries. macOS and Windows are supported via `install.js` downloading from GitHub releases, but those binaries need to be built and uploaded manually or the workflow needs extending.
