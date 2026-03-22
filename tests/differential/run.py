@@ -33,61 +33,25 @@ CLONES_DIR = SCRIPT_DIR / ".clones"
 RESULTS_DIR = SCRIPT_DIR / "results"
 GALE_ROOT = SCRIPT_DIR.parent.parent  # gale/
 
-# Known Gale-supported rules (core Stylelint rules implemented in Gale).
-# Used to filter Stylelint output so we only compare what Gale can check.
-GALE_RULES = {
-    # Core Stylelint rules
-    "alpha-value-notation", "annotation-no-unknown", "at-rule-no-unknown",
-    "at-rule-no-vendor-prefix", "block-no-empty", "color-hex-case",
-    "color-hex-length", "color-named", "color-no-invalid-hex",
-    "comment-empty-line-before", "comment-no-empty",
-    "custom-property-no-missing-var-function", "custom-property-pattern",
-    "declaration-block-no-duplicate-custom-properties",
-    "declaration-block-no-duplicate-properties",
-    "declaration-block-no-redundant-longhand-properties",
-    "declaration-block-no-shorthand-property-overrides",
-    "declaration-empty-line-before", "declaration-no-important",
-    "font-family-no-duplicate-names",
-    "font-family-no-missing-generic-family-keyword",
-    "function-calc-no-unspaced-operator", "function-name-case",
-    "function-url-quotes", "import-notation",
-    "keyframe-block-no-duplicate-selectors",
-    "keyframe-declaration-no-important", "length-zero-no-unit",
-    "max-nesting-depth", "media-feature-name-no-unknown",
-    "media-query-no-invalid", "no-descending-specificity",
-    "no-duplicate-at-import-rules", "no-duplicate-selectors",
-    "no-empty-source", "no-invalid-double-slash-comments",
-    "no-invalid-position-at-import-rule", "no-invalid-position-declaration",
-    "no-irregular-whitespace", "no-unknown-animations",
-    "number-max-precision", "property-no-unknown", "property-no-vendor-prefix",
-    "rule-empty-line-before", "selector-class-pattern",
-    "selector-max-compound-selectors", "selector-max-id",
-    "selector-no-qualifying-type", "selector-pseudo-class-no-unknown",
-    "selector-pseudo-element-colon-notation",
-    "selector-pseudo-element-no-unknown", "selector-type-no-unknown",
-    "shorthand-property-no-redundant-values", "string-no-newline",
-    "unit-no-unknown", "value-keyword-case", "value-no-vendor-prefix",
-    # stylelint-order plugin rules
-    "order/order", "order/properties-order", "order/properties-alphabetical-order",
-    # stylelint-scss plugin rules
-    "scss/at-else-closing-brace-newline-after", "scss/at-else-closing-brace-space-after",
-    "scss/at-extend-no-missing-placeholder", "scss/at-function-pattern",
-    "scss/at-if-closing-brace-newline-after", "scss/at-if-closing-brace-space-after",
-    "scss/at-if-no-null", "scss/at-import-partial-extension",
-    "scss/at-mixin-argumentless-call-parentheses", "scss/at-mixin-pattern",
-    "scss/at-rule-no-unknown", "scss/comment-no-empty",
-    "scss/declaration-nested-properties", "scss/declaration-nested-properties-no-divided-groups",
-    "scss/dollar-variable-colon-space-after", "scss/dollar-variable-colon-space-before",
-    "scss/dollar-variable-no-missing-interpolation", "scss/dollar-variable-pattern",
-    "scss/double-slash-comment-whitespace-inside", "scss/function-no-unknown",
-    "scss/function-quote-no-quoted-strings-inside", "scss/function-unquote-no-unquoted-strings-inside",
-    "scss/load-no-partial-leading-underscore", "scss/load-partial-extension",
-    "scss/no-duplicate-dollar-variables", "scss/no-duplicate-mixins",
-    "scss/no-global-function-names", "scss/operator-no-newline-after",
-    "scss/operator-no-newline-before", "scss/operator-no-unspaced",
-    "scss/partial-no-import", "scss/percent-placeholder-pattern",
-    "scss/selector-no-redundant-nesting-selector",
-}
+# Discover ALL rules Gale implements by scanning rule source files.
+# The diff test compares ALL warnings — Stylelint and Gale output must match
+# exactly for true drop-in replacement parity.  The only filtering is on the
+# Stylelint side: warnings from third-party plugins that Gale cannot run
+# (because they require JS execution) are excluded.
+def _discover_gale_rules() -> set[str]:
+    """Extract rule names from Gale source files (fn name() -> &'static str)."""
+    import re
+    rules_dir = GALE_ROOT / "crates" / "gale_linter" / "src" / "rules"
+    rules = set()
+    if not rules_dir.exists():
+        return rules
+    for rs_file in rules_dir.glob("*.rs"):
+        content = rs_file.read_text(errors="ignore")
+        for m in re.finditer(r'fn name\(&self\)\s*->\s*&\'static str\s*\{\s*"([^"]+)"', content):
+            rules.add(m.group(1))
+    return rules
+
+GALE_RULES = _discover_gale_rules()
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -647,10 +611,13 @@ def process_repo(
     g_count = sum(len(r.get("warnings", [])) for r in gale_results)
     print(f"  [lint] Gale: {g_count} warnings")
 
-    # Normalize & compare
-    # Filter Stylelint results to only rules Gale supports (ignore plugin rules)
+    # Normalize & compare.
+    # Stylelint side: filter to rules Gale implements (skip unsupported
+    # third-party plugins that require JS execution).
+    # Gale side: NO filter — every warning Gale emits is compared, so any
+    # false positive is caught.
     s_norm = normalize_results(stylelint_results, clone_dir, filter_rules=GALE_RULES)
-    g_norm = normalize_results(gale_results, clone_dir, filter_rules=GALE_RULES)
+    g_norm = normalize_results(gale_results, clone_dir, filter_rules=None)
     report = compare_results(s_norm, g_norm)
 
     # Save raw results
