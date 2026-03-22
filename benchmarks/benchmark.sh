@@ -224,8 +224,8 @@ run_benchmark_for_repo() {
   info "Validating both linters produce output..."
 
   local stylelint_check gale_check
-  stylelint_check=$(cd "$clone_dir" && "$stylelint_bin" "$glob_pattern" --formatter json 2>/dev/null || true)
-  gale_check=$(cd "$clone_dir" && "$GALE_BIN" "$glob_pattern" --formatter json 2>/dev/null || true)
+  stylelint_check=$(cd "$clone_dir" && "$stylelint_bin" "$glob_pattern" --formatter json 2>&1 || true)
+  gale_check=$(cd "$clone_dir" && "$GALE_BIN" "$glob_pattern" --formatter json 2>&1 || true)
 
   if [ -z "$stylelint_check" ]; then
     warn "Stylelint produced no output for $name. Skipping this repo."

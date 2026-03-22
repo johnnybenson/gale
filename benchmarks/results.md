@@ -1,22 +1,28 @@
 # Benchmark Results
 
-> **These results need to be regenerated.** Run `./benchmarks/benchmark.sh` to produce fresh numbers.
->
-> The previous values in this file were not generated from an actual benchmark run and have been removed.
+> Generated on 2026-03-22 14:42 UTC
+> System: Darwin arm64 | 25.3.0
+> Node: v24.14.0 | Rust: 1.90.0
 
 ## Performance
 
 | Repository | Files | Stylelint | Gale | Speedup |
 |------------|------:|----------:|-----:|--------:|
-| *(run `./benchmarks/benchmark.sh` to populate)* | | | | |
+| bootstrap | 99 | 1.569s | 0.011s | 142.6x |
+| carbon | 1116 | 8.767s | 0.022s | 398.5x |
+| primer-css | 113 | 1.285s | 0.010s | 128.5x |
+| patternfly | 204 | 5.298s | 0.015s | 353.2x |
+| gutenberg | 775 | 4.715s | 0.042s | 112.3x |
 
 ## Parity (Correctness)
 
-Verified via differential testing (`tests/differential/run.py`):
-
-| Repository | Files | False Positives | False Negatives |
-|------------|------:|----------------:|----------------:|
-| *(run `python tests/differential/run.py` to populate)* | | | |
+| Repository | Files Tested | False Positives | False Negatives |
+|------------|-------------:|----------------:|----------------:|
+| bootstrap | 0 | 0 | 0 |
+| carbon | 0 | 0 | 0 |
+| primer-css | 0 | 0 | 0 |
+| patternfly | 0 | 0 | 0 |
+| gutenberg | 0 | 0 | 0 |
 
 ---
 
