@@ -58,7 +58,49 @@ impl Rule for StylisticValueListCommaNewlineAfter {
                 continue;
             }
 
+            // Skip SCSS line comments
+            if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                continue;
+            }
+
+            // Skip SCSS interpolation #{...}
+            if bytes[i] == b'#' && i + 1 < len && bytes[i + 1] == b'{' {
+                i += 2;
+                let mut interp_depth = 1;
+                while i < len && interp_depth > 0 {
+                    if bytes[i] == b'{' {
+                        interp_depth += 1;
+                    } else if bytes[i] == b'}' {
+                        interp_depth -= 1;
+                    }
+                    if interp_depth > 0 {
+                        i += 1;
+                    }
+                }
+                if i < len {
+                    i += 1;
+                }
+                continue;
+            }
+
             if bytes[i] == b':' && !in_value && paren_depth == 0 {
+                // Only enter value context if this looks like a declaration colon
+                // (not a pseudo-selector like :hover, :focus, :not(), etc.)
+                // A pseudo-selector colon is followed by an ASCII letter.
+                let next = i + 1;
+                if next < len && bytes[next].is_ascii_alphabetic() {
+                    // This is a pseudo-selector colon, skip
+                    i += 1;
+                    continue;
+                }
+                if next < len && bytes[next] == b':' {
+                    // Double-colon pseudo-element, skip
+                    i += 1;
+                    continue;
+                }
                 // Entering a value after a property colon
                 in_value = true;
                 value_start = i + 1;
@@ -215,6 +257,23 @@ mod tests {
     fn allows_space_on_single_line_with_multi_line_option() {
         let opt = serde_json::Value::String("always-multi-line".to_string());
         let source = "a { background: url(foo.png), url(bar.png); }";
+        let d = StylisticValueListCommaNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignores_selector_commas() {
+        // Commas in selectors should not be treated as value list commas
+        let opt = serde_json::Value::String("always".to_string());
+        let source = "a:hover, a:focus { color: red; }";
+        let d = StylisticValueListCommaNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
+        assert!(d.is_empty(), "Should not flag selector commas, got: {:?}", d.len());
+    }
+
+    #[test]
+    fn ignores_scss_interpolation() {
+        let opt = serde_json::Value::String("always".to_string());
+        let source = "a { prop: #{$a, $b}; }";
         let d = StylisticValueListCommaNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
         assert!(d.is_empty());
     }

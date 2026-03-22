@@ -136,6 +136,40 @@ fn is_declaration_colon(bytes: &[u8], pos: usize) -> bool {
     if pos == 0 {
         return false;
     }
+
+    // Handle double-colon pseudo-elements (::before, ::after)
+    if pos + 1 < bytes.len() && bytes[pos + 1] == b':' {
+        return false;
+    }
+
+    // If the character immediately after the colon is an ASCII letter (no space),
+    // check if the word after the colon is followed by selector-like characters
+    // (`{`, `,`, `(`, `.`, `#`, `[`, `:`, or whitespace then `{`/`,`) which indicates
+    // a pseudo-class (e.g. input:focus { }), OR if it's followed by `;`/`!`/`}`
+    // which indicates a declaration value (e.g. color:red;).
+    if pos + 1 < bytes.len() && bytes[pos + 1].is_ascii_alphabetic() {
+        // Scan forward past the word after the colon
+        let mut f = pos + 1;
+        while f < bytes.len()
+            && (bytes[f].is_ascii_alphanumeric() || bytes[f] == b'-' || bytes[f] == b'_')
+        {
+            f += 1;
+        }
+        // Skip whitespace
+        while f < bytes.len() && (bytes[f] == b' ' || bytes[f] == b'\t') {
+            f += 1;
+        }
+        // If followed by `{`, `(`, `,`, `.`, `#`, `[`, `:`, or `&`, it's a selector context
+        if f < bytes.len()
+            && matches!(
+                bytes[f],
+                b'{' | b'(' | b',' | b'.' | b'#' | b'[' | b':' | b'&'
+            )
+        {
+            return false;
+        }
+    }
+
     // Walk back over whitespace
     let mut j = pos - 1;
     while j > 0 && (bytes[j] == b' ' || bytes[j] == b'\t') {
@@ -217,6 +251,25 @@ mod tests {
     #[test]
     fn ignores_pseudo_classes() {
         let d = check("a:hover { color: red; }", "always");
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignores_nested_pseudo_classes() {
+        // In SCSS nesting, input:focus inside a block should not be flagged
+        let d = check(".parent { input:focus { color: red; } }", "always");
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignores_pseudo_elements() {
+        let d = check("a::before { color: red; }", "always");
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignores_not_pseudo() {
+        let d = check("a:not(.foo) { color: red; }", "always");
         assert!(d.is_empty());
     }
 }

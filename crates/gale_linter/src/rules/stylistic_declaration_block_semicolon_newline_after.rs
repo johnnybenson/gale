@@ -108,19 +108,53 @@ impl Rule for StylisticDeclarationBlockSemicolonNewlineAfter {
                 let semi_pos = i;
 
                 // Check if this semicolon ends an at-rule (e.g. @include, @import).
-                // Scan backwards to find the start of the statement.
+                // Scan backwards to find the start of the statement, skipping over
+                // nested blocks (e.g., @include foo { ... };)
                 let mut is_at_rule = false;
+                {
+                    let mut k = semi_pos;
+                    let mut inner_depth: i32 = 0;
+                    while k > 0 {
+                        k -= 1;
+                        if bytes[k] == b'}' {
+                            inner_depth += 1;
+                        } else if bytes[k] == b'{' {
+                            if inner_depth > 0 {
+                                inner_depth -= 1;
+                            } else {
+                                // Hit the opening brace of the enclosing block
+                                break;
+                            }
+                        } else if inner_depth == 0 {
+                            if bytes[k] == b';' {
+                                break;
+                            }
+                            if bytes[k] == b'@' {
+                                is_at_rule = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if is_at_rule {
+                    i += 1;
+                    continue;
+                }
+
+                // Skip semicolons immediately after a closing brace (end of at-rule content block)
+                // e.g., `@include mixin { ... };`
                 {
                     let mut k = semi_pos;
                     while k > 0 {
                         k -= 1;
-                        if bytes[k] == b'{' || bytes[k] == b'}' || bytes[k] == b';' {
-                            break;
+                        if bytes[k] == b' ' || bytes[k] == b'\t' || bytes[k] == b'\n' || bytes[k] == b'\r' {
+                            continue;
                         }
-                        if bytes[k] == b'@' {
+                        if bytes[k] == b'}' {
+                            // Semicolon follows a block, skip
                             is_at_rule = true;
-                            break;
                         }
+                        break;
                     }
                 }
                 if is_at_rule {
@@ -276,5 +310,28 @@ mod tests {
         let d = StylisticDeclarationBlockSemicolonNewlineAfter
             .check_root(&[], &ctx_with_option(source, &opt));
         assert!(!d.is_empty());
+    }
+
+    #[test]
+    fn skips_at_include_with_content_block() {
+        let opt = serde_json::json!("always");
+        // @include with a content block ending in ;
+        let source = "a {\n  @include mixin { color: red; };\n  display: block;\n}";
+        let d = StylisticDeclarationBlockSemicolonNewlineAfter
+            .check_root(&[], &ctx_with_option(source, &opt));
+        assert!(
+            d.is_empty(),
+            "Should not flag semicolon after @include content block, got: {:?}",
+            d.iter().map(|d| (&d.message, d.span.offset)).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn skips_at_include_semicolon() {
+        let opt = serde_json::json!("always");
+        let source = "a {\n  @include mixin;\n  color: red;\n}";
+        let d = StylisticDeclarationBlockSemicolonNewlineAfter
+            .check_root(&[], &ctx_with_option(source, &opt));
+        assert!(d.is_empty());
     }
 }

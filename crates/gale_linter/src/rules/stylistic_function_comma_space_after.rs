@@ -84,12 +84,66 @@ impl Rule for StylisticFunctionCommaSpaceAfter {
             }
 
             // Detect function call: identifier followed by `(`
+            // Skip pseudo-class/pseudo-element functions and SCSS at-rule parens
             if bytes[i] == b'('
                 && i > 0
                 && (bytes[i - 1].is_ascii_alphanumeric()
                     || bytes[i - 1] == b'-'
                     || bytes[i - 1] == b'_')
             {
+                // Check if this is a pseudo-class/element function like :not(), :is(), :where(), :has()
+                // by looking for a colon before the function name
+                let mut is_pseudo_fn = false;
+                {
+                    let mut p = i - 1;
+                    while p > 0
+                        && (bytes[p].is_ascii_alphanumeric()
+                            || bytes[p] == b'-'
+                            || bytes[p] == b'_')
+                    {
+                        p -= 1;
+                    }
+                    if bytes[p] == b':' {
+                        is_pseudo_fn = true;
+                    }
+                }
+
+                // Check if this is an SCSS at-rule like @include mixin(), @if(), @each, @for, @while
+                // The pattern is: @keyword [optional-name](...) so we may need to walk back
+                // over the function name, then whitespace, then the at-rule keyword, then @.
+                let mut is_at_rule_paren = false;
+                {
+                    let mut p = i - 1;
+                    // Walk back over the function/mixin name
+                    while p > 0
+                        && (bytes[p].is_ascii_alphanumeric()
+                            || bytes[p] == b'-'
+                            || bytes[p] == b'_')
+                    {
+                        p -= 1;
+                    }
+                    // Check if directly preceded by @
+                    if bytes[p] == b'@' {
+                        is_at_rule_paren = true;
+                    } else {
+                        // Skip whitespace (for `@include mixin(...)` pattern)
+                        while p > 0 && (bytes[p] == b' ' || bytes[p] == b'\t') {
+                            p -= 1;
+                        }
+                        // Walk back over the at-rule keyword (e.g., "include")
+                        while p > 0
+                            && (bytes[p].is_ascii_alphanumeric()
+                                || bytes[p] == b'-'
+                                || bytes[p] == b'_')
+                        {
+                            p -= 1;
+                        }
+                        if bytes[p] == b'@' {
+                            is_at_rule_paren = true;
+                        }
+                    }
+                }
+
                 let paren_start = i;
                 // Find matching closing paren
                 let mut depth = 1;
@@ -108,12 +162,38 @@ impl Rule for StylisticFunctionCommaSpaceAfter {
                             }
                             j += 1;
                         }
+                    } else if bytes[j] == b'#' && j + 1 < len && bytes[j + 1] == b'{' {
+                        // Skip SCSS interpolation inside function args
+                        j += 2;
+                        let mut id = 1;
+                        while j < len && id > 0 {
+                            if bytes[j] == b'{' {
+                                id += 1;
+                            } else if bytes[j] == b'}' {
+                                id -= 1;
+                            }
+                            if id > 0 {
+                                j += 1;
+                            }
+                        }
+                    } else if bytes[j] == b'/' && j + 1 < len && bytes[j + 1] == b'/' {
+                        // Skip SCSS line comments inside function args
+                        while j < len && bytes[j] != b'\n' {
+                            j += 1;
+                        }
                     }
                     if depth > 0 {
                         j += 1;
                     }
                 }
                 let paren_end = j;
+
+                // Skip pseudo-class functions and SCSS at-rule parens
+                if is_pseudo_fn || is_at_rule_paren {
+                    i = paren_end + 1;
+                    continue;
+                }
+
                 let func_content = &ctx.source[paren_start..paren_end.min(len)];
                 let is_single_line = !func_content.contains('\n');
 
@@ -121,6 +201,43 @@ impl Rule for StylisticFunctionCommaSpaceAfter {
                 let mut k = paren_start + 1;
                 let mut inner_depth = 0;
                 while k < paren_end {
+                    // Skip SCSS interpolation inside function args
+                    if bytes[k] == b'#' && k + 1 < paren_end && bytes[k + 1] == b'{' {
+                        k += 2;
+                        let mut id = 1;
+                        while k < paren_end && id > 0 {
+                            if bytes[k] == b'{' {
+                                id += 1;
+                            } else if bytes[k] == b'}' {
+                                id -= 1;
+                            }
+                            if id > 0 {
+                                k += 1;
+                            }
+                        }
+                        if k < paren_end {
+                            k += 1;
+                        }
+                        continue;
+                    }
+                    // Skip SCSS line comments inside function args
+                    if bytes[k] == b'/' && k + 1 < paren_end && bytes[k + 1] == b'/' {
+                        while k < paren_end && bytes[k] != b'\n' {
+                            k += 1;
+                        }
+                        continue;
+                    }
+                    // Skip block comments inside function args
+                    if bytes[k] == b'/' && k + 1 < paren_end && bytes[k + 1] == b'*' {
+                        k += 2;
+                        while k + 1 < paren_end && !(bytes[k] == b'*' && bytes[k + 1] == b'/') {
+                            k += 1;
+                        }
+                        if k + 1 < paren_end {
+                            k += 2;
+                        }
+                        continue;
+                    }
                     if bytes[k] == b'(' {
                         inner_depth += 1;
                     } else if bytes[k] == b')' {
@@ -214,5 +331,23 @@ mod tests {
     fn never_rejects_space() {
         let d = check("a { transform: translate(1px, 2px); }", "never");
         assert_eq!(d.len(), 1);
+    }
+
+    #[test]
+    fn ignores_scss_interpolation_inside_function() {
+        let d = check("a { background: url(#{$var, $other}); }", "always");
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignores_pseudo_class_functions() {
+        let d = check("a:not(.foo,.bar) { color: red; }", "always");
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignores_at_include_parens() {
+        let d = check("a { @include mixin($a,$b); }", "always");
+        assert!(d.is_empty());
     }
 }

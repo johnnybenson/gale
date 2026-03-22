@@ -38,6 +38,32 @@ impl Rule for StylisticFunctionParenthesesSpaceInside {
                 i += 2;
                 continue;
             }
+            // Skip SCSS line comments
+            if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                continue;
+            }
+            // Skip SCSS interpolation #{...}
+            if bytes[i] == b'#' && i + 1 < len && bytes[i + 1] == b'{' {
+                i += 2;
+                let mut interp_depth = 1;
+                while i < len && interp_depth > 0 {
+                    if bytes[i] == b'{' {
+                        interp_depth += 1;
+                    } else if bytes[i] == b'}' {
+                        interp_depth -= 1;
+                    }
+                    if interp_depth > 0 {
+                        i += 1;
+                    }
+                }
+                if i < len {
+                    i += 1;
+                }
+                continue;
+            }
             // Skip strings
             if bytes[i] == b'\'' || bytes[i] == b'"' {
                 let quote = bytes[i];
@@ -61,6 +87,54 @@ impl Rule for StylisticFunctionParenthesesSpaceInside {
                     || bytes[i - 1] == b'-'
                     || bytes[i - 1] == b'_')
             {
+                // Check if this is a pseudo-class/element function like :not(), :is(), :where()
+                let mut is_pseudo_fn = false;
+                {
+                    let mut p = i - 1;
+                    while p > 0
+                        && (bytes[p].is_ascii_alphanumeric()
+                            || bytes[p] == b'-'
+                            || bytes[p] == b'_')
+                    {
+                        p -= 1;
+                    }
+                    if bytes[p] == b':' {
+                        is_pseudo_fn = true;
+                    }
+                }
+
+                // Check if this is an SCSS at-rule like @include mixin(), @if(), @each, @for, @while
+                let mut is_at_rule_paren = false;
+                {
+                    let mut p = i - 1;
+                    // Walk back over the function/mixin name
+                    while p > 0
+                        && (bytes[p].is_ascii_alphanumeric()
+                            || bytes[p] == b'-'
+                            || bytes[p] == b'_')
+                    {
+                        p -= 1;
+                    }
+                    if bytes[p] == b'@' {
+                        is_at_rule_paren = true;
+                    } else {
+                        // Skip whitespace (for `@include mixin(...)` pattern)
+                        while p > 0 && (bytes[p] == b' ' || bytes[p] == b'\t') {
+                            p -= 1;
+                        }
+                        // Walk back over the at-rule keyword (e.g., "include")
+                        while p > 0
+                            && (bytes[p].is_ascii_alphanumeric()
+                                || bytes[p] == b'-'
+                                || bytes[p] == b'_')
+                        {
+                            p -= 1;
+                        }
+                        if bytes[p] == b'@' {
+                            is_at_rule_paren = true;
+                        }
+                    }
+                }
                 let open_paren = i;
                 let mut depth = 1;
                 let mut j = i + 1;
@@ -84,6 +158,12 @@ impl Rule for StylisticFunctionParenthesesSpaceInside {
                     }
                 }
                 let close_paren = j;
+
+                // Skip pseudo-class functions and SCSS at-rule parens
+                if is_pseudo_fn || is_at_rule_paren {
+                    i = close_paren + 1;
+                    continue;
+                }
 
                 // Skip empty function calls `fn()`
                 if close_paren == open_paren + 1 {
@@ -201,5 +281,24 @@ mod tests {
     fn always_rejects_no_space_inside() {
         let d = check("a { transform: translate(1px, 2px); }", "always");
         assert_eq!(d.len(), 2);
+    }
+
+    #[test]
+    fn ignores_pseudo_class_functions() {
+        let d = check("a:not(.foo) { color: red; }", "never");
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignores_at_include_parens() {
+        let d = check("a { @include mixin( $a ); }", "never");
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignores_scss_interpolation() {
+        // #{...} should be skipped entirely
+        let d = check("a { color: #{fn( $a )}; }", "never");
+        assert!(d.is_empty());
     }
 }

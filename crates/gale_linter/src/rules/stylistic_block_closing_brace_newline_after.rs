@@ -114,10 +114,17 @@ impl Rule for StylisticBlockClosingBraceNewlineAfter {
                 // Determine if the block is single-line by looking backward for the opening brace
                 let is_single_line = is_block_single_line(source, brace_pos);
 
+                // Check if the next non-whitespace content after } is @else or @else if
+                // which is valid SCSS: `} @else {` or `} @else if ... {`
+                let is_followed_by_else = is_next_else(bytes, after_pos);
+
                 match option {
                     "always" => {
-                        // Expect newline after every closing brace (unless followed by another } or EOF)
-                        if found_non_ws && !is_next_closing_brace(bytes, after_pos) {
+                        // Expect newline after every closing brace (unless followed by another }, EOF, or @else)
+                        if found_non_ws
+                            && !is_next_closing_brace(bytes, after_pos)
+                            && !is_followed_by_else
+                        {
                             diagnostics.push(
                                 Diagnostic::new(
                                     self.name(),
@@ -144,6 +151,7 @@ impl Rule for StylisticBlockClosingBraceNewlineAfter {
                         if is_single_line
                             && found_non_ws
                             && !is_next_closing_brace(bytes, after_pos)
+                            && !is_followed_by_else
                         {
                             diagnostics.push(
                                 Diagnostic::new(
@@ -160,6 +168,7 @@ impl Rule for StylisticBlockClosingBraceNewlineAfter {
                         if !is_single_line
                             && found_non_ws
                             && !is_next_closing_brace(bytes, after_pos)
+                            && !is_followed_by_else
                         {
                             diagnostics.push(
                                 Diagnostic::new(
@@ -181,6 +190,33 @@ impl Rule for StylisticBlockClosingBraceNewlineAfter {
 
         diagnostics
     }
+}
+
+/// Check if the next non-whitespace content after a position is `@else` (SCSS).
+fn is_next_else(bytes: &[u8], pos: usize) -> bool {
+    let mut j = pos;
+    while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\n' || bytes[j] == b'\r') {
+        j += 1;
+    }
+    // Check for @else
+    if j + 4 < bytes.len()
+        && bytes[j] == b'@'
+        && bytes[j + 1] == b'e'
+        && bytes[j + 2] == b'l'
+        && bytes[j + 3] == b's'
+        && bytes[j + 4] == b'e'
+    {
+        // Make sure it's `@else` followed by space, `{`, or end (not `@elsewhere`)
+        if j + 5 >= bytes.len()
+            || bytes[j + 5] == b' '
+            || bytes[j + 5] == b'\t'
+            || bytes[j + 5] == b'{'
+            || bytes[j + 5] == b'\n'
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn is_next_closing_brace(bytes: &[u8], pos: usize) -> bool {
@@ -263,5 +299,32 @@ mod tests {
             StylisticBlockClosingBraceNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
         assert!(!d.is_empty());
         assert!(d[0].message.contains("Unexpected newline"));
+    }
+
+    #[test]
+    fn allows_else_after_closing_brace() {
+        let opt = serde_json::Value::String("always".to_string());
+        let source = "@if $cond { color: red; } @else { color: blue; }";
+        let d =
+            StylisticBlockClosingBraceNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
+        // The first } before @else should NOT be flagged
+        assert!(
+            d.is_empty(),
+            "Should not flag }} before @else, got: {:?}",
+            d.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn allows_else_if_after_closing_brace() {
+        let opt = serde_json::Value::String("always".to_string());
+        let source = "@if $a { color: red; } @else if $b { color: blue; } @else { color: green; }";
+        let d =
+            StylisticBlockClosingBraceNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
+        assert!(
+            d.is_empty(),
+            "Should not flag }} before @else if, got: {:?}",
+            d.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
     }
 }
