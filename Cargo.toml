@@ -58,7 +58,7 @@ gale_diagnostics = { path = "crates/gale_diagnostics", version = "0.1.1" }
 gale_lsp = { path = "crates/gale_lsp", version = "0.1.1" }
 
 [package]
-name = "gale"
+name = "gale-lint"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
