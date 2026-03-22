@@ -350,7 +350,7 @@ fn is_first_in_block_by_source(source: &str, offset: usize) -> bool {
             return false;
         }
         // Check for end of a block comment `*/`
-        if pos >= 2 && &before[pos - 2..pos] == "*/" {
+        if pos >= 2 && bytes[pos - 2] == b'*' && bytes[pos - 1] == b'/' {
             // Find the matching `/*`
             if let Some(open) = before[..pos - 2].rfind("/*") {
                 pos = open;

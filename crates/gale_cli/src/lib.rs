@@ -209,11 +209,15 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
                     .find(|c: char| c == '*' || c == '?' || c == '{' || c == '[')
                     .unwrap_or(pattern.len());
                 let prefix = &pattern[..first_meta];
-                let root = Path::new(prefix).parent().unwrap_or_else(|| Path::new("."));
-                if root.as_os_str().is_empty() {
-                    PathBuf::from(".")
+                let p = Path::new(prefix);
+                let parent = p
+                    .parent()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default();
+                if parent.is_empty() {
+                    PathBuf::from(prefix)
                 } else {
-                    root.to_path_buf()
+                    PathBuf::from(parent)
                 }
             };
 
