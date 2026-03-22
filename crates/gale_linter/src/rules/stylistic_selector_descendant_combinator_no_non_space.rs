@@ -33,9 +33,18 @@ impl Rule for StylisticSelectorDescendantCombinatorNoNonSpace {
         let mut i = 0;
 
         while i < len {
-            // Skip SCSS // line comments
+            // Skip SCSS // line comments and trailing newline + indentation
             if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'/' {
                 while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                // Skip newline + indentation after comment
+                while i < len
+                    && (bytes[i] == b'\n'
+                        || bytes[i] == b'\r'
+                        || bytes[i] == b' '
+                        || bytes[i] == b'\t')
+                {
                     i += 1;
                 }
                 continue;
@@ -81,6 +90,27 @@ impl Rule for StylisticSelectorDescendantCombinatorNoNonSpace {
                 continue;
             }
 
+            // Skip newlines (descendant combinators are same-line whitespace)
+            if bytes[i] == b'\n' || bytes[i] == b'\r' {
+                i += 1;
+                continue;
+            }
+
+            // Skip commas (selector list separators — whitespace after them is formatting)
+            if bytes[i] == b',' {
+                i += 1;
+                // Skip all whitespace after comma (including newlines + indentation)
+                while i < len
+                    && (bytes[i] == b' '
+                        || bytes[i] == b'\t'
+                        || bytes[i] == b'\n'
+                        || bytes[i] == b'\r')
+                {
+                    i += 1;
+                }
+                continue;
+            }
+
             // Check for whitespace gaps that could be descendant combinators
             if bytes[i] == b' ' || bytes[i] == b'\t' {
                 let ws_start = i;
@@ -90,6 +120,10 @@ impl Rule for StylisticSelectorDescendantCombinatorNoNonSpace {
                 }
                 // If we hit end, a newline, or a combinator operator, skip
                 if i >= len {
+                    continue;
+                }
+                // Newline after whitespace — this is multi-line selector formatting, not a combinator
+                if bytes[i] == b'\n' || bytes[i] == b'\r' {
                     continue;
                 }
                 // Check the character after whitespace: if it's a combinator
