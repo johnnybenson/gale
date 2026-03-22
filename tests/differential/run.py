@@ -249,96 +249,81 @@ def _find_stylelint_bin(clone_dir: Path, search_paths: list[str] | None = None) 
     return None
 
 
-def run_stylelint(clone_dir: Path, files: list[str], search_paths: list[str] | None = None) -> list[dict] | None:
-    """Run Stylelint on the given files and return parsed JSON output."""
+def run_stylelint(clone_dir: Path, globs: list[str], search_paths: list[str] | None = None) -> list[dict] | None:
+    """Run Stylelint on glob patterns and return parsed JSON output.
+
+    This mirrors how a real user would run Stylelint:
+      bunx stylelint 'src/**/*.scss' --formatter json
+    """
     stylelint_bin = _find_stylelint_bin(clone_dir, search_paths)
     if stylelint_bin is None:
         print(f"  [error] Stylelint binary not found")
         return None
 
-    all_results = []
-    batch_size = 50
+    # Pass globs directly — let Stylelint discover files like a real user would.
+    cmd = [str(stylelint_bin), "--formatter", "json", "--no-color"] + globs
+    timeout = 600
+    result = run_cmd(cmd, cwd=str(clone_dir), timeout=timeout)
 
-    for i in range(0, len(files), batch_size):
-        batch = files[i:i + batch_size]
-        # Fix 4: dynamic timeout based on batch size
-        timeout = max(300, len(batch) * 10)
-        cmd = [str(stylelint_bin), "--formatter", "json", "--no-color"] + batch
-        result = run_cmd(cmd, cwd=str(clone_dir), timeout=timeout)
+    # Stylelint 16+ may output JSON to stderr instead of stdout.
+    output = result.stdout.strip()
+    if not output:
+        stderr = result.stderr.strip()
+        json_start = stderr.find("[{")
+        if json_start >= 0:
+            output = stderr[json_start:]
+        elif stderr.startswith("["):
+            output = stderr
+        else:
+            output = stderr
 
-        # Stylelint 16+ may output JSON to stderr instead of stdout.
-        # Some versions also prepend DeprecationWarning text to stderr.
-        # Try stdout first, then fall back to extracting JSON from stderr.
-        output = result.stdout.strip()
-        if not output:
-            stderr = result.stderr.strip()
-            # Try to extract JSON array from stderr (skip any preamble warnings)
-            json_start = stderr.find("[{")
-            if json_start >= 0:
-                output = stderr[json_start:]
-            elif stderr.startswith("["):
-                output = stderr
-            else:
-                output = stderr
+    if result.returncode == 2 and not output:
+        print(f"  [error] Stylelint config error (exit 2, no output)")
+        return None
 
-        if result.returncode == 2 and not output:
-            print(f"  [error] Stylelint config error (exit 2, no output)")
+    if not output:
+        return []
+
+    try:
+        return json.loads(output)
+    except json.JSONDecodeError as e:
+        if result.returncode == 2:
+            print(f"  [error] Stylelint config error: {output[:200]}")
             return None
-
-        if not output:
-            continue
-
-        try:
-            all_results.extend(json.loads(output))
-        except json.JSONDecodeError as e:
-            if result.returncode == 2:
-                print(f"  [error] Stylelint config error: {output[:200]}")
-                return None
-            # Fix 3: Don't abort the entire run — skip this batch and continue
-            batch_desc = f"files[{i}:{i+len(batch)}]"
-            print(f"  [warn] Stylelint JSON parse error in {batch_desc}: {e}")
-            print(f"  [warn]   stdout[:200]: {result.stdout.strip()[:200]}")
-            print(f"  [warn]   stderr[:200]: {result.stderr.strip()[:200]}")
-            print(f"  [warn]   Skipping batch, continuing...")
-            continue
-
-    return all_results
+        print(f"  [warn] Stylelint JSON parse error: {e}")
+        print(f"  [warn]   stdout[:200]: {result.stdout.strip()[:200]}")
+        return []
 
 
-def run_gale(clone_dir: Path, files: list[str], gale_bin: Path) -> list[dict] | None:
-    """Run Gale on the given files and return parsed JSON output.
+def run_gale(clone_dir: Path, globs: list[str], gale_bin: Path) -> list[dict] | None:
+    """Run Gale on glob patterns and return parsed JSON output.
 
-    Gale reads the repo's .stylelintrc / gale.json automatically.
+    This mirrors how a real user would run Gale as a drop-in replacement:
+      bunx gale 'src/**/*.scss' --formatter json
     """
     if not gale_bin.exists():
         print(f"  [error] Gale binary not found")
         return None
 
-    all_results = []
-    batch_size = 50
+    # Pass globs directly — Gale discovers files from globs like Stylelint.
+    cmd = [str(gale_bin), "--formatter", "json"] + globs
+    timeout = 600
+    result = run_cmd(cmd, cwd=str(clone_dir), timeout=timeout)
 
-    for i in range(0, len(files), batch_size):
-        batch = files[i:i + batch_size]
-        timeout = max(300, len(batch) * 10)
-        cmd = [str(gale_bin), "--formatter", "json"] + batch
-        result = run_cmd(cmd, cwd=str(clone_dir), timeout=timeout)
+    # Capture stderr for debugging (warnings, unsupported rules, etc.)
+    if result.stderr.strip():
+        for line in result.stderr.strip().split("\n")[:5]:
+            print(f"  [gale stderr] {line}")
 
-        # Capture stderr for debugging
-        if result.stderr.strip():
-            for line in result.stderr.strip().split("\n")[:3]:
-                print(f"  [gale stderr] {line}")
+    stdout = result.stdout.strip()
+    if not stdout:
+        return []
 
-        stdout = result.stdout.strip()
-        if not stdout:
-            continue
-
-        try:
-            all_results.extend(json.loads(stdout))
-        except json.JSONDecodeError as e:
-            print(f"  [error] Gale JSON parse error: {e}")
-            return None
-
-    return all_results
+    try:
+        return json.loads(stdout)
+    except json.JSONDecodeError as e:
+        print(f"  [error] Gale JSON parse error: {e}")
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -563,24 +548,26 @@ def process_repo(
     if not deps_result:
         print(f"  [warn] Continuing without deps (Stylelint may not work)")
 
-    css_files = find_css_files(clone_dir, search_paths, css_only=css_only)
-    ext_label = ".css only" if css_only else "CSS/SCSS/Less"
-    print(f"  [files] Found {len(css_files)} {ext_label} files")
+    # Build glob patterns from repo config.
+    # If the repo defines explicit globs, use them.  Otherwise, construct
+    # from paths: "{path}/**/*.{css,scss,less}"
+    globs = repo_config.get("globs")
+    if not globs:
+        ext_pattern = "*.css" if css_only else "*.{css,scss,less}"
+        globs = [f"{p}/**/{ext_pattern}" for p in search_paths]
 
-    if not css_files:
-        print(f"  [skip] No files found")
-        return None
+    print(f"  [globs] {' '.join(globs)}")
 
-    # Run Stylelint (using repo's own config)
+    # Run Stylelint (using repo's own config + globs, like a real user)
     print(f"  [lint] Running Stylelint...")
     t0 = time.time()
     try:
-        stylelint_results = run_stylelint(clone_dir, css_files, search_paths=search_paths)
+        stylelint_results = run_stylelint(clone_dir, globs, search_paths=search_paths)
     except subprocess.TimeoutExpired:
         stylelint_time = time.time() - t0
         print(f"  [warn] Stylelint timed out after {stylelint_time:.0f}s, skipping repo")
         return {
-            "total_files": len(css_files), "files_match": 0, "files_differ": 0,
+            "total_files": 0, "files_match": 0, "files_differ": 0,
             "stylelint_only_warnings": 0, "gale_only_warnings": 0,
             "matching_warnings": 0, "diffs": [], "timeout": "stylelint",
         }
@@ -589,18 +576,19 @@ def process_repo(
         print(f"  [warn] Stylelint failed, skipping comparison")
         return None
     s_count = sum(len(r.get("warnings", [])) for r in stylelint_results)
-    print(f"  [lint] Stylelint: {s_count} warnings")
+    s_files = len(stylelint_results)
+    print(f"  [lint] Stylelint: {s_count} warnings across {s_files} files")
 
-    # Run Gale (using repo's own config — should read .stylelintrc automatically)
+    # Run Gale (using repo's own config + same globs — drop-in replacement)
     print(f"  [lint] Running Gale...")
     t0 = time.time()
     try:
-        gale_results = run_gale(clone_dir, css_files, gale_bin)
+        gale_results = run_gale(clone_dir, globs, gale_bin)
     except subprocess.TimeoutExpired:
         gale_time = time.time() - t0
         print(f"  [warn] Gale timed out after {gale_time:.0f}s, skipping repo")
         return {
-            "total_files": len(css_files), "files_match": 0, "files_differ": 0,
+            "total_files": 0, "files_match": 0, "files_differ": 0,
             "stylelint_only_warnings": 0, "gale_only_warnings": 0,
             "matching_warnings": 0, "diffs": [], "timeout": "gale",
         }
@@ -609,7 +597,8 @@ def process_repo(
         print(f"  [warn] Gale failed, skipping comparison")
         return None
     g_count = sum(len(r.get("warnings", [])) for r in gale_results)
-    print(f"  [lint] Gale: {g_count} warnings")
+    g_files = len(gale_results)
+    print(f"  [lint] Gale: {g_count} warnings across {g_files} files")
 
     # Normalize & compare.
     # Stylelint side: filter to rules Gale implements (skip unsupported

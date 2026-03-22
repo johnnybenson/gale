@@ -4,13 +4,15 @@
     "repo": "grafana/grafana",
     "branch": "main",
     "paths": ["public"],
-    "notes": "Simple config, extends stylelint-config-sass-guidelines. Mostly disabled rules."
+    "globs": ["public/**/*.{css,scss}"],
+    "notes": "Simple config, extends stylelint-config-sass-guidelines."
   },
   {
     "name": "bootstrap",
     "repo": "twbs/bootstrap",
     "branch": "main",
     "paths": ["scss"],
+    "globs": ["scss/**/*.scss"],
     "notes": "Extends stylelint-config-standard + scss. Uses scss, stylistic, order plugins."
   },
   {
@@ -18,6 +20,7 @@
     "repo": "wordpress/gutenberg",
     "branch": "trunk",
     "paths": ["packages"],
+    "globs": ["packages/**/*.scss"],
     "notes": "WordPress editor. Extends stylelint-config-recommended + scss."
   },
   {
@@ -25,6 +28,7 @@
     "repo": "mui/material-ui",
     "branch": "master",
     "paths": ["."],
+    "globs": ["**/*.css"],
     "notes": "Pure CSS files. Config hidden in @mui/internal-code-infra."
   },
   {
@@ -32,6 +36,7 @@
     "repo": "primer/css",
     "branch": "main",
     "paths": ["src"],
+    "globs": ["src/**/*.scss"],
     "notes": "GitHub design system. Heavy use of custom Primer plugins."
   },
   {
@@ -39,6 +44,7 @@
     "repo": "carbon-design-system/carbon",
     "branch": "main",
     "paths": ["packages"],
+    "globs": ["packages/**/*.scss"],
     "notes": "IBM design system. Very strict config with many plugins."
   },
   {
@@ -46,27 +52,31 @@
     "repo": "freeCodeCamp/freeCodeCamp",
     "branch": "main",
     "paths": ["."],
-    "notes": "Most starred repo on GitHub (439k stars). Minimal config with 14 rules, no extends. .stylelintrc.json at root."
+    "globs": ["**/*.css"],
+    "notes": "Most starred repo on GitHub (439k stars). Minimal config."
   },
   {
     "name": "patternfly",
     "repo": "patternfly/patternfly",
     "branch": "main",
     "paths": ["src"],
-    "notes": "Red Hat design system. 63% SCSS, very strict config. .stylelintrc at root."
+    "globs": ["src/**/*.scss"],
+    "notes": "Red Hat design system. Very strict config."
   },
   {
     "name": "govuk-frontend",
     "repo": "alphagov/govuk-frontend",
     "branch": "main",
     "paths": ["packages"],
-    "notes": "UK Government design system. stylelint.config.js at root."
+    "globs": ["packages/**/*.scss"],
+    "notes": "UK Government design system."
   },
   {
     "name": "spectrum-css",
     "repo": "adobe/spectrum-css",
     "branch": "main",
     "paths": ["components", "tokens"],
+    "globs": ["components/**/*.css", "tokens/**/*.css"],
     "notes": "Adobe design system."
   },
   {
@@ -74,6 +84,7 @@
     "repo": "angular/components",
     "branch": "main",
     "paths": ["src"],
+    "globs": ["src/**/*.{css,scss}"],
     "notes": "Angular Material."
   },
   {
@@ -81,6 +92,7 @@
     "repo": "facebook/docusaurus",
     "branch": "main",
     "paths": ["packages"],
+    "globs": ["packages/**/*.css"],
     "notes": "Meta docs framework (61k stars). Pure CSS."
   },
   {
@@ -88,6 +100,7 @@
     "repo": "discourse/discourse",
     "branch": "main",
     "paths": ["app/assets/stylesheets"],
+    "globs": ["app/assets/stylesheets/**/*.scss"],
     "notes": "Forum platform (46k stars). SCSS."
   },
   {
@@ -95,13 +108,15 @@
     "repo": "elastic/eui",
     "branch": "main",
     "paths": ["packages/eui"],
-    "notes": "Elastic UI framework. Requires Node 22.22.0. Yarn workspace monorepo."
+    "globs": ["packages/eui/**/*.{css,scss}"],
+    "notes": "Elastic UI framework. Yarn workspace monorepo."
   },
   {
     "name": "wp-calypso",
     "repo": "Automattic/wp-calypso",
     "branch": "trunk",
     "paths": ["client", "packages"],
+    "globs": ["client/**/*.scss", "packages/**/*.scss"],
     "notes": "WordPress.com frontend. 2200+ CSS files."
   },
   {
@@ -109,6 +124,47 @@
     "repo": "mattermost/mattermost",
     "branch": "master",
     "paths": ["webapp"],
+    "globs": ["webapp/**/*.{css,scss}"],
     "notes": "Monorepo — CSS files and package.json in webapp/."
+  },
+  {
+    "name": "mastodon",
+    "repo": "mastodon/mastodon",
+    "branch": "main",
+    "paths": ["app/javascript"],
+    "globs": ["app/javascript/**/*.scss"],
+    "notes": "Social media platform (47k stars). SCSS."
+  },
+  {
+    "name": "jupyterlab",
+    "repo": "jupyterlab/jupyterlab",
+    "branch": "main",
+    "paths": ["packages"],
+    "globs": ["packages/**/*.css"],
+    "notes": "Data science IDE (15k stars). Extends stylelint-config-standard."
+  },
+  {
+    "name": "polaris",
+    "repo": "Shopify/polaris",
+    "branch": "main",
+    "paths": ["polaris-react", "polaris"],
+    "globs": ["polaris-react/**/*.scss", "polaris/**/*.scss"],
+    "notes": "Shopify design system (6k stars)."
+  },
+  {
+    "name": "joomla",
+    "repo": "joomla/joomla-cms",
+    "branch": "5.4-dev",
+    "paths": ["media", "build"],
+    "globs": ["media/**/*.{css,scss}", "build/**/*.{css,scss}"],
+    "notes": "CMS platform (5k stars). SCSS in templates."
+  },
+  {
+    "name": "slds",
+    "repo": "salesforce-ux/design-system",
+    "branch": "main",
+    "paths": ["ui"],
+    "globs": ["ui/**/*.scss"],
+    "notes": "Salesforce Lightning design system (2k stars). SCSS-heavy."
   }
 ]
