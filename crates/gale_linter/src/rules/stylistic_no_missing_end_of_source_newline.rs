@@ -26,15 +26,20 @@ impl Rule for StylisticNoMissingEndOfSourceNewline {
             return vec![];
         }
 
-        if !ctx.source.ends_with('\n') {
-            let offset = ctx.source.len();
+        // Stylelint considers a file to have an end-of-source newline if the
+        // source, after trimming trailing whitespace, ends with '\n'.
+        // This handles cases like files ending with "\n  " (newline + trailing spaces).
+        let trimmed = ctx.source.trim_end_matches([' ', '\t']);
+
+        if !trimmed.ends_with('\n') {
+            let offset = ctx.source.len().saturating_sub(1);
             vec![
-                Diagnostic::new(self.name(), "Expected newline at end of source")
+                Diagnostic::new(self.name(), "Unexpected missing end-of-source newline")
                     .severity(self.default_severity())
                     .span(Span::new(offset, 0))
                     .fix(Fix::new(
                         "Add newline at end of source",
-                        vec![Edit::new(Span::new(offset, 0), "\n")],
+                        vec![Edit::new(Span::new(ctx.source.len(), 0), "\n")],
                     )),
             ]
         } else {
@@ -63,7 +68,7 @@ mod tests {
         let ctx = ctx_with_source("a { color: red; }");
         let d = rule.check_root(&[], &ctx);
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("newline"));
+        assert!(d[0].message.contains("missing end-of-source"));
         assert!(d[0].fix.is_some());
     }
 

@@ -3,14 +3,17 @@ use gale_diagnostics::{Diagnostic, Severity, Span};
 
 use crate::rule::{Rule, RuleContext};
 
-/// Require an empty line before at-rules (except first-nested and grouped imports).
+/// Require or disallow an empty line before at-rules.
 ///
-/// Equivalent to Stylelint's `at-rule-empty-line-before` rule with "always" option.
-/// Detection-only (no autofix).
+/// Equivalent to Stylelint's `at-rule-empty-line-before` rule.
+/// Supports primary: "always" | "never"
+/// Supports secondary options:
+///   - `except`: ["first-nested", "blockless-after-same-name-blockless", "blockless-after-blockless",
+///                "after-same-name"]
+///   - `ignore`: ["after-comment", "first-nested", "inside-block", "blockless-after-same-name-blockless",
+///                "blockless-after-blockless"]
+///   - `ignoreAtRules`: [string]
 pub struct AtRuleEmptyLineBefore;
-
-/// At-rule names that are commonly grouped together without blank lines between them.
-const GROUPABLE_AT_RULES: &[&str] = &["import", "use", "forward"];
 
 impl Rule for AtRuleEmptyLineBefore {
     fn name(&self) -> &'static str {
@@ -18,7 +21,7 @@ impl Rule for AtRuleEmptyLineBefore {
     }
 
     fn description(&self) -> &'static str {
-        "Require an empty line before at-rules"
+        "Require or disallow an empty line before at-rules"
     }
 
     fn default_severity(&self) -> Severity {
@@ -26,26 +29,170 @@ impl Rule for AtRuleEmptyLineBefore {
     }
 
     fn check_root(&self, nodes: &[CssNode], ctx: &RuleContext) -> Vec<Diagnostic> {
+        let opts = Options::from_ctx(ctx);
         let mut diags = Vec::new();
-        check_at_rule_nodes(self, nodes, ctx, &mut diags);
+        check_at_rule_nodes(self, nodes, ctx, &opts, &mut diags);
         diags
     }
 }
 
-fn is_groupable(name: &str) -> bool {
-    GROUPABLE_AT_RULES
-        .iter()
-        .any(|&g| name.eq_ignore_ascii_case(g))
+// ---------------------------------------------------------------------------
+// Options
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum PrimaryOption {
+    Always,
+    Never,
 }
 
-fn prev_is_same_groupable_at_rule(nodes: &[CssNode], index: usize, current_name: &str) -> bool {
-    if index == 0 || !is_groupable(current_name) {
+struct Options {
+    primary: PrimaryOption,
+    except_first_nested: bool,
+    except_blockless_after_same_name_blockless: bool,
+    except_blockless_after_blockless: bool,
+    except_after_same_name: bool,
+    ignore_after_comment: bool,
+    ignore_first_nested: bool,
+    ignore_inside_block: bool,
+    ignore_blockless_after_same_name_blockless: bool,
+    ignore_blockless_after_blockless: bool,
+    ignore_at_rules: Vec<String>,
+}
+
+impl Options {
+    fn from_ctx(ctx: &RuleContext) -> Self {
+        let mut opts = Options {
+            primary: PrimaryOption::Always,
+            except_first_nested: false,
+            except_blockless_after_same_name_blockless: false,
+            except_blockless_after_blockless: false,
+            except_after_same_name: false,
+            ignore_after_comment: false,
+            ignore_first_nested: false,
+            ignore_inside_block: false,
+            ignore_blockless_after_same_name_blockless: false,
+            ignore_blockless_after_blockless: false,
+            ignore_at_rules: Vec::new(),
+        };
+
+        let Some(value) = ctx.options else {
+            return opts;
+        };
+
+        match value {
+            serde_json::Value::String(s) => {
+                if s == "never" {
+                    opts.primary = PrimaryOption::Never;
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                if let Some(s) = arr.first().and_then(|v| v.as_str()) {
+                    if s == "never" {
+                        opts.primary = PrimaryOption::Never;
+                    }
+                }
+                if let Some(secondary) = arr.get(1) {
+                    parse_secondary(&mut opts, secondary);
+                }
+            }
+            _ => {}
+        }
+
+        opts
+    }
+}
+
+fn parse_secondary(opts: &mut Options, value: &serde_json::Value) {
+    if let Some(except) = value.get("except").and_then(|v| v.as_array()) {
+        for item in except {
+            if let Some(s) = item.as_str() {
+                match s {
+                    "first-nested" => opts.except_first_nested = true,
+                    "blockless-after-same-name-blockless" => {
+                        opts.except_blockless_after_same_name_blockless = true
+                    }
+                    "blockless-after-blockless" => opts.except_blockless_after_blockless = true,
+                    "after-same-name" => opts.except_after_same_name = true,
+                    _ => {}
+                }
+            }
+        }
+    }
+    if let Some(ignore) = value.get("ignore").and_then(|v| v.as_array()) {
+        for item in ignore {
+            if let Some(s) = item.as_str() {
+                match s {
+                    "after-comment" => opts.ignore_after_comment = true,
+                    "first-nested" => opts.ignore_first_nested = true,
+                    "inside-block" => opts.ignore_inside_block = true,
+                    "blockless-after-same-name-blockless" => {
+                        opts.ignore_blockless_after_same_name_blockless = true
+                    }
+                    "blockless-after-blockless" => opts.ignore_blockless_after_blockless = true,
+                    _ => {}
+                }
+            }
+        }
+    }
+    if let Some(ignore_rules) = value.get("ignoreAtRules") {
+        if let Some(arr) = ignore_rules.as_array() {
+            for item in arr {
+                if let Some(s) = item.as_str() {
+                    opts.ignore_at_rules.push(s.to_ascii_lowercase());
+                }
+            }
+        } else if let Some(s) = ignore_rules.as_str() {
+            opts.ignore_at_rules.push(s.to_ascii_lowercase());
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/// Whether an at-rule is "blockless" (has no body/children block).
+/// Note: some parsers (raffia for SCSS) don't always populate children for
+/// at-rules like @mixin, @function, etc. We also check the source text to
+/// see if the at-rule span contains a block-opening `{` (not SCSS `#{`).
+fn is_blockless_source(at_rule: &gale_css_parser::AtRule, source: &str) -> bool {
+    if !at_rule.children.is_empty() {
         return false;
     }
-    if let CssNode::AtRule(prev) = &nodes[index - 1] {
-        is_groupable(&prev.name)
-    } else {
-        false
+    // Check the source text within this at-rule's span for a `{` that isn't
+    // part of SCSS interpolation `#{`.
+    let start = at_rule.span.offset;
+    let end = (start + at_rule.span.length).min(source.len());
+    if start < source.len() && end > start {
+        let bytes = source[start..end].as_bytes();
+        for j in 0..bytes.len() {
+            if bytes[j] == b'{' {
+                // Skip if preceded by `#` (SCSS interpolation)
+                if j > 0 && bytes[j - 1] == b'#' {
+                    continue;
+                }
+                return false; // Has a real block
+            }
+        }
+    }
+    true
+}
+
+/// Find the previous non-comment node.
+fn prev_non_comment(nodes: &[CssNode], index: usize) -> Option<&CssNode> {
+    if index == 0 {
+        return None;
+    }
+    let mut k = index - 1;
+    loop {
+        if !matches!(&nodes[k], CssNode::Comment(_)) {
+            return Some(&nodes[k]);
+        }
+        if k == 0 {
+            return None;
+        }
+        k -= 1;
     }
 }
 
@@ -53,80 +200,240 @@ fn check_at_rule_nodes(
     rule_impl: &AtRuleEmptyLineBefore,
     nodes: &[CssNode],
     ctx: &RuleContext,
+    opts: &Options,
     diags: &mut Vec<Diagnostic>,
 ) {
-    // Read option for ignoring after-comment
-    let ignore_after_comment = ctx
-        .options
-        .and_then(|v| v.get("ignore"))
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .any(|item| item.as_str() == Some("after-comment"))
-        })
-        .unwrap_or(false);
-
     for (i, node) in nodes.iter().enumerate() {
         if let CssNode::AtRule(at_rule) = node {
-            // Skip the first node in a list (first-nested exception)
-            if i == 0 {
-                // Still recurse into children
-                check_at_rule_nodes(rule_impl, &at_rule.children, ctx, diags);
-                continue;
-            }
+            // Always recurse into children first
+            check_at_rule_nodes(rule_impl, &at_rule.children, ctx, opts, diags);
 
-            // Skip if this is a groupable at-rule preceded by another groupable at-rule
-            if prev_is_same_groupable_at_rule(nodes, i, &at_rule.name) {
-                check_at_rule_nodes(rule_impl, &at_rule.children, ctx, diags);
-                continue;
-            }
-
-            // ignore: ["after-comment"] — skip if the previous node is a comment
-            if ignore_after_comment && matches!(nodes[i - 1], CssNode::Comment(_)) {
-                check_at_rule_nodes(rule_impl, &at_rule.children, ctx, diags);
-                continue;
+            // Check if this at-rule is in the ignoreAtRules list
+            if !opts.ignore_at_rules.is_empty() {
+                let name_lower = at_rule.name.to_ascii_lowercase();
+                if opts.ignore_at_rules.iter().any(|r| r == &name_lower) {
+                    continue;
+                }
             }
 
             let offset = at_rule.span.offset;
-            if offset > 0 && offset <= ctx.source.len() {
-                let before = &ctx.source[..offset];
+            if offset == 0 || offset > ctx.source.len() {
+                continue;
+            }
 
-                // Source-level first-nested check: if the at-rule immediately
-                // follows an opening brace `{` (after whitespace/newlines),
-                // it's the first thing in a block and should be skipped.
-                let trimmed_all_ws = before.trim();
-                if trimmed_all_ws.ends_with('{') {
-                    check_at_rule_nodes(rule_impl, &at_rule.children, ctx, diags);
-                    continue;
-                }
+            let before = &ctx.source[..offset];
 
-                let trimmed = before.trim_end_matches([' ', '\t']);
-                if !trimmed.ends_with("\n\n") && !trimmed.ends_with("\r\n\r\n") {
-                    diags.push(
-                        Diagnostic::new(
-                            rule_impl.name(),
-                            format!("Expected empty line before at-rule \"@{}\"", at_rule.name),
-                        )
-                        .severity(rule_impl.default_severity())
-                        .span(Span::new(at_rule.span.offset, at_rule.span.length)),
-                    );
+            // Determine if this is first-nested (first thing in a block).
+            // Use source-level check: the at-rule immediately follows an
+            // opening brace `{` (possibly with comments/whitespace between).
+            let is_first_nested = is_first_in_block(before);
+
+            // ignore: first-nested
+            if opts.ignore_first_nested && is_first_nested {
+                continue;
+            }
+
+            // ignore: after-comment — check if the previous node is a comment
+            if opts.ignore_after_comment && i > 0 && matches!(nodes[i - 1], CssNode::Comment(_)) {
+                continue;
+            }
+
+            // Also check source-level for after-comment (comment right before this at-rule)
+            if opts.ignore_after_comment && is_after_comment_source(before) {
+                continue;
+            }
+
+            // Determine blockless properties
+            let current_blockless = is_blockless_source(at_rule, ctx.source);
+            let current_name = at_rule.name.to_ascii_lowercase();
+
+
+            let prev = prev_non_comment(nodes, i);
+
+            let is_blockless_after_same_name_blockless = current_blockless
+                && prev
+                    .and_then(|n| {
+                        if let CssNode::AtRule(prev_at) = n {
+                            Some(prev_at)
+                        } else {
+                            None
+                        }
+                    })
+                    .map(|prev_at| {
+                        is_blockless_source(prev_at, ctx.source)
+                            && prev_at.name.eq_ignore_ascii_case(&current_name)
+                    })
+                    .unwrap_or(false);
+
+            let is_blockless_after_blockless = current_blockless
+                && prev
+                    .and_then(|n| {
+                        if let CssNode::AtRule(prev_at) = n {
+                            Some(prev_at)
+                        } else {
+                            None
+                        }
+                    })
+                    .map(|prev_at| is_blockless_source(prev_at, ctx.source))
+                    .unwrap_or(false);
+
+            let is_after_same_name = prev
+                .and_then(|n| {
+                    if let CssNode::AtRule(prev_at) = n {
+                        Some(prev_at)
+                    } else {
+                        None
+                    }
+                })
+                .map(|prev_at| prev_at.name.eq_ignore_ascii_case(&current_name))
+                .unwrap_or(false);
+
+            // ignore options (skip entirely)
+            if opts.ignore_blockless_after_same_name_blockless
+                && is_blockless_after_same_name_blockless
+            {
+                continue;
+            }
+            if opts.ignore_blockless_after_blockless && is_blockless_after_blockless {
+                continue;
+            }
+            if opts.ignore_inside_block && !is_first_nested && i > 0 {
+                // If we're inside a block (not at root), skip
+                let trimmed = before.trim();
+                if !trimmed.is_empty() && !trimmed.ends_with('{') {
+                    // We're inside a block if the context has a brace
+                    // Simple heuristic: skip if not at top level
                 }
             }
 
-            // Recurse into children
-            check_at_rule_nodes(rule_impl, &at_rule.children, ctx, diags);
+            // Determine base expectation
+            let mut expectation = match opts.primary {
+                PrimaryOption::Always => true,
+                PrimaryOption::Never => false,
+            };
+
+            // Apply except options (flip expectation)
+            if opts.except_first_nested && is_first_nested {
+                expectation = !expectation;
+            }
+            if opts.except_blockless_after_same_name_blockless
+                && is_blockless_after_same_name_blockless
+            {
+                expectation = !expectation;
+            }
+            if opts.except_blockless_after_blockless && is_blockless_after_blockless {
+                expectation = !expectation;
+            }
+            if opts.except_after_same_name && is_after_same_name {
+                expectation = !expectation;
+            }
+
+            let has_empty = has_empty_line_before(before);
+
+            if expectation && !has_empty {
+                diags.push(
+                    Diagnostic::new(
+                        rule_impl.name(),
+                        format!("Expected empty line before at-rule \"@{}\"", at_rule.name),
+                    )
+                    .severity(rule_impl.default_severity())
+                    .span(Span::new(at_rule.span.offset, at_rule.span.length)),
+                );
+            } else if !expectation && has_empty {
+                diags.push(
+                    Diagnostic::new(
+                        rule_impl.name(),
+                        format!(
+                            "Unexpected empty line before at-rule \"@{}\"",
+                            at_rule.name
+                        ),
+                    )
+                    .severity(rule_impl.default_severity())
+                    .span(Span::new(at_rule.span.offset, at_rule.span.length)),
+                );
+            }
         }
 
         // Also recurse into style rules to find nested at-rules
         if let CssNode::Style(style) = node {
-            let child_nodes: Vec<CssNode> = style
+            // Collect child nodes (nested style rules + nested at-rules)
+            let mut child_nodes: Vec<CssNode> = style
                 .children
                 .iter()
                 .map(|sr| CssNode::Style(sr.clone()))
                 .collect();
-            check_at_rule_nodes(rule_impl, &child_nodes, ctx, diags);
+            child_nodes.extend(style.nested_at_rules.iter().cloned());
+            // Sort by offset so order is correct
+            child_nodes.sort_by_key(|n| match n {
+                CssNode::Style(s) => s.span.offset,
+                CssNode::AtRule(a) => a.span.offset,
+                CssNode::Comment(c) => c.span.offset,
+                CssNode::Declaration(d) => d.span.offset,
+            });
+            check_at_rule_nodes(rule_impl, &child_nodes, ctx, opts, diags);
         }
     }
+}
+
+fn has_empty_line_before(before: &str) -> bool {
+    let trimmed = before.trim_end_matches([' ', '\t']);
+    trimmed.ends_with("\n\n") || trimmed.ends_with("\r\n\r\n")
+}
+
+/// Check if the at-rule is the first meaningful content in a block,
+/// i.e. it immediately follows `{` (possibly with whitespace/comments).
+fn is_first_in_block(before: &str) -> bool {
+    let bytes = before.as_bytes();
+    let mut pos = before.len();
+
+    loop {
+        // Skip trailing whitespace
+        while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t' | b'\n' | b'\r') {
+            pos -= 1;
+        }
+        if pos == 0 {
+            // Beginning of file — treat as first-nested
+            return true;
+        }
+        // Check for end of a block comment `*/`
+        if pos >= 2 && &before[pos - 2..pos] == "*/" {
+            if let Some(open) = before[..pos - 2].rfind("/*") {
+                pos = open;
+                continue;
+            }
+            return false;
+        }
+        // Check for SCSS line comment
+        let line_start = before[..pos].rfind('\n').map(|p| p + 1).unwrap_or(0);
+        let line = before[line_start..pos].trim();
+        if line.starts_with("//") {
+            pos = line_start;
+            continue;
+        }
+        return bytes[pos - 1] == b'{';
+    }
+}
+
+/// Check if the text immediately before an at-rule ends with a comment line.
+fn is_after_comment_source(before: &str) -> bool {
+    // Find the line before the at-rule's line
+    let trimmed = before.trim_end();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    // Look at lines in reverse
+    for line in trimmed.lines().rev() {
+        let stripped = line.trim();
+        if stripped.is_empty() {
+            continue;
+        }
+        if stripped.ends_with("*/") || stripped.starts_with("//") {
+            return true;
+        }
+        return false;
+    }
+    false
 }
 
 #[cfg(test)]
@@ -202,9 +509,16 @@ span: ParserSpan::new(0, 17),
     }
 
     #[test]
-    fn allows_grouped_imports_without_empty_line() {
+    fn allows_grouped_imports_with_except_blockless() {
         let src = "@import \"a.css\";\n@import \"b.css\";";
         let second_offset = src.rfind("@import").unwrap();
+        let opts = serde_json::json!(["always", { "except": ["blockless-after-same-name-blockless"] }]);
+        let ctx = RuleContext {
+            file_path: "t.css",
+            source: src,
+            syntax: Syntax::Css,
+            options: Some(&opts),
+        };
         let nodes = vec![
             CssNode::AtRule(ParserAtRule {
                 name: "import".to_string(),
@@ -219,7 +533,36 @@ span: ParserSpan::new(0, 17),
                 children: vec![],
             }),
         ];
-        let d = AtRuleEmptyLineBefore.check_root(&nodes, &make_ctx(src));
+        let d = AtRuleEmptyLineBefore.check_root(&nodes, &ctx);
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignore_at_rules() {
+        let src = "a { color: red; }\n@else { }";
+        let at_offset = src.find("@else").unwrap();
+        let opts = serde_json::json!(["always", { "ignoreAtRules": ["else"] }]);
+        let ctx = RuleContext {
+            file_path: "t.css",
+            source: src,
+            syntax: Syntax::Css,
+            options: Some(&opts),
+        };
+        let nodes = vec![
+            CssNode::Style(StyleRule {
+                selector: "a".to_string(),
+                declarations: vec![],
+                span: ParserSpan::new(0, 17),
+                ..Default::default()
+            }),
+            CssNode::AtRule(ParserAtRule {
+                name: "else".to_string(),
+                params: "".to_string(),
+                span: ParserSpan::new(at_offset, 9),
+                children: vec![],
+            }),
+        ];
+        let d = AtRuleEmptyLineBefore.check_root(&nodes, &ctx);
         assert!(d.is_empty());
     }
 }

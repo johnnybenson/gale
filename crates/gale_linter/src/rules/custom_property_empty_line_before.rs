@@ -32,7 +32,7 @@ impl Rule for CustomPropertyEmptyLineBefore {
         let opts = Options::from_ctx(ctx);
         let mut diags = Vec::new();
 
-        for decl in &rule.declarations {
+        for (decl_idx, decl) in rule.declarations.iter().enumerate() {
             // Only check custom properties (starting with --)
             if !decl.property.starts_with("--") {
                 continue;
@@ -49,7 +49,11 @@ impl Rule for CustomPropertyEmptyLineBefore {
             let is_first = is_first_in_block_by_source(ctx.source, decl_start);
             let is_single_line = is_single_line_block(ctx.source, rule);
             let after_comment = is_after_comment(ctx.source, decl_start);
-            let after_custom_property = is_after_custom_property(ctx.source, decl_start);
+            // Use AST to check if previous declaration is a custom property,
+            // since source-based detection fails for multi-line values (e.g.
+            // the previous line might be `);` from a multi-line rgba() call).
+            let after_custom_property = decl_idx > 0
+                && rule.declarations[decl_idx - 1].property.starts_with("--");
             let after_block = is_after_block(ctx.source, decl_start);
 
             // Apply ignore options (skip this declaration entirely)

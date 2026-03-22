@@ -11,3 +11,4 @@ gale_diagnostics = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 regex = "1"
+fancy-regex = "0.14"

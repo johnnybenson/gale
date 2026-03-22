@@ -74,6 +74,51 @@ impl Rule for StylisticStringQuotes {
                 continue;
             }
 
+            // Detect url( and skip all content inside — Stylelint does not check
+            // strings inside url() functions.
+            if i + 4 <= len && bytes[i..i + 4].eq_ignore_ascii_case(b"url(") {
+                i += 4;
+                // Skip whitespace after url(
+                while i < len && matches!(bytes[i], b' ' | b'\t') {
+                    i += 1;
+                }
+                if i < len && (bytes[i] == b'\'' || bytes[i] == b'"') {
+                    // Quoted url — skip to closing quote then closing paren
+                    let url_quote = bytes[i];
+                    i += 1;
+                    while i < len {
+                        if bytes[i] == b'\\' && i + 1 < len {
+                            i += 2;
+                            continue;
+                        }
+                        if bytes[i] == url_quote {
+                            i += 1;
+                            break;
+                        }
+                        i += 1;
+                    }
+                    // Skip to closing paren
+                    while i < len && bytes[i] != b')' {
+                        i += 1;
+                    }
+                    if i < len {
+                        i += 1;
+                    }
+                } else {
+                    // Unquoted url — skip to closing paren
+                    let mut depth = 1;
+                    while i < len && depth > 0 {
+                        if bytes[i] == b'(' {
+                            depth += 1;
+                        } else if bytes[i] == b')' {
+                            depth -= 1;
+                        }
+                        i += 1;
+                    }
+                }
+                continue;
+            }
+
             if bytes[i] == bad_quote {
                 let start = i;
                 i += 1;

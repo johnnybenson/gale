@@ -50,16 +50,36 @@ impl Rule for DeclarationPropertyValueKeywordNoDeprecated {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+
+        // Parse ignoreKeywords from secondary options
+        let ignore_keywords: Vec<String> = ctx
+            .secondary_options()
+            .and_then(|v| v.get("ignoreKeywords"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| item.as_str().map(|s| s.to_ascii_lowercase()))
+                    .collect()
+            })
+            .unwrap_or_default();
 
         let mut diags = Vec::new();
         for decl in &rule.declarations {
             if let Some((keyword, suggestion)) =
                 check_deprecated_keyword(&decl.property, &decl.value)
             {
+                // Skip if keyword is in the ignore list
+                if ignore_keywords
+                    .iter()
+                    .any(|ik| ik == &keyword.to_ascii_lowercase())
+                {
+                    continue;
+                }
+
                 diags.push(
                     Diagnostic::new(
                         self.name(),

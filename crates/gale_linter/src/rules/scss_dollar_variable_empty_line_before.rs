@@ -47,11 +47,33 @@ impl Rule for ScssDollarVariableEmptyLineBefore {
         let lines: Vec<&str> = source.lines().collect();
         let mut diagnostics = Vec::new();
 
+        // Track parenthesis depth to skip $var: inside mixin arguments,
+        // @use ... with (...), and function calls.
+        let mut paren_depth: i32 = 0;
+
         for (line_idx, line) in lines.iter().enumerate() {
+            // Update paren depth based on this line's content.
+            // We need to count parens outside of strings/comments.
+            for ch in line.chars() {
+                if ch == '(' {
+                    paren_depth += 1;
+                } else if ch == ')' {
+                    paren_depth -= 1;
+                    if paren_depth < 0 {
+                        paren_depth = 0;
+                    }
+                }
+            }
+
             let trimmed = line.trim();
 
             // Only look at lines that start with a $variable declaration
             if !trimmed.starts_with('$') || !trimmed.contains(':') {
+                continue;
+            }
+
+            // Skip if we're inside parentheses (mixin args, @use with, etc.)
+            if paren_depth > 0 {
                 continue;
             }
 
@@ -63,6 +85,24 @@ impl Rule for ScssDollarVariableEmptyLineBefore {
                     .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
             {
                 continue;
+            }
+
+            // Also skip if the line ends with a comma (likely a mixin argument)
+            // or if looking at source context indicates we're inside a
+            // multi-line paren expression.
+            if trimmed.ends_with(',') {
+                // Check if this is a parameter (common in @include, @use with)
+                // by looking for an unclosed `(` in previous lines.
+                let byte_offset: usize = lines[..line_idx]
+                    .iter()
+                    .map(|l| l.len() + 1)
+                    .sum();
+                let before = &source[..byte_offset];
+                let open_parens = before.chars().filter(|&c| c == '(').count();
+                let close_parens = before.chars().filter(|&c| c == ')').count();
+                if open_parens > close_parens {
+                    continue;
+                }
             }
 
             // Determine context of preceding line

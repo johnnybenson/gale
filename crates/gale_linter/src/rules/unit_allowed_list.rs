@@ -152,6 +152,21 @@ fn extract_units_with_context(value: &str) -> Vec<UnitOccurrence> {
         if chars[i].is_ascii_digit()
             || (chars[i] == '.' && i + 1 < len && chars[i + 1].is_ascii_digit())
         {
+            // If the digit is immediately preceded by a letter, underscore, or
+            // is part of an identifier (e.g. `a11y`, `edge2edge`, `h2`), skip
+            // the entire identifier — this is not a CSS numeric value.
+            if i > 0
+                && (chars[i - 1].is_ascii_alphabetic()
+                    || chars[i - 1] == '_')
+            {
+                while i < len
+                    && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
+                {
+                    i += 1;
+                }
+                continue;
+            }
+
             if i > 1
                 && chars[i - 1] == '-'
                 && (chars[i - 2].is_ascii_alphanumeric()
