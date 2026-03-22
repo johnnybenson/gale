@@ -8,10 +8,16 @@ use crate::rule::{Rule, RuleContext};
 /// The standard syntax uses `to top`, `to right`, etc. Non-standard
 /// (legacy WebKit) syntax uses `top`, `left`, etc. without the `to` keyword.
 ///
+/// This rule only checks **unprefixed** `linear-gradient()` and
+/// `repeating-linear-gradient()`.  Vendor-prefixed versions
+/// (`-webkit-linear-gradient`, `-moz-linear-gradient`, `-o-linear-gradient`)
+/// legitimately use the old syntax, so they are **not** flagged.
+///
 /// Equivalent to Stylelint's `function-linear-gradient-no-nonstandard-direction` rule.
 pub struct FunctionLinearGradientNoNonstandardDirection;
 
-/// Direction keywords that are non-standard when used without `to`.
+/// Direction keywords that are non-standard when used without `to`
+/// in the **standard** (unprefixed) gradient syntax.
 const NON_STANDARD_DIRECTIONS: &[&str] = &[
     "top",
     "bottom",
@@ -27,13 +33,10 @@ const NON_STANDARD_DIRECTIONS: &[&str] = &[
     "right bottom",
 ];
 
-/// Function names that use standard gradient direction syntax.
-const GRADIENT_FUNCTIONS: &[&str] = &[
+/// Unprefixed gradient function names that should use the standard syntax.
+const STANDARD_GRADIENT_FUNCTIONS: &[&str] = &[
     "linear-gradient",
     "repeating-linear-gradient",
-    "-webkit-linear-gradient",
-    "-moz-linear-gradient",
-    "-o-linear-gradient",
 ];
 
 impl Rule for FunctionLinearGradientNoNonstandardDirection {
@@ -57,7 +60,14 @@ impl Rule for FunctionLinearGradientNoNonstandardDirection {
             _ => return vec![],
         };
         for decl in declarations {
-            check_value(&decl.value, decl.span.offset, self, &mut diags);
+            let decl_start = decl.span.offset;
+            let decl_end = decl_start + decl.span.length;
+            let search_area = if decl.span.length > 0 && decl_end <= _ctx.source.len() {
+                &_ctx.source[decl_start..decl_end]
+            } else {
+                &decl.value
+            };
+            check_value(search_area, decl_start, self, &mut diags);
         }
         diags
     }
@@ -87,7 +97,10 @@ fn check_value(
                 start -= 1;
             }
             let fname = &lower[start..paren_pos];
-            if GRADIENT_FUNCTIONS.contains(&fname) {
+
+            // Only check unprefixed standard gradient functions.
+            // Vendor-prefixed versions use the old syntax legitimately.
+            if STANDARD_GRADIENT_FUNCTIONS.contains(&fname) {
                 // Extract the first argument (before the first comma).
                 let after_paren = paren_pos + 1;
                 // Find matching close paren.
@@ -113,12 +126,12 @@ fn check_value(
                 };
 
                 // Check if the first argument is a non-standard direction.
-                if NON_STANDARD_DIRECTIONS.contains(&first_arg) {
+                if is_nonstandard_direction(first_arg) {
                     diags.push(
                         Diagnostic::new(
                             rule.name(),
                             format!(
-                                "Unexpected non-standard direction \"{}\" in {fname}()",
+                                "Unexpected non-standard direction \"{}\"",
                                 first_arg
                             ),
                         )
@@ -133,6 +146,59 @@ fn check_value(
         }
         i += 1;
     }
+}
+
+/// Check if a first argument is a non-standard direction.
+///
+/// Non-standard means:
+/// - A bare direction keyword like `top`, `bottom`, `left`, `right`
+///   (including two-word combos like `top right`)
+/// - A `to` keyword followed by an angle like `to 90deg` (this is also invalid)
+///
+/// Standard means:
+/// - `to top`, `to bottom`, `to left`, `to right`, `to top right`, etc.
+/// - An angle like `45deg`, `1turn`, `100grad`, etc.
+/// - A color (starts a color stop directly, no direction)
+fn is_nonstandard_direction(first_arg: &str) -> bool {
+    let trimmed = first_arg.trim();
+
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    // Check for bare direction keywords (non-standard)
+    if NON_STANDARD_DIRECTIONS.contains(&trimmed) {
+        return true;
+    }
+
+    // "to" followed by angle is invalid too (e.g., "to 90deg")
+    if let Some(after_to) = trimmed.strip_prefix("to ") {
+        let after_to = after_to.trim();
+        if looks_like_angle(after_to) {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Check if a string looks like a CSS angle value.
+fn looks_like_angle(s: &str) -> bool {
+    let s = s.trim();
+    if s.is_empty() {
+        return false;
+    }
+    // Angles end with deg, grad, rad, or turn
+    let units = ["deg", "grad", "rad", "turn"];
+    for unit in &units {
+        if let Some(num_part) = s.strip_suffix(unit) {
+            let num_part = num_part.trim();
+            if !num_part.is_empty() && num_part.bytes().all(|b| b.is_ascii_digit() || b == b'.' || b == b'-' || b == b'+') {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Find the position of the first comma at depth 0 (not inside nested parens).
@@ -235,6 +301,43 @@ mod tests {
     fn ignores_non_gradient() {
         let d = FunctionLinearGradientNoNonstandardDirection
             .check(&style_with_value("rgb(255, 0, 0)"), &ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignores_vendor_prefixed_gradient() {
+        // Vendor-prefixed gradients use the old syntax legitimately
+        let d = FunctionLinearGradientNoNonstandardDirection.check(
+            &style_with_value("-webkit-linear-gradient(top, red, blue)"),
+            &ctx(),
+        );
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignores_moz_prefixed_gradient() {
+        let d = FunctionLinearGradientNoNonstandardDirection.check(
+            &style_with_value("-moz-linear-gradient(top, red, blue)"),
+            &ctx(),
+        );
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn reports_repeating_linear_gradient() {
+        let d = FunctionLinearGradientNoNonstandardDirection.check(
+            &style_with_value("repeating-linear-gradient(top, red, blue)"),
+            &ctx(),
+        );
+        assert_eq!(d.len(), 1);
+    }
+
+    #[test]
+    fn accepts_standard_repeating() {
+        let d = FunctionLinearGradientNoNonstandardDirection.check(
+            &style_with_value("repeating-linear-gradient(to top, red, blue)"),
+            &ctx(),
+        );
         assert!(d.is_empty());
     }
 }
