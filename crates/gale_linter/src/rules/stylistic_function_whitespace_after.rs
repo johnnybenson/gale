@@ -120,9 +120,9 @@ impl Rule for StylisticFunctionWhitespaceAfter {
                 let after = close_paren + 1;
                 if after < len {
                     let ch_after = bytes[after];
-                    // Don't flag if followed by `)`, `,`, `;`, `}`, or newline — those are
+                    // Don't flag if followed by `)`, `,`, `;`, `}`, `{`, or newline — those are
                     // natural terminators where whitespace is not expected.
-                    if !matches!(ch_after, b')' | b',' | b';' | b'}' | b'\n' | b'\r') {
+                    if !matches!(ch_after, b')' | b',' | b';' | b'}' | b'{' | b'\n' | b'\r') {
                         let has_ws = ch_after == b' ' || ch_after == b'\t';
 
                         let violation = match option {

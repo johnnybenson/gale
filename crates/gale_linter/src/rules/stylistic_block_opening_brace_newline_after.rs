@@ -72,11 +72,20 @@ impl Rule for StylisticBlockOpeningBraceNewlineAfter {
                     j += 1;
                 }
 
-                // Check what follows the opening brace
-                let after = brace_pos + 1;
+                // Check what follows the opening brace (skip spaces/tabs)
+                let mut after = brace_pos + 1;
+                while after < len && (bytes[after] == b' ' || bytes[after] == b'\t') {
+                    after += 1;
+                }
                 let has_newline = after < len
                     && (bytes[after] == b'\n'
-                        || (bytes[after] == b'\r' && after + 1 < len && bytes[after + 1] == b'\n'));
+                        || (bytes[after] == b'\r'
+                            && after + 1 < len
+                            && bytes[after + 1] == b'\n')
+                        // SCSS line comment counts as having a newline
+                        || (after + 1 < len
+                            && bytes[after] == b'/'
+                            && bytes[after + 1] == b'/'));
 
                 let should_check = match option {
                     "always" => true,

@@ -46,8 +46,30 @@ impl Rule for StylisticSelectorListCommaNewlineAfter {
         };
 
         let bytes = sel_source.as_bytes();
+        let mut paren_depth = 0i32;
+        let mut in_interpolation = 0i32;
         for (i, &b) in bytes.iter().enumerate() {
-            if b == b',' {
+            // Track SCSS interpolation #{...}
+            if b == b'#' && i + 1 < bytes.len() && bytes[i + 1] == b'{' {
+                in_interpolation += 1;
+            }
+            if b == b'{' && i > 0 && bytes[i - 1] != b'#' {
+                // regular brace, not interpolation
+            } else if b == b'{' && i > 0 && bytes[i - 1] == b'#' {
+                // already counted above
+            }
+            if b == b'}' && in_interpolation > 0 {
+                in_interpolation -= 1;
+            }
+            if b == b'(' {
+                paren_depth += 1;
+            }
+            if b == b')' && paren_depth > 0 {
+                paren_depth -= 1;
+            }
+            // Only check commas at the top level of the selector
+            // (not inside interpolation or function calls)
+            if b == b',' && paren_depth == 0 && in_interpolation == 0 {
                 let after_comma = i + 1;
                 let next_char = if after_comma < bytes.len() {
                     Some(bytes[after_comma] as char)
@@ -55,7 +77,21 @@ impl Rule for StylisticSelectorListCommaNewlineAfter {
                     None
                 };
 
-                let has_newline_after = next_char == Some('\n')
+                // SCSS line comment after comma counts as having a newline
+                let has_scss_comment = after_comma + 1 < bytes.len()
+                    && {
+                        let mut skip = after_comma;
+                        while skip < bytes.len()
+                            && (bytes[skip] == b' ' || bytes[skip] == b'\t')
+                        {
+                            skip += 1;
+                        }
+                        skip + 1 < bytes.len()
+                            && bytes[skip] == b'/'
+                            && bytes[skip + 1] == b'/'
+                    };
+                let has_newline_after = has_scss_comment
+                    || next_char == Some('\n')
                     || (next_char == Some('\r')
                         && after_comma + 1 < bytes.len()
                         && bytes[after_comma + 1] == b'\n');

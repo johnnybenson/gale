@@ -97,9 +97,19 @@ impl Rule for StylisticSelectorCombinatorSpaceAfter {
                 continue;
             }
 
-            // Only check combinators in selector context
+            // Only check combinators in selector context.
+            // Skip SCSS comparison operators (>=, <=) and `>` inside
+            // @if/@else conditions.
             if in_selector && COMBINATORS.contains(&bytes[i]) {
                 let comb_pos = i;
+                // `>=` and `<=` are SCSS comparison operators, not combinators
+                if bytes[i] == b'>'
+                    && comb_pos + 1 < len
+                    && bytes[comb_pos + 1] == b'='
+                {
+                    i += 2;
+                    continue;
+                }
                 let has_space_after = comb_pos + 1 < len
                     && (bytes[comb_pos + 1] == b' '
                         || bytes[comb_pos + 1] == b'\t'

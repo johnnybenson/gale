@@ -29,6 +29,7 @@ impl Rule for StylisticDeclarationColonNewlineAfter {
         let mut diagnostics = Vec::new();
         let mut i = 0;
         let mut depth: i32 = 0;
+        let mut paren_depth: i32 = 0;
         let mut in_value = false;
 
         while i < len {
@@ -77,6 +78,20 @@ impl Rule for StylisticDeclarationColonNewlineAfter {
                 continue;
             }
 
+            if bytes[i] == b'(' {
+                paren_depth += 1;
+                i += 1;
+                continue;
+            }
+            if bytes[i] == b')' {
+                paren_depth -= 1;
+                if paren_depth < 0 {
+                    paren_depth = 0;
+                }
+                i += 1;
+                continue;
+            }
+
             if bytes[i] == b';' || bytes[i] == b'\n' {
                 in_value = false;
             }
@@ -90,7 +105,26 @@ impl Rule for StylisticDeclarationColonNewlineAfter {
             }
 
             // Detect property: value pattern inside blocks only.
-            if bytes[i] == b':' && depth > 0 && !in_value {
+            // Skip colons inside parentheses (SCSS named function args).
+            if bytes[i] == b':' && depth > 0 && paren_depth == 0 && !in_value {
+                // Quick check: if the character after the colon is an alpha char
+                // (not a space), this is likely a pseudo-selector like :hover, :focus.
+                // CSS properties always have a space (or newline) after the colon.
+                let after_colon = i + 1;
+                if after_colon < len
+                    && bytes[after_colon] != b' '
+                    && bytes[after_colon] != b'\t'
+                    && bytes[after_colon] != b'\n'
+                    && bytes[after_colon] != b'\r'
+                    && bytes[after_colon] != b':'  // :: pseudo-element
+                {
+                    // If the char after colon is alphabetic, this is a pseudo-class.
+                    // CSS declarations always have whitespace after the colon.
+                    if bytes[after_colon].is_ascii_alphabetic() {
+                        i += 1;
+                        continue;
+                    }
+                }
                 // Make sure this isn't a pseudo-selector (::before) or selector (:hover)
                 // A declaration colon is preceded by a property name (letters/hyphens)
                 let mut k = i;

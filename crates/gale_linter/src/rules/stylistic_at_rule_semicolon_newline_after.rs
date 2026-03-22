@@ -95,7 +95,13 @@ impl Rule for StylisticAtRuleSemicolonNewlineAfter {
                     }
                 }
 
-                if found_non_ws && !found_newline {
+                // SCSS line comment after `;` counts as having a newline
+                if j + 1 < len && bytes[j] == b'/' && bytes[j + 1] == b'/' {
+                    found_newline = true;
+                }
+                // If the next non-ws character is `}`, the at-rule is the last
+                // statement in the block — no newline needed.
+                if found_non_ws && !found_newline && j < len && bytes[j] != b'}' {
                     diagnostics.push(
                         Diagnostic::new(
                             self.name(),

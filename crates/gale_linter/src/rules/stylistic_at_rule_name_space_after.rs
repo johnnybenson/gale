@@ -44,13 +44,23 @@ impl Rule for StylisticAtRuleNameSpaceAfter {
                 continue;
             }
 
-            // Skip comments
+            // Skip block comments
             if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
                 i += 2;
                 while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
                     i += 1;
                 }
-                i += 2;
+                if i + 1 < len {
+                    i += 2;
+                }
+                continue;
+            }
+
+            // Skip SCSS line comments
+            if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
                 continue;
             }
 
