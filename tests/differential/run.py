@@ -613,6 +613,8 @@ def main():
         print(f"\n{'='*70}")
         print(f"  FINAL SUMMARY")
         print(f"{'='*70}")
+        print(f"  Gale rules available for comparison: {len(GALE_RULES)}")
+        print()
         header = f"  {'Repo':<20} {'Files':<8} {'Match':<8} {'FN':<8} {'FP':<8} {'Parity':<8}"
         sep_len = 60
         if has_benchmark:

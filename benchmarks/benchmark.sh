@@ -8,7 +8,7 @@
 # and produces a markdown results table.
 #
 # Usage:
-#   ./benchmarks/benchmark.sh              # Full benchmark (all 9 repos)
+#   ./benchmarks/benchmark.sh              # Full benchmark (all 16 repos)
 #   ./benchmarks/benchmark.sh bootstrap    # Single repo
 #   ./benchmarks/benchmark.sh --help       # Show help
 #
@@ -47,6 +47,13 @@ REPOS=(
   "material-ui|mui/material-ui|master|packages/**/*.css|packages"
   "patternfly|patternfly/patternfly|main|src/**/*.scss|src"
   "primer-css|primer/css|main|src/**/*.scss|src"
+  "spectrum-css|adobe/spectrum-css|main|components/**/*.css|components"
+  "angular-components|angular/components|main|src/**/*.scss|src"
+  "elastic-eui|elastic/eui|main|packages/**/*.scss|packages"
+  "docusaurus|facebook/docusaurus|main|packages/**/*.css|packages"
+  "discourse|discourse/discourse|main|app/assets/stylesheets/**/*.scss|app/assets/stylesheets"
+  "wp-calypso|Automattic/wp-calypso|trunk|client/**/*.scss|client"
+  "mattermost|mattermost/mattermost|master|webapp/**/*.scss|webapp"
 )
 
 # ---------------------------------------------------------------------------
@@ -212,6 +219,27 @@ run_benchmark_for_repo() {
   local file_count
   file_count=$(count_files "$clone_dir" "$search_dir")
   echo "    Files matching pattern: $file_count"
+
+  # Pre-run validation: run both linters once and verify non-empty output
+  info "Validating both linters produce output..."
+
+  local stylelint_check gale_check
+  stylelint_check=$(cd "$clone_dir" && "$stylelint_bin" "$glob_pattern" --formatter json 2>/dev/null || true)
+  gale_check=$(cd "$clone_dir" && "$GALE_BIN" "$glob_pattern" --formatter json 2>/dev/null || true)
+
+  if [ -z "$stylelint_check" ]; then
+    warn "Stylelint produced no output for $name. Skipping this repo."
+    echo "$name|$file_count|SKIP|SKIP|SKIP" >> "$SCRIPT_DIR/.benchmark-results.txt"
+    return 0
+  fi
+
+  if [ -z "$gale_check" ]; then
+    warn "Gale produced no output for $name. Skipping this repo."
+    echo "$name|$file_count|SKIP|SKIP|SKIP" >> "$SCRIPT_DIR/.benchmark-results.txt"
+    return 0
+  fi
+
+  success "Both linters produced output. Proceeding with benchmark."
 
   # Run hyperfine
   info "Running hyperfine ($MIN_RUNS runs, $WARMUP warmup)..."
@@ -506,7 +534,9 @@ usage() {
   echo "Run Gale vs Stylelint benchmarks on real-world repositories."
   echo ""
   echo "Repos:    bootstrap, carbon, freecodecamp, grafana, govuk-frontend,"
-  echo "          gutenberg, material-ui, patternfly, primer-css (default: all)"
+  echo "          gutenberg, material-ui, patternfly, primer-css,"
+  echo "          spectrum-css, angular-components, elastic-eui, docusaurus,"
+  echo "          discourse, wp-calypso, mattermost (default: all)"
   echo ""
   echo "Options:"
   echo "  --help          Show this help"

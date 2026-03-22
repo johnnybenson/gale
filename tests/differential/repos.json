@@ -61,5 +61,54 @@
     "branch": "main",
     "paths": ["packages"],
     "notes": "UK Government design system. stylelint.config.js at root."
+  },
+  {
+    "name": "spectrum-css",
+    "repo": "adobe/spectrum-css",
+    "branch": "main",
+    "paths": ["components", "tokens"],
+    "notes": "Adobe design system."
+  },
+  {
+    "name": "angular-components",
+    "repo": "angular/components",
+    "branch": "main",
+    "paths": ["src"],
+    "notes": "Angular Material."
+  },
+  {
+    "name": "elastic-eui",
+    "repo": "elastic/eui",
+    "branch": "main",
+    "paths": ["packages"],
+    "notes": "Elastic UI."
+  },
+  {
+    "name": "docusaurus",
+    "repo": "facebook/docusaurus",
+    "branch": "main",
+    "paths": ["packages", "website"],
+    "notes": "Meta docs framework."
+  },
+  {
+    "name": "discourse",
+    "repo": "discourse/discourse",
+    "branch": "main",
+    "paths": ["app/assets/stylesheets"],
+    "notes": "Forum platform. SCSS."
+  },
+  {
+    "name": "wp-calypso",
+    "repo": "Automattic/wp-calypso",
+    "branch": "trunk",
+    "paths": ["client", "packages"],
+    "notes": "WordPress.com frontend. Large SCSS monorepo."
+  },
+  {
+    "name": "mattermost",
+    "repo": "mattermost/mattermost",
+    "branch": "master",
+    "paths": ["webapp"],
+    "notes": "Team messaging."
   }
 ]
