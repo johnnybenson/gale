@@ -387,11 +387,17 @@ impl Rule for FontFamilyNameQuotes {
                 continue;
             }
 
+            // Guard: if span offset + property length would exceed source, fall back
+            if decl.span.offset + decl.property.len() >= source.len() {
+                self.check_from_parsed_value(decl, mode, &mut diagnostics);
+                continue;
+            }
+
             let value_start = find_value_start(source, decl.span.offset, decl.property.len());
             let value_end = find_value_end(source, value_start);
 
             // Sanity: if the detected value is unreasonably long, fall back
-            if value_end.saturating_sub(value_start) > 2000 {
+            if value_end.saturating_sub(value_start) > 1000 {
                 self.check_from_parsed_value(decl, mode, &mut diagnostics);
                 continue;
             }

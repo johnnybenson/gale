@@ -138,26 +138,88 @@ def detect_package_manager(clone_dir: Path) -> str:
     return "npm"
 
 
-def install_deps(clone_dir: Path) -> bool:
-    """Install npm dependencies (needed for Stylelint and its plugins)."""
-    node_modules = clone_dir / "node_modules"
+def _get_current_node_version() -> str:
+    """Return the current Node.js version string (e.g., '22.21.1')."""
+    result = run_cmd(["node", "--version"], timeout=10)
+    return result.stdout.strip().lstrip("v")
+
+
+def _check_node_version(install_dir: Path) -> tuple[bool, str | None]:
+    """Check if the repo requires a Node version we don't have.
+
+    Returns (ok, required_version). If ok is False, required_version is the
+    version the repo needs.
+    """
+    nvmrc = install_dir / ".nvmrc"
+    node_version_file = install_dir / ".node-version"
+
+    required = None
+    if nvmrc.exists():
+        required = nvmrc.read_text().strip().lstrip("v")
+    elif node_version_file.exists():
+        required = node_version_file.read_text().strip().lstrip("v")
+
+    if not required:
+        return True, None
+
+    current = _get_current_node_version()
+
+    # Compare major.minor.patch — require exact match or current >= required
+    try:
+        req_parts = [int(x) for x in required.split(".")]
+        cur_parts = [int(x) for x in current.split(".")]
+        if cur_parts >= req_parts:
+            return True, None
+        return False, required
+    except ValueError:
+        # Can't parse, assume it's fine
+        return True, None
+
+
+def install_deps(clone_dir: Path, search_paths: list[str] | None = None) -> bool | str:
+    """Install npm dependencies (needed for Stylelint and its plugins).
+
+    Returns True on success, False on hard failure, or "skip" if the repo
+    should be skipped (e.g., wrong Node version).
+    """
+    # Determine the actual install directory — for monorepos, package.json
+    # may live in a subdirectory rather than the clone root.
+    install_dir = clone_dir
+    if not (install_dir / "package.json").exists() and search_paths:
+        for sp in search_paths:
+            candidate = clone_dir / sp
+            if (candidate / "package.json").exists():
+                install_dir = candidate
+                print(f"  [info] Found package.json in subdirectory: {sp}/")
+                break
+
+    node_modules = install_dir / "node_modules"
     if node_modules.exists():
         print(f"  [skip] node_modules already exists")
         return True
 
-    if not (clone_dir / "package.json").exists():
+    if not (install_dir / "package.json").exists():
         print(f"  [warn] No package.json found")
         return False
 
-    pm = detect_package_manager(clone_dir)
+    # Check Node.js version requirement before attempting install.
+    # Check both the clone root and install dir (for monorepos).
+    for check_dir in dict.fromkeys([clone_dir, install_dir]):
+        ok, required_version = _check_node_version(check_dir)
+        if not ok:
+            current = _get_current_node_version()
+            print(f"  [skip] requires Node {required_version} (current: {current})")
+            return "skip"
+
+    pm = detect_package_manager(install_dir)
     print(f"  [install] Installing dependencies with {pm}...")
 
-    run_cmd(["corepack", "enable"], cwd=str(clone_dir), timeout=30)
+    run_cmd(["corepack", "enable"], cwd=str(install_dir), timeout=30)
 
     if pm == "pnpm":
         cmd = ["pnpm", "install", "--ignore-scripts", "--no-frozen-lockfile"]
     elif pm == "yarn":
-        env_file = clone_dir / ".yarnrc.yml"
+        env_file = install_dir / ".yarnrc.yml"
         if env_file.exists():
             content = env_file.read_text()
             if "nodeLinker" not in content:
@@ -169,9 +231,16 @@ def install_deps(clone_dir: Path) -> bool:
     else:
         cmd = ["npm", "install", "--ignore-scripts"]
 
-    result = run_cmd(cmd, cwd=str(clone_dir), timeout=300)
+    result = run_cmd(cmd, cwd=str(install_dir), timeout=300)
     if result.returncode != 0:
-        print(f"  [error] {pm} install failed: {result.stderr.strip()[:200]}")
+        # Check if this is a Node version issue
+        stderr = result.stderr.strip()
+        ok2, req2 = _check_node_version(install_dir)
+        if not ok2:
+            current = _get_current_node_version()
+            print(f"  [skip] requires Node {req2} (current: {current})")
+            return "skip"
+        print(f"  [error] {pm} install failed: {stderr[:200]}")
         return False
     return True
 
@@ -199,10 +268,27 @@ def find_css_files(clone_dir: Path, search_paths: list[str], css_only: bool = Fa
 # ---------------------------------------------------------------------------
 
 
-def run_stylelint(clone_dir: Path, files: list[str]) -> list[dict] | None:
+def _find_stylelint_bin(clone_dir: Path, search_paths: list[str] | None = None) -> Path | None:
+    """Find the Stylelint binary, checking both clone root and subdirectories."""
+    # Check clone root first
+    candidate = clone_dir / "node_modules" / ".bin" / "stylelint"
+    if candidate.exists():
+        return candidate
+
+    # Check subdirectories (for monorepos)
+    if search_paths:
+        for sp in search_paths:
+            candidate = clone_dir / sp / "node_modules" / ".bin" / "stylelint"
+            if candidate.exists():
+                return candidate
+
+    return None
+
+
+def run_stylelint(clone_dir: Path, files: list[str], search_paths: list[str] | None = None) -> list[dict] | None:
     """Run Stylelint on the given files and return parsed JSON output."""
-    stylelint_bin = clone_dir / "node_modules" / ".bin" / "stylelint"
-    if not stylelint_bin.exists():
+    stylelint_bin = _find_stylelint_bin(clone_dir, search_paths)
+    if stylelint_bin is None:
         print(f"  [error] Stylelint binary not found")
         return None
 
@@ -211,8 +297,10 @@ def run_stylelint(clone_dir: Path, files: list[str]) -> list[dict] | None:
 
     for i in range(0, len(files), batch_size):
         batch = files[i:i + batch_size]
+        # Fix 4: dynamic timeout based on batch size
+        timeout = max(300, len(batch) * 10)
         cmd = [str(stylelint_bin), "--formatter", "json", "--no-color"] + batch
-        result = run_cmd(cmd, cwd=str(clone_dir), timeout=120)
+        result = run_cmd(cmd, cwd=str(clone_dir), timeout=timeout)
 
         # Stylelint 16+ may output JSON to stderr instead of stdout.
         # Some versions also prepend DeprecationWarning text to stderr.
@@ -224,6 +312,8 @@ def run_stylelint(clone_dir: Path, files: list[str]) -> list[dict] | None:
             json_start = stderr.find("[{")
             if json_start >= 0:
                 output = stderr[json_start:]
+            elif stderr.startswith("["):
+                output = stderr
             else:
                 output = stderr
 
@@ -240,8 +330,13 @@ def run_stylelint(clone_dir: Path, files: list[str]) -> list[dict] | None:
             if result.returncode == 2:
                 print(f"  [error] Stylelint config error: {output[:200]}")
                 return None
-            print(f"  [error] Stylelint JSON parse error: {e}")
-            return None
+            # Fix 3: Don't abort the entire run — skip this batch and continue
+            batch_desc = f"files[{i}:{i+len(batch)}]"
+            print(f"  [warn] Stylelint JSON parse error in {batch_desc}: {e}")
+            print(f"  [warn]   stdout[:200]: {result.stdout.strip()[:200]}")
+            print(f"  [warn]   stderr[:200]: {result.stderr.strip()[:200]}")
+            print(f"  [warn]   Skipping batch, continuing...")
+            continue
 
     return all_results
 
@@ -260,8 +355,9 @@ def run_gale(clone_dir: Path, files: list[str], gale_bin: Path) -> list[dict] | 
 
     for i in range(0, len(files), batch_size):
         batch = files[i:i + batch_size]
+        timeout = max(300, len(batch) * 10)
         cmd = [str(gale_bin), "--formatter", "json"] + batch
-        result = run_cmd(cmd, cwd=str(clone_dir), timeout=120)
+        result = run_cmd(cmd, cwd=str(clone_dir), timeout=timeout)
 
         # Capture stderr for debugging
         if result.stderr.strip():
@@ -496,7 +592,11 @@ def process_repo(
     if not clone_repo(repo, branch, clone_dir, force=force_clone):
         return None
 
-    if not install_deps(clone_dir):
+    deps_result = install_deps(clone_dir, search_paths=search_paths)
+    if deps_result == "skip":
+        print(f"  [skip] {name}: skipped due to environment requirements")
+        return None
+    if not deps_result:
         print(f"  [warn] Continuing without deps (Stylelint may not work)")
 
     css_files = find_css_files(clone_dir, search_paths, css_only=css_only)
@@ -510,7 +610,16 @@ def process_repo(
     # Run Stylelint (using repo's own config)
     print(f"  [lint] Running Stylelint...")
     t0 = time.time()
-    stylelint_results = run_stylelint(clone_dir, css_files)
+    try:
+        stylelint_results = run_stylelint(clone_dir, css_files, search_paths=search_paths)
+    except subprocess.TimeoutExpired:
+        stylelint_time = time.time() - t0
+        print(f"  [warn] Stylelint timed out after {stylelint_time:.0f}s, skipping repo")
+        return {
+            "total_files": len(css_files), "files_match": 0, "files_differ": 0,
+            "stylelint_only_warnings": 0, "gale_only_warnings": 0,
+            "matching_warnings": 0, "diffs": [], "timeout": "stylelint",
+        }
     stylelint_time = time.time() - t0
     if stylelint_results is None:
         print(f"  [warn] Stylelint failed, skipping comparison")
@@ -521,7 +630,16 @@ def process_repo(
     # Run Gale (using repo's own config — should read .stylelintrc automatically)
     print(f"  [lint] Running Gale...")
     t0 = time.time()
-    gale_results = run_gale(clone_dir, css_files, gale_bin)
+    try:
+        gale_results = run_gale(clone_dir, css_files, gale_bin)
+    except subprocess.TimeoutExpired:
+        gale_time = time.time() - t0
+        print(f"  [warn] Gale timed out after {gale_time:.0f}s, skipping repo")
+        return {
+            "total_files": len(css_files), "files_match": 0, "files_differ": 0,
+            "stylelint_only_warnings": 0, "gale_only_warnings": 0,
+            "matching_warnings": 0, "diffs": [], "timeout": "gale",
+        }
     gale_time = time.time() - t0
     if gale_results is None:
         print(f"  [warn] Gale failed, skipping comparison")
@@ -630,11 +748,13 @@ def main():
                     f"{report['stylelint_only_warnings']:<8} "
                     f"{report['gale_only_warnings']:<8} "
                     f"{parity:<8}")
-            if has_benchmark:
+            if has_benchmark and "stylelint_time" in report and "gale_time" in report:
                 s_time = report["stylelint_time"]
                 g_time = report["gale_time"]
                 speedup = s_time / g_time if g_time > 0 else float("inf")
                 line += f"{speedup:.1f}x"
+            elif has_benchmark:
+                line += "N/A"
             print(line)
         print()
 

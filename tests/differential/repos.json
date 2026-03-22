@@ -77,38 +77,38 @@
     "notes": "Angular Material."
   },
   {
-    "name": "elastic-eui",
-    "repo": "elastic/eui",
-    "branch": "main",
-    "paths": ["packages"],
-    "notes": "Elastic UI."
-  },
-  {
     "name": "docusaurus",
     "repo": "facebook/docusaurus",
     "branch": "main",
-    "paths": ["packages", "website"],
-    "notes": "Meta docs framework."
+    "paths": ["packages"],
+    "notes": "Meta docs framework (61k stars). Pure CSS."
   },
   {
     "name": "discourse",
     "repo": "discourse/discourse",
     "branch": "main",
     "paths": ["app/assets/stylesheets"],
-    "notes": "Forum platform. SCSS."
+    "notes": "Forum platform (46k stars). SCSS."
+  },
+  {
+    "name": "elastic-eui",
+    "repo": "elastic/eui",
+    "branch": "main",
+    "paths": ["packages"],
+    "notes": "Elastic UI framework. Requires Node 22.22.0+."
   },
   {
     "name": "wp-calypso",
     "repo": "Automattic/wp-calypso",
     "branch": "trunk",
     "paths": ["client", "packages"],
-    "notes": "WordPress.com frontend. Large SCSS monorepo."
+    "notes": "WordPress.com frontend. 2200+ CSS files."
   },
   {
     "name": "mattermost",
     "repo": "mattermost/mattermost",
     "branch": "master",
     "paths": ["webapp"],
-    "notes": "Team messaging."
+    "notes": "Monorepo — CSS files and package.json in webapp/."
   }
 ]

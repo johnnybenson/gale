@@ -140,6 +140,18 @@ fn extract_class_names_with_offsets(selector: &str) -> Vec<(String, usize)> {
             i += 1;
             byte_pos += char_byte_len;
             let start = i;
+            // A CSS class selector must start with a letter, hyphen, underscore,
+            // or non-ASCII character after the dot. If the next character is a
+            // digit, this is a numeric value (e.g. `.5` in `opacity: .5`), not
+            // a class selector.
+            if i < len && chars[i].is_ascii_digit() {
+                // Skip past the numeric value
+                while i < len && (chars[i].is_ascii_alphanumeric() || chars[i] == '.' || chars[i] == '-' || chars[i] == '_') {
+                    byte_pos += chars[i].len_utf8();
+                    i += 1;
+                }
+                continue;
+            }
             while i < len {
                 if chars[i].is_ascii_alphanumeric()
                     || chars[i] == '-'
@@ -190,6 +202,16 @@ fn extract_class_names(selector: &str) -> Vec<String> {
         if chars[i] == '.' {
             i += 1;
             let start = i;
+            // A CSS class selector must start with a letter, hyphen, underscore,
+            // or non-ASCII character after the dot. If the next character is a
+            // digit, this is a numeric value (e.g. `.5` in `opacity: .5`), not
+            // a class selector.
+            if i < len && chars[i].is_ascii_digit() {
+                while i < len && (chars[i].is_ascii_alphanumeric() || chars[i] == '.' || chars[i] == '-' || chars[i] == '_') {
+                    i += 1;
+                }
+                continue;
+            }
             // CSS class: ident chars (alphanum, hyphen, underscore, non-ASCII)
             // Also consume SCSS interpolation #{...} within class names
             while i < len {
@@ -311,5 +333,53 @@ mod tests {
         let c = ctx_with_options(&opts);
         let d = SelectorClassPattern.check(&style_with_selector(".my-class"), &c);
         assert!(d[0].message.contains("^[a-z][a-zA-Z0-9]+$"));
+    }
+
+    #[test]
+    fn ignores_numeric_values_after_dot() {
+        // These are numeric values (e.g. `opacity: .5`), not class selectors.
+        // Gale should not report them as class pattern violations.
+        let c = ctx();
+        assert!(
+            SelectorClassPattern
+                .check(&style_with_selector(".5"), &c)
+                .is_empty(),
+            ".5 should be ignored (numeric value)"
+        );
+        assert!(
+            SelectorClassPattern
+                .check(&style_with_selector(".2"), &c)
+                .is_empty(),
+            ".2 should be ignored (numeric value)"
+        );
+        assert!(
+            SelectorClassPattern
+                .check(&style_with_selector(".15"), &c)
+                .is_empty(),
+            ".15 should be ignored (numeric value)"
+        );
+        assert!(
+            SelectorClassPattern
+                .check(&style_with_selector(".65"), &c)
+                .is_empty(),
+            ".65 should be ignored (numeric value)"
+        );
+        assert!(
+            SelectorClassPattern
+                .check(&style_with_selector(".8"), &c)
+                .is_empty(),
+            ".8 should be ignored (numeric value)"
+        );
+    }
+
+    #[test]
+    fn extract_class_names_skips_numeric_dot_values() {
+        // Verify the extraction function itself skips numeric values
+        assert!(extract_class_names(".5").is_empty());
+        assert!(extract_class_names(".15").is_empty());
+        assert!(extract_class_names(".8").is_empty());
+        // But real class names still work
+        assert_eq!(extract_class_names(".foo"), vec!["foo"]);
+        assert_eq!(extract_class_names(".foo-bar"), vec!["foo-bar"]);
     }
 }

@@ -64,10 +64,18 @@ impl Rule for DeclarationEmptyLineBefore {
                 }
             }
 
-            let has_empty = has_empty_line_before(ctx.source, decl_start);
-
             // Check if this is first-nested (first content after the opening `{`).
             let is_first = is_first_in_block_by_source(ctx.source, decl_start);
+
+            // When the declaration is the first thing after `{`, only look for
+            // empty lines between `{` and the declaration — not outside the
+            // block.  This prevents false positives for single-line blocks like
+            // `&::after { clear: both }` that follow an unrelated blank line.
+            let has_empty = if is_first {
+                has_empty_line_after_brace(ctx.source, decl_start)
+            } else {
+                has_empty_line_before(ctx.source, decl_start)
+            };
 
             // Check if this is a single-line block
             let is_single_line = is_single_line_block(ctx.source, rule);
@@ -248,6 +256,48 @@ fn parse_secondary(opts: &mut Options, value: &serde_json::Value) {
             }
         }
     }
+}
+
+/// Check if there is an empty line between the opening `{` and the
+/// declaration at `offset`.  Only the region after `{` is inspected.
+/// This uses the same algorithm as `has_empty_line_before` but scoped
+/// to the content between `{` and the declaration.
+fn has_empty_line_after_brace(source: &str, offset: usize) -> bool {
+    if offset == 0 || offset > source.len() {
+        return false;
+    }
+    let before = &source[..offset];
+    // Find the `{` that opens the block this declaration belongs to.
+    let Some(brace_pos) = before.rfind('{') else {
+        return false;
+    };
+    // Use the same logic as has_empty_line_before, but start scanning
+    // only from after the `{`.  We call has_empty_line_before with a
+    // synthetic "offset" relative to the region after `{`.
+    let region_start = brace_pos + 1;
+    if offset <= region_start {
+        return false;
+    }
+    // Slice source to only include content from after `{` to the declaration
+    let region = &source[region_start..offset];
+    // Find the last newline in the region (same as has_empty_line_before logic)
+    let last_newline = region.rfind('\n');
+    let Some(nl_pos) = last_newline else {
+        return false; // No newline in the region → same line as `{` → no empty line
+    };
+    let before_lines = &region[..nl_pos];
+    let mut found_blank = false;
+    for line in before_lines.rsplit('\n') {
+        let stripped = line.trim_matches(|c: char| c == ' ' || c == '\t' || c == '\r');
+        if stripped.is_empty() {
+            found_blank = true;
+        } else {
+            return found_blank;
+        }
+    }
+    // If we exhausted all lines and they were all blank, there's no prior
+    // content after `{` to separate from.
+    false
 }
 
 /// Check if the text before a node has an empty line (a line containing

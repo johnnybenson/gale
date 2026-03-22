@@ -184,60 +184,18 @@ fn is_first_style_in_list(nodes: &[CssNode], index: usize) -> bool {
 
 /// Check if a node is first-nested by looking at the source (follows an opening brace).
 ///
-/// Skips over comments (both `//` line comments and `/* */` block comments)
-/// that may appear between the opening `{` and the first rule, which is common
-/// in SCSS.
+/// Matches Stylelint's `isFirstNested` semantics: a node is first-nested only
+/// if it is literally the first child of its parent block.  If a comment appears
+/// between the opening `{` and this node, the node is NOT first-nested (the
+/// comment is the first child).
 fn is_first_nested_by_source(source: &str, offset: usize) -> bool {
     if offset == 0 || offset > source.len() {
         return false;
     }
     let before = &source[..offset];
-    let trimmed = before.trim();
-    if trimmed.ends_with('{') {
-        return true;
-    }
-    // Walk backwards through the source, skipping comments and whitespace,
-    // to see if we eventually reach an opening brace.
-    let bytes = before.as_bytes();
-    let mut pos = before.len();
-    loop {
-        // Skip trailing whitespace
-        while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t' | b'\n' | b'\r') {
-            pos -= 1;
-        }
-        if pos == 0 {
-            return false;
-        }
-        // Check for end of a line comment: walk back to find `//` at start of this line
-        // First, find the start of the current line
-        let line_end = pos;
-        let line_start = before[..pos].rfind('\n').map(|p| p + 1).unwrap_or(0);
-        let line = before[line_start..line_end].trim();
-        if line.starts_with("//") {
-            // This is a line comment; skip past it
-            pos = line_start;
-            continue;
-        }
-        // If the line contains a `//` comment after a `{`, strip the comment
-        // and check the remaining content.
-        if let Some(comment_pos) = line.find("//") {
-            let before_comment = line[..comment_pos].trim();
-            if before_comment.ends_with('{') {
-                return true;
-            }
-        }
-        // Check for end of a block comment `*/`
-        if pos >= 2 && &before[pos - 2..pos] == "*/" {
-            // Find the matching `/*`
-            if let Some(open) = before[..pos - 2].rfind("/*") {
-                pos = open;
-                continue;
-            }
-            return false;
-        }
-        // Not a comment — check if it's `{`
-        return bytes[pos - 1] == b'{';
-    }
+    // Walk backwards past whitespace only (do NOT skip comments).
+    let trimmed = before.trim_end();
+    trimmed.ends_with('{')
 }
 
 /// Check if the previous sibling is a single-line comment.
