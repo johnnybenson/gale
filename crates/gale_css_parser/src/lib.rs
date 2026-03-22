@@ -462,9 +462,18 @@ fn convert_rules(rules: &[LcssRule], source: &str, idx: &LineIndex) -> Vec<CssNo
             }
 
             LcssRule::Page(page) => {
+                // Serialize page selectors into params string
+                let mut params_parts = Vec::new();
+                for sel in &page.selectors {
+                    let sel_str = sel.to_css_string(po()).unwrap_or_default();
+                    if !sel_str.is_empty() {
+                        params_parts.push(sel_str);
+                    }
+                }
+                let params = params_parts.join(", ");
                 nodes.push(CssNode::AtRule(AtRule {
                     name: "page".into(),
-                    params: String::new(),
+                    params,
                     span: loc_to_span(page.loc, source, idx),
                     children: Vec::new(),
                 }));
