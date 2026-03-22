@@ -1,12 +1,15 @@
 use gale_css_parser::CssNode;
 use gale_diagnostics::{Diagnostic, Severity, Span};
+use regex::Regex;
 
 use crate::rule::{Rule, RuleContext};
 
 /// Only allow specified CSS functions.
 ///
-/// Options: an array of function names that are allowed. All other functions
-/// are flagged.
+/// Options: an array of function names (strings) or regex patterns
+/// (strings that start and end with `/`). All other functions are flagged.
+///
+/// Vendor-prefixed functions are matched against their unprefixed name.
 ///
 /// Equivalent to Stylelint's `function-allowed-list` rule.
 pub struct FunctionAllowedList;
@@ -25,33 +28,80 @@ impl Rule for FunctionAllowedList {
     }
 
     fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
-        let allowed: Vec<String> = match ctx.options {
-            Some(serde_json::Value::Array(arr)) => arr
-                .iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_ascii_lowercase()))
-                .collect(),
+        // The primary option is an array of allowed function names/patterns.
+        // It can arrive as:
+        //   - A bare array: ["rgb", "hsl"]
+        //   - Nested in options array: [["rgb", "hsl"]]
+        //   - Nested with secondary: [["rgb", "hsl"], { ... }]
+        let allowed_values: Vec<&str> = match ctx.options {
+            Some(serde_json::Value::Array(arr)) => {
+                // Check if first element is itself an array (nested format)
+                if let Some(serde_json::Value::Array(inner)) = arr.first() {
+                    inner.iter().filter_map(|v| v.as_str()).collect()
+                } else {
+                    // Could be bare array of strings, OR could be ["always", {...}] style
+                    // For this rule, primary is always an array of strings
+                    arr.iter().filter_map(|v| v.as_str()).collect()
+                }
+            }
             _ => return vec![],
         };
+
+        if allowed_values.is_empty() {
+            return vec![];
+        }
+
+        // Separate plain names from regex patterns
+        let mut plain_names: Vec<String> = Vec::new();
+        let mut regex_patterns: Vec<Regex> = Vec::new();
+
+        for val in &allowed_values {
+            if val.starts_with('/') && val.ends_with('/') && val.len() > 2 {
+                // It's a regex pattern
+                let pattern = &val[1..val.len() - 1];
+                if let Ok(re) = Regex::new(pattern) {
+                    regex_patterns.push(re);
+                }
+            } else {
+                plain_names.push(val.to_ascii_lowercase());
+            }
+        }
 
         let mut diags = Vec::new();
 
         match node {
             CssNode::Style(rule) => {
                 for decl in &rule.declarations {
+                    let decl_start = decl.span.offset;
+                    let decl_end = decl_start + decl.span.length;
+                    let search_area = if decl.span.length > 0 && decl_end <= ctx.source.len() {
+                        &ctx.source[decl_start..decl_end]
+                    } else {
+                        &decl.value
+                    };
                     find_disallowed_functions(
-                        &decl.value,
-                        decl.span.offset,
-                        &allowed,
+                        search_area,
+                        decl_start,
+                        &plain_names,
+                        &regex_patterns,
                         self,
                         &mut diags,
                     );
                 }
             }
             CssNode::Declaration(decl) => {
+                let decl_start = decl.span.offset;
+                let decl_end = decl_start + decl.span.length;
+                let search_area = if decl.span.length > 0 && decl_end <= ctx.source.len() {
+                    &ctx.source[decl_start..decl_end]
+                } else {
+                    &decl.value
+                };
                 find_disallowed_functions(
-                    &decl.value,
-                    decl.span.offset,
-                    &allowed,
+                    search_area,
+                    decl_start,
+                    &plain_names,
+                    &regex_patterns,
                     self,
                     &mut diags,
                 );
@@ -63,15 +113,50 @@ impl Rule for FunctionAllowedList {
     }
 }
 
+/// Strip vendor prefix from a function name and return the unprefixed name.
+/// E.g., "-webkit-calc" -> "calc", "-moz-transform" -> "transform".
+fn strip_vendor_prefix(name: &str) -> &str {
+    const PREFIXES: &[&str] = &["-webkit-", "-moz-", "-ms-", "-o-"];
+    for prefix in PREFIXES {
+        if let Some(stripped) = name.strip_prefix(prefix) {
+            return stripped;
+        }
+    }
+    name
+}
+
+fn is_function_allowed(
+    fname: &str,
+    plain_names: &[String],
+    regex_patterns: &[Regex],
+) -> bool {
+    let lower = fname.to_ascii_lowercase();
+    let unprefixed = strip_vendor_prefix(&lower);
+
+    // Check plain names (case-insensitive, also match unprefixed)
+    if plain_names.contains(&lower) || plain_names.contains(&unprefixed.to_string()) {
+        return true;
+    }
+
+    // Check regex patterns against both the original and unprefixed name
+    for re in regex_patterns {
+        if re.is_match(fname) || re.is_match(unprefixed) {
+            return true;
+        }
+    }
+
+    false
+}
+
 fn find_disallowed_functions(
     value: &str,
     base_offset: usize,
-    allowed: &[String],
+    plain_names: &[String],
+    regex_patterns: &[Regex],
     rule: &FunctionAllowedList,
     diags: &mut Vec<Diagnostic>,
 ) {
-    let lower = value.to_ascii_lowercase();
-    let bytes = lower.as_bytes();
+    let bytes = value.as_bytes();
     let len = bytes.len();
     let mut i = 0;
 
@@ -87,12 +172,16 @@ fn find_disallowed_functions(
                 start -= 1;
             }
             if start < end {
-                let fname = &lower[start..end];
-                if !allowed.contains(&fname.to_string()) {
+                let fname = &value[start..end];
+                if !is_function_allowed(fname, plain_names, regex_patterns) {
+                    let fname_lower = fname.to_ascii_lowercase();
                     diags.push(
-                        Diagnostic::new(rule.name(), format!("Unexpected function \"{fname}\""))
-                            .severity(rule.default_severity())
-                            .span(Span::new(base_offset + start, end - start)),
+                        Diagnostic::new(
+                            rule.name(),
+                            format!("Unexpected function \"{fname_lower}\""),
+                        )
+                        .severity(rule.default_severity())
+                        .span(Span::new(base_offset + start, end - start)),
                     );
                 }
             }
@@ -163,6 +252,34 @@ mod tests {
     fn case_insensitive() {
         let ctx = ctx_with_options(Some(serde_json::json!(["rgb"])));
         let d = FunctionAllowedList.check(&style_with_value("RGB(0, 0, 0)"), &ctx);
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn vendor_prefixed_function_matches_unprefixed() {
+        let ctx = ctx_with_options(Some(serde_json::json!(["calc"])));
+        let d = FunctionAllowedList.check(&style_with_value("-webkit-calc(100% - 10px)"), &ctx);
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn regex_pattern_matching() {
+        let ctx = ctx_with_options(Some(serde_json::json!(["/^rgb/"])));
+        let d = FunctionAllowedList.check(&style_with_value("rgba(0, 0, 0, 0.5)"), &ctx);
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn regex_pattern_rejects_non_matching() {
+        let ctx = ctx_with_options(Some(serde_json::json!(["/^rgb/"])));
+        let d = FunctionAllowedList.check(&style_with_value("hsl(0, 100%, 50%)"), &ctx);
+        assert_eq!(d.len(), 1);
+    }
+
+    #[test]
+    fn nested_array_format() {
+        let ctx = ctx_with_options(Some(serde_json::json!([["rgb", "hsl"]])));
+        let d = FunctionAllowedList.check(&style_with_value("rgb(0, 0, 0)"), &ctx);
         assert!(d.is_empty());
     }
 
