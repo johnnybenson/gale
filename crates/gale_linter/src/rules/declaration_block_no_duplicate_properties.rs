@@ -51,94 +51,882 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
             .unwrap_or_default();
 
         let ignore_consecutive = ignore_list.iter().any(|s| s == "consecutive-duplicates");
-        let ignore_consecutive_diff_syntaxes = ignore_list
-            .iter()
-            .any(|s| s == "consecutive-duplicates-with-different-syntaxes");
-        let ignore_consecutive_diff_values = ignore_list
+        let ignore_diff_values = ignore_list
             .iter()
             .any(|s| s == "consecutive-duplicates-with-different-values");
+        let ignore_diff_syntaxes = ignore_list
+            .iter()
+            .any(|s| s == "consecutive-duplicates-with-different-syntaxes");
+        let ignore_prefixless_same = ignore_list
+            .iter()
+            .any(|s| s == "consecutive-duplicates-with-same-prefixless-values");
+
+        // Parse ignoreProperties option (supports strings and regex patterns like "/background-/")
+        let ignore_properties: Vec<PropertyMatcher> = ctx
+            .options
+            .and_then(|v| v.get("ignoreProperties"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| item.as_str().map(PropertyMatcher::from_pattern))
+                    .collect()
+            })
+            .unwrap_or_default();
 
         let is_preprocessor = matches!(
             ctx.syntax,
-            gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less
+            gale_css_parser::Syntax::Scss
+                | gale_css_parser::Syntax::Sass
+                | gale_css_parser::Syntax::Less
         );
 
-        // Track seen properties as (prefix, unprefixed_name) -> (original_property, span)
-        // to correctly handle vendor-prefixed properties. `-webkit-transform` and
-        // `transform` are NOT duplicates; `-webkit-transform` and `-webkit-transform` ARE.
-        // We store the first occurrence's property name and span so we can report
-        // duplicates at the first occurrence's position (matching Stylelint behavior).
-        let mut seen: HashMap<(String, String), (String, gale_css_parser::Span)> = HashMap::new();
-        // Track last property name+value for consecutive duplicate checks
-        let mut last_prop: Option<(String, String)> = None;
+        // Track declarations we've seen: lowercase property -> index into `decls` vec.
+        // This mirrors Stylelint's algorithm: store all seen declarations, check for
+        // duplicates by looking up the previous declaration with the same property name.
+        let mut decl_map: HashMap<String, usize> = HashMap::new();
+
+        /// Tracked declaration info
+        struct DeclInfo {
+            property: String,
+            lower_prop: String,
+            value: String,
+            important: bool,
+            span: gale_css_parser::Span,
+        }
+
+        let mut decls: Vec<DeclInfo> = Vec::new();
         let mut diagnostics = Vec::new();
 
-        for decl in &rule.declarations {
+        // Sort declarations by source offset. lightningcss separates important
+        // and non-important declarations, which can produce them out of source
+        // order. We need source order for correct consecutive-duplicate checks.
+        let mut sorted_decls: Vec<&gale_css_parser::Declaration> =
+            rule.declarations.iter().collect();
+        sorted_decls.sort_by_key(|d| d.span.offset);
+
+        for decl in &sorted_decls {
+            let prop = &decl.property;
+            let lower_prop = prop.to_ascii_lowercase();
+
             // Skip properties with SCSS/Less interpolation — we can't resolve the
             // actual name, so duplicate detection would produce false positives.
-            if is_preprocessor && decl.property.contains("#{") {
-                last_prop = Some((
-                    decl.property.to_ascii_lowercase(),
-                    decl.value.to_ascii_lowercase(),
-                ));
+            if is_preprocessor && prop.contains("#{") {
+                decls.push(DeclInfo {
+                    property: prop.clone(),
+                    lower_prop: lower_prop.clone(),
+                    value: decl.value.clone(),
+                    important: decl.important,
+                    span: decl.span.clone(),
+                });
                 continue;
             }
-            let name = decl.property.to_ascii_lowercase();
-            let value = decl.value.to_ascii_lowercase();
 
-            let (prefix, unprefixed) = split_vendor_prefix_from_prop(&name);
-            let key = (prefix.to_string(), unprefixed.to_string());
+            // Skip non-standard syntax properties (SCSS $variables, Less @variables)
+            if prop.starts_with('$') || (is_preprocessor && prop.starts_with('@')) {
+                decls.push(DeclInfo {
+                    property: prop.clone(),
+                    lower_prop: lower_prop.clone(),
+                    value: decl.value.clone(),
+                    important: decl.important,
+                    span: decl.span.clone(),
+                });
+                continue;
+            }
 
-            if let Some((first_property, first_span)) = seen.get(&key) {
-                let is_consecutive = last_prop
-                    .as_ref()
-                    .map(|(prev_name, _)| prev_name == &name)
-                    .unwrap_or(false);
+            // Skip custom properties (--*)
+            if prop.starts_with("--") {
+                decls.push(DeclInfo {
+                    property: prop.clone(),
+                    lower_prop: lower_prop.clone(),
+                    value: decl.value.clone(),
+                    important: decl.important,
+                    span: decl.span.clone(),
+                });
+                continue;
+            }
 
-                let has_different_value = last_prop
-                    .as_ref()
-                    .map(|(_, prev_val)| prev_val != &value)
-                    .unwrap_or(false);
+            // Skip `src` property (commonly duplicated in @font-face)
+            if lower_prop == "src" {
+                decls.push(DeclInfo {
+                    property: prop.clone(),
+                    lower_prop: lower_prop.clone(),
+                    value: decl.value.clone(),
+                    important: decl.important,
+                    span: decl.span.clone(),
+                });
+                continue;
+            }
 
-                let should_ignore = if is_consecutive {
-                    if ignore_consecutive {
-                        // Any consecutive duplicate is ignored.
-                        true
-                    } else if ignore_consecutive_diff_values {
-                        has_different_value
-                    } else if ignore_consecutive_diff_syntaxes {
-                        let prev_value = last_prop.as_ref().map(|(_, v)| v.as_str()).unwrap_or("");
-                        has_different_syntax(prev_value, &value)
-                    } else {
-                        // Default: always allow consecutive duplicates with
-                        // different values (common fallback pattern, matching
-                        // Stylelint's default behavior).
-                        has_different_value
+            // Skip properties matching ignoreProperties patterns
+            if ignore_properties
+                .iter()
+                .any(|m| m.matches(&lower_prop, prop))
+            {
+                decls.push(DeclInfo {
+                    property: prop.clone(),
+                    lower_prop: lower_prop.clone(),
+                    value: decl.value.clone(),
+                    important: decl.important,
+                    span: decl.span.clone(),
+                });
+                continue;
+            }
+
+            let current_index = decls.len();
+
+            if let Some(&dup_index) = decl_map.get(&lower_prop) {
+                let dup_decl = &decls[dup_index];
+                let dup_value = &dup_decl.value;
+                let dup_important = dup_decl.important;
+                let current_value = &decl.value;
+                let current_important = decl.important;
+
+                // Is the duplicate more important than the current declaration?
+                let duplicate_is_more_important = !current_important && dup_important;
+
+                // Are the duplicates consecutive? (dup_index is the last index in decls)
+                let duplicates_are_consecutive = dup_index == current_index - 1;
+
+                // Unprefixed values are equal?
+                let unprefixed_dup_equal =
+                    strip_vendor_prefix_from_value(current_value)
+                        == strip_vendor_prefix_from_value(dup_value);
+
+                // Handle the ignore options (matching Stylelint's logic)
+                if ignore_diff_values || ignore_diff_syntaxes || ignore_prefixless_same {
+                    // Non-consecutive duplicates are always reported
+                    if !duplicates_are_consecutive
+                        || (ignore_prefixless_same && !unprefixed_dup_equal)
+                    {
+                        // Report
+                        let (report_prop, report_span) = if duplicate_is_more_important {
+                            (prop.clone(), decl.span.clone())
+                        } else {
+                            (dup_decl.property.clone(), dup_decl.span.clone())
+                        };
+
+                        if !duplicate_is_more_important {
+                            // Replace the tracked duplicate with the current one
+                            decl_map.insert(lower_prop.clone(), current_index);
+                        }
+
+                        diagnostics.push(
+                            Diagnostic::new(
+                                self.name(),
+                                format!("Unexpected duplicate \"{}\"", report_prop),
+                            )
+                            .severity(self.default_severity())
+                            .span(Span::new(report_span.offset, report_span.length)),
+                        );
+
+                        decls.push(DeclInfo {
+                            property: prop.clone(),
+                            lower_prop: lower_prop.clone(),
+                            value: decl.value.clone(),
+                            important: decl.important,
+                            span: decl.span.clone(),
+                        });
+                        continue;
                     }
-                } else {
-                    false
-                };
 
-                if !should_ignore {
-                    // Report at the first occurrence's position, matching Stylelint behavior.
+                    if ignore_diff_syntaxes {
+                        let syntaxes_are_equal =
+                            is_equal_value_syntaxes(current_value, dup_value, &lower_prop);
+
+                        if syntaxes_are_equal {
+                            // Same syntax means report
+                            let (report_prop, report_span) = if duplicate_is_more_important {
+                                (prop.clone(), decl.span.clone())
+                            } else {
+                                (dup_decl.property.clone(), dup_decl.span.clone())
+                            };
+
+                            if !duplicate_is_more_important {
+                                decl_map.insert(lower_prop.clone(), current_index);
+                            }
+
+                            diagnostics.push(
+                                Diagnostic::new(
+                                    self.name(),
+                                    format!("Unexpected duplicate \"{}\"", report_prop),
+                                )
+                                .severity(self.default_severity())
+                                .span(Span::new(report_span.offset, report_span.length)),
+                            );
+
+                            decls.push(DeclInfo {
+                                property: prop.clone(),
+                                lower_prop: lower_prop.clone(),
+                                value: decl.value.clone(),
+                                important: decl.important,
+                                span: decl.span.clone(),
+                            });
+                            continue;
+                        }
+                    }
+
+                    // If values differ, skip (allowed by these ignore modes)
+                    if current_value != dup_value {
+                        decls.push(DeclInfo {
+                            property: prop.clone(),
+                            lower_prop: lower_prop.clone(),
+                            value: decl.value.clone(),
+                            important: decl.important,
+                            span: decl.span.clone(),
+                        });
+                        if !duplicate_is_more_important {
+                            decl_map.insert(lower_prop.clone(), current_index);
+                        }
+                        continue;
+                    }
+
+                    // Same value consecutive duplicate - report
+                    let (report_prop, report_span) = if duplicate_is_more_important {
+                        (prop.clone(), decl.span.clone())
+                    } else {
+                        (dup_decl.property.clone(), dup_decl.span.clone())
+                    };
+
+                    if !duplicate_is_more_important {
+                        decl_map.insert(lower_prop.clone(), current_index);
+                    }
+
                     diagnostics.push(
                         Diagnostic::new(
                             self.name(),
-                            format!("Unexpected duplicate \"{}\"", first_property),
+                            format!("Unexpected duplicate \"{}\"", report_prop),
                         )
                         .severity(self.default_severity())
-                        .span(Span::new(first_span.offset, first_span.length)),
+                        .span(Span::new(report_span.offset, report_span.length)),
                     );
+
+                    decls.push(DeclInfo {
+                        property: prop.clone(),
+                        lower_prop: lower_prop.clone(),
+                        value: decl.value.clone(),
+                        important: decl.important,
+                        span: decl.span.clone(),
+                    });
+                    continue;
                 }
+
+                // ignore: consecutive-duplicates
+                if ignore_consecutive && duplicates_are_consecutive {
+                    decls.push(DeclInfo {
+                        property: prop.clone(),
+                        lower_prop: lower_prop.clone(),
+                        value: decl.value.clone(),
+                        important: decl.important,
+                        span: decl.span.clone(),
+                    });
+                    if !duplicate_is_more_important {
+                        decl_map.insert(lower_prop.clone(), current_index);
+                    }
+                    continue;
+                }
+
+                // Default: report all duplicates
+                let (report_prop, report_span) = if duplicate_is_more_important {
+                    (prop.clone(), decl.span.clone())
+                } else {
+                    (dup_decl.property.clone(), dup_decl.span.clone())
+                };
+
+                if !duplicate_is_more_important {
+                    decl_map.insert(lower_prop.clone(), current_index);
+                }
+
+                diagnostics.push(
+                    Diagnostic::new(
+                        self.name(),
+                        format!("Unexpected duplicate \"{}\"", report_prop),
+                    )
+                    .severity(self.default_severity())
+                    .span(Span::new(report_span.offset, report_span.length)),
+                );
             } else {
-                seen.insert(key, (decl.property.clone(), decl.span.clone()));
+                decl_map.insert(lower_prop.clone(), current_index);
             }
 
-            last_prop = Some((name, value));
+            decls.push(DeclInfo {
+                property: prop.clone(),
+                lower_prop: lower_prop.clone(),
+                value: decl.value.clone(),
+                important: decl.important,
+                span: decl.span.clone(),
+            });
         }
 
         diagnostics
     }
+}
+
+/// Pattern matcher for ignoreProperties - supports plain strings and regex-like "/pattern/"
+enum PropertyMatcher {
+    Exact(String),
+    Regex(regex::Regex),
+}
+
+impl PropertyMatcher {
+    fn from_pattern(pattern: &str) -> Self {
+        if pattern.starts_with('/') && pattern.ends_with('/') && pattern.len() > 2 {
+            let re_str = &pattern[1..pattern.len() - 1];
+            match regex::Regex::new(re_str) {
+                Ok(re) => PropertyMatcher::Regex(re),
+                Err(_) => PropertyMatcher::Exact(pattern.to_ascii_lowercase()),
+            }
+        } else {
+            PropertyMatcher::Exact(pattern.to_ascii_lowercase())
+        }
+    }
+
+    fn matches(&self, lower_prop: &str, original_prop: &str) -> bool {
+        match self {
+            PropertyMatcher::Exact(s) => lower_prop == s,
+            PropertyMatcher::Regex(re) => re.is_match(original_prop) || re.is_match(lower_prop),
+        }
+    }
+}
+
+/// Strip vendor prefix from a CSS value.
+/// E.g., `-moz-fit-content` -> `fit-content`, `-webkit-flex` -> `flex`
+fn strip_vendor_prefix_from_value(value: &str) -> String {
+    let trimmed = value.trim();
+    // Match vendor prefix pattern at the start of the value
+    if let Some(rest) = trimmed
+        .strip_prefix("-webkit-")
+        .or_else(|| trimmed.strip_prefix("-moz-"))
+        .or_else(|| trimmed.strip_prefix("-ms-"))
+        .or_else(|| trimmed.strip_prefix("-o-"))
+    {
+        return rest.to_string();
+    }
+    // Also handle case-insensitive
+    let lower = trimmed.to_ascii_lowercase();
+    if let Some(pos) = lower.find("-webkit-").or_else(|| lower.find("-moz-")).or_else(|| lower.find("-ms-")).or_else(|| lower.find("-o-")) {
+        if pos == 0 {
+            let prefix_end = lower[pos..].find('-').unwrap() + 1;
+            let prefix_end2 = lower[pos + prefix_end..].find('-').unwrap() + prefix_end + 1;
+            return trimmed[prefix_end2..].to_string();
+        }
+    }
+    trimmed.to_string()
+}
+
+/// Check if a value uses "standard" CSS syntax (not SCSS variables, interpolation, etc.)
+fn is_standard_syntax_value(value: &str) -> bool {
+    let mut v = value.trim();
+    // Ignore operators before variables
+    if v.starts_with('-') || v.starts_with('+') || v.starts_with('*') || v.starts_with('/') {
+        v = &v[1..];
+    }
+    // SCSS variable
+    if v.starts_with('$') {
+        return false;
+    }
+    // Less variable
+    if v.starts_with('@') {
+        return false;
+    }
+    // SCSS interpolation
+    if v.contains("#{") {
+        return false;
+    }
+    // Less interpolation
+    if v.contains("@{") {
+        return false;
+    }
+    // Styled-component interpolation
+    if v.contains("${") {
+        return false;
+    }
+    // Underscore-prefixed SCSS variable references like _$a
+    if v.starts_with('_') && v.contains('$') {
+        return false;
+    }
+    true
+}
+
+/// Parsed value token for syntax comparison
+#[derive(Debug, PartialEq)]
+enum ValueToken {
+    /// A number with optional unit (e.g., "100vw", "16px", "1rem")
+    Dimension { unit: String },
+    /// A percentage value
+    Percentage,
+    /// A plain number
+    Number,
+    /// A function call with name and nested tokens (e.g., "calc(...)")
+    Function { name: String, children: Vec<ValueToken> },
+    /// An identifier/keyword (e.g., "red", "fit-content")
+    Ident(String),
+    /// A string literal
+    StringLiteral,
+    /// A URL token
+    Url,
+    /// Whitespace
+    Whitespace,
+    /// An operator like +, -, *, /
+    Operator(char),
+    /// A comma separator
+    Comma,
+    /// A hash/color value
+    Hash,
+    /// Unknown/other
+    Other(String),
+}
+
+/// Tokenize a CSS value into structural tokens for syntax comparison.
+fn tokenize_value(value: &str) -> Vec<ValueToken> {
+    let mut tokens = Vec::new();
+    let input = value.trim();
+    let chars: Vec<char> = input.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        let ch = chars[i];
+
+        // Skip whitespace
+        if ch.is_ascii_whitespace() {
+            i += 1;
+            // Don't add whitespace tokens - we compare structure only
+            continue;
+        }
+
+        // Skip CSS comments
+        if ch == '/' && i + 1 < chars.len() && chars[i + 1] == '*' {
+            i += 2;
+            while i + 1 < chars.len() && !(chars[i] == '*' && chars[i + 1] == '/') {
+                i += 1;
+            }
+            i += 2; // skip */
+            continue;
+        }
+
+        // Comma
+        if ch == ',' {
+            tokens.push(ValueToken::Comma);
+            i += 1;
+            continue;
+        }
+
+        // Operators (when standalone, not part of a number)
+        if (ch == '+' || ch == '*' || ch == '/') {
+            tokens.push(ValueToken::Operator(ch));
+            i += 1;
+            continue;
+        }
+
+        // Hash/color
+        if ch == '#' {
+            i += 1;
+            while i < chars.len() && (chars[i].is_ascii_alphanumeric()) {
+                i += 1;
+            }
+            tokens.push(ValueToken::Hash);
+            continue;
+        }
+
+        // String literal
+        if ch == '"' || ch == '\'' {
+            let quote = ch;
+            i += 1;
+            while i < chars.len() && chars[i] != quote {
+                if chars[i] == '\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            if i < chars.len() {
+                i += 1; // closing quote
+            }
+            tokens.push(ValueToken::StringLiteral);
+            continue;
+        }
+
+        // Number (possibly with unit) or dimension
+        // Also handle negative numbers
+        if ch.is_ascii_digit()
+            || ch == '.'
+            || (ch == '-'
+                && i + 1 < chars.len()
+                && (chars[i + 1].is_ascii_digit() || chars[i + 1] == '.'))
+        {
+            let start = i;
+            if ch == '-' {
+                i += 1;
+            }
+            // Integer/decimal part
+            while i < chars.len() && (chars[i].is_ascii_digit() || chars[i] == '.') {
+                i += 1;
+            }
+            // Check for unit
+            let unit_start = i;
+            while i < chars.len()
+                && (chars[i].is_ascii_alphabetic() || chars[i] == '-' || chars[i] == '%')
+            {
+                i += 1;
+            }
+            if i > unit_start {
+                let unit: String = chars[unit_start..i].iter().collect();
+                if unit == "%" {
+                    tokens.push(ValueToken::Percentage);
+                } else {
+                    tokens.push(ValueToken::Dimension {
+                        unit: unit.to_ascii_lowercase(),
+                    });
+                }
+            } else {
+                tokens.push(ValueToken::Number);
+            }
+            continue;
+        }
+
+        // Identifier or function
+        if ch.is_ascii_alphabetic() || ch == '-' || ch == '_' {
+            let start = i;
+            while i < chars.len()
+                && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
+            {
+                i += 1;
+            }
+            let name: String = chars[start..i].iter().collect();
+
+            // Check if it's a function call
+            if i < chars.len() && chars[i] == '(' {
+                let lower_name = name.to_ascii_lowercase();
+                i += 1; // skip (
+                // Find matching closing paren (handle nesting)
+                let mut depth = 1;
+                let args_start = i;
+                while i < chars.len() && depth > 0 {
+                    if chars[i] == '(' {
+                        depth += 1;
+                    } else if chars[i] == ')' {
+                        depth -= 1;
+                    }
+                    if depth > 0 {
+                        i += 1;
+                    }
+                }
+                let args: String = chars[args_start..i].iter().collect();
+                if i < chars.len() {
+                    i += 1; // skip )
+                }
+                let children = tokenize_value(&args);
+                tokens.push(ValueToken::Function {
+                    name: lower_name,
+                    children,
+                });
+            } else {
+                tokens.push(ValueToken::Ident(name.to_ascii_lowercase()));
+            }
+            continue;
+        }
+
+        // Parentheses (standalone, not part of a function)
+        if ch == '(' {
+            i += 1;
+            let mut depth = 1;
+            let inner_start = i;
+            while i < chars.len() && depth > 0 {
+                if chars[i] == '(' {
+                    depth += 1;
+                } else if chars[i] == ')' {
+                    depth -= 1;
+                }
+                if depth > 0 {
+                    i += 1;
+                }
+            }
+            if i < chars.len() {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Skip anything else
+        i += 1;
+        tokens.push(ValueToken::Other(ch.to_string()));
+    }
+
+    tokens
+}
+
+/// Check if two sets of value tokens represent "equal" syntaxes.
+/// This is the core of Stylelint's `isEqualValueNodes`.
+fn is_equal_value_tokens(
+    tokens1: &[ValueToken],
+    tokens2: &[ValueToken],
+    property: &str,
+) -> bool {
+    // Different lengths indicate different syntaxes
+    if tokens1.len() != tokens2.len() {
+        return false;
+    }
+
+    for (t1, t2) in tokens1.iter().zip(tokens2.iter()) {
+        match (t1, t2) {
+            (ValueToken::Dimension { unit: u1 }, ValueToken::Dimension { unit: u2 }) => {
+                if u1 != u2 {
+                    return false;
+                }
+            }
+            (ValueToken::Percentage, ValueToken::Percentage) => {}
+            (ValueToken::Number, ValueToken::Number) => {}
+            (
+                ValueToken::Function {
+                    name: n1,
+                    children: c1,
+                },
+                ValueToken::Function {
+                    name: n2,
+                    children: c2,
+                },
+            ) => {
+                if n1 != n2 {
+                    return false;
+                }
+                if !is_equal_value_tokens(c1, c2, property) {
+                    return false;
+                }
+            }
+            (ValueToken::Ident(name1), ValueToken::Ident(name2)) => {
+                // Named colors have the same syntax for color properties
+                if is_color_property(property)
+                    && is_named_color(name1)
+                    && is_named_color(name2)
+                {
+                    continue;
+                }
+                if name1 != name2 {
+                    return false;
+                }
+            }
+            (ValueToken::StringLiteral, ValueToken::StringLiteral) => {}
+            (ValueToken::Hash, ValueToken::Hash) => {}
+            (ValueToken::Url, ValueToken::Url) => {}
+            (ValueToken::Whitespace, ValueToken::Whitespace) => {}
+            (ValueToken::Operator(o1), ValueToken::Operator(o2)) => {
+                if o1 != o2 {
+                    return false;
+                }
+            }
+            (ValueToken::Comma, ValueToken::Comma) => {}
+            // Different token types = different syntaxes
+            _ => {
+                // Check for special cases: Dimension vs Percentage, Ident vs Function, etc.
+                // These are different syntaxes
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+/// Check if two CSS values have equal syntaxes.
+/// Used for `consecutive-duplicates-with-different-syntaxes`.
+fn is_equal_value_syntaxes(value1: &str, value2: &str, property: &str) -> bool {
+    if value1 == value2 {
+        return true;
+    }
+
+    // Non-standard syntax values (SCSS vars, interpolation) are never equal
+    if !is_standard_syntax_value(value1) || !is_standard_syntax_value(value2) {
+        return false;
+    }
+
+    let tokens1 = tokenize_value(value1);
+    let tokens2 = tokenize_value(value2);
+
+    is_equal_value_tokens(&tokens1, &tokens2, property)
+}
+
+/// Check if a property is a color property
+fn is_color_property(prop: &str) -> bool {
+    matches!(
+        prop,
+        "color"
+            | "background-color"
+            | "border-color"
+            | "border-top-color"
+            | "border-right-color"
+            | "border-bottom-color"
+            | "border-left-color"
+            | "border-block-color"
+            | "border-block-start-color"
+            | "border-block-end-color"
+            | "border-inline-color"
+            | "border-inline-start-color"
+            | "border-inline-end-color"
+            | "outline-color"
+            | "text-decoration-color"
+            | "text-emphasis-color"
+            | "column-rule-color"
+            | "caret-color"
+            | "accent-color"
+            | "flood-color"
+            | "lighting-color"
+            | "stop-color"
+            | "scrollbar-color"
+    )
+}
+
+/// Check if a value is a CSS named color keyword
+fn is_named_color(name: &str) -> bool {
+    matches!(
+        name,
+        "aliceblue"
+            | "antiquewhite"
+            | "aqua"
+            | "aquamarine"
+            | "azure"
+            | "beige"
+            | "bisque"
+            | "black"
+            | "blanchedalmond"
+            | "blue"
+            | "blueviolet"
+            | "brown"
+            | "burlywood"
+            | "cadetblue"
+            | "chartreuse"
+            | "chocolate"
+            | "coral"
+            | "cornflowerblue"
+            | "cornsilk"
+            | "crimson"
+            | "cyan"
+            | "darkblue"
+            | "darkcyan"
+            | "darkgoldenrod"
+            | "darkgray"
+            | "darkgreen"
+            | "darkgrey"
+            | "darkkhaki"
+            | "darkmagenta"
+            | "darkolivegreen"
+            | "darkorange"
+            | "darkorchid"
+            | "darkred"
+            | "darksalmon"
+            | "darkseagreen"
+            | "darkslateblue"
+            | "darkslategray"
+            | "darkslategrey"
+            | "darkturquoise"
+            | "darkviolet"
+            | "deeppink"
+            | "deepskyblue"
+            | "dimgray"
+            | "dimgrey"
+            | "dodgerblue"
+            | "firebrick"
+            | "floralwhite"
+            | "forestgreen"
+            | "fuchsia"
+            | "gainsboro"
+            | "ghostwhite"
+            | "gold"
+            | "goldenrod"
+            | "gray"
+            | "green"
+            | "greenyellow"
+            | "grey"
+            | "honeydew"
+            | "hotpink"
+            | "indianred"
+            | "indigo"
+            | "ivory"
+            | "khaki"
+            | "lavender"
+            | "lavenderblush"
+            | "lawngreen"
+            | "lemonchiffon"
+            | "lightblue"
+            | "lightcoral"
+            | "lightcyan"
+            | "lightgoldenrodyellow"
+            | "lightgray"
+            | "lightgreen"
+            | "lightgrey"
+            | "lightpink"
+            | "lightsalmon"
+            | "lightseagreen"
+            | "lightskyblue"
+            | "lightslategray"
+            | "lightslategrey"
+            | "lightsteelblue"
+            | "lightyellow"
+            | "lime"
+            | "limegreen"
+            | "linen"
+            | "magenta"
+            | "maroon"
+            | "mediumaquamarine"
+            | "mediumblue"
+            | "mediumorchid"
+            | "mediumpurple"
+            | "mediumseagreen"
+            | "mediumslateblue"
+            | "mediumspringgreen"
+            | "mediumturquoise"
+            | "mediumvioletred"
+            | "midnightblue"
+            | "mintcream"
+            | "mistyrose"
+            | "moccasin"
+            | "navajowhite"
+            | "navy"
+            | "oldlace"
+            | "olive"
+            | "olivedrab"
+            | "orange"
+            | "orangered"
+            | "orchid"
+            | "palegoldenrod"
+            | "palegreen"
+            | "paleturquoise"
+            | "palevioletred"
+            | "papayawhip"
+            | "peachpuff"
+            | "peru"
+            | "pink"
+            | "plum"
+            | "powderblue"
+            | "purple"
+            | "rebeccapurple"
+            | "red"
+            | "rosybrown"
+            | "royalblue"
+            | "saddlebrown"
+            | "salmon"
+            | "sandybrown"
+            | "seagreen"
+            | "seashell"
+            | "sienna"
+            | "silver"
+            | "skyblue"
+            | "slateblue"
+            | "slategray"
+            | "slategrey"
+            | "snow"
+            | "springgreen"
+            | "steelblue"
+            | "tan"
+            | "teal"
+            | "thistle"
+            | "tomato"
+            | "transparent"
+            | "turquoise"
+            | "violet"
+            | "wheat"
+            | "white"
+            | "whitesmoke"
+            | "yellow"
+            | "yellowgreen"
+    )
 }
 
 /// Split a property name into its vendor prefix and unprefixed name.
@@ -152,43 +940,6 @@ fn split_vendor_prefix_from_prop(prop: &str) -> (&str, &str) {
         }
     }
     ("", prop)
-}
-
-fn has_different_syntax(a: &str, b: &str) -> bool {
-    let a_has_prefix = has_vendor_prefix(a);
-    let b_has_prefix = has_vendor_prefix(b);
-    // If one is vendor-prefixed and the other is not, they have different syntaxes
-    if a_has_prefix != b_has_prefix {
-        return true;
-    }
-    // If they use different vendor prefixes
-    if a_has_prefix && b_has_prefix {
-        let a_prefix = extract_vendor_prefix(a);
-        let b_prefix = extract_vendor_prefix(b);
-        if a_prefix != b_prefix {
-            return true;
-        }
-    }
-    false
-}
-
-fn has_vendor_prefix(value: &str) -> bool {
-    let v = value.trim();
-    v.contains("-webkit-") || v.contains("-moz-") || v.contains("-ms-") || v.contains("-o-")
-}
-
-fn extract_vendor_prefix(value: &str) -> &str {
-    if value.contains("-webkit-") {
-        "-webkit-"
-    } else if value.contains("-moz-") {
-        "-moz-"
-    } else if value.contains("-ms-") {
-        "-ms-"
-    } else if value.contains("-o-") {
-        "-o-"
-    } else {
-        ""
-    }
 }
 
 #[cfg(test)]
@@ -291,116 +1042,34 @@ mod tests {
     }
 
     #[test]
-    fn allows_vendor_prefixed_property_with_unprefixed() {
-        // -webkit-user-select + user-select is a vendor fallback, not a duplicate
+    fn flags_consecutive_duplicates_with_different_values_by_default() {
+        // Default behavior: flag all duplicates, even consecutive with different values
         let rule = DeclarationBlockNoDuplicateProperties;
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![
                 Declaration {
-                    property: "-webkit-user-select".to_string(),
-                    value: "none".to_string(),
-                    span: ParserSpan::new(4, 24),
+                    property: "color".to_string(),
+                    value: "pink".to_string(),
+                    span: ParserSpan::new(4, 11),
                     important: false,
                 },
                 Declaration {
-                    property: "user-select".to_string(),
-                    value: "none".to_string(),
-                    span: ParserSpan::new(30, 17),
+                    property: "color".to_string(),
+                    value: "orange".to_string(),
+                    span: ParserSpan::new(16, 13),
                     important: false,
                 },
             ],
             children: vec![],
-            span: ParserSpan::new(0, 50),
+            span: ParserSpan::new(0, 30),
         });
         let diags = rule.check(&node, &make_context());
-        assert!(diags.is_empty(), "vendor prefix + unprefixed should not be flagged");
-    }
-
-    #[test]
-    fn allows_different_vendor_prefixes() {
-        // -webkit-transform + -moz-transform are different vendor prefixes, not duplicates
-        let rule = DeclarationBlockNoDuplicateProperties;
-        let node = CssNode::Style(StyleRule {
-            selector: "a".to_string(),
-            declarations: vec![
-                Declaration {
-                    property: "-webkit-transform".to_string(),
-                    value: "scale(2)".to_string(),
-                    span: ParserSpan::new(4, 25),
-                    important: false,
-                },
-                Declaration {
-                    property: "-moz-transform".to_string(),
-                    value: "scale(2)".to_string(),
-                    span: ParserSpan::new(30, 22),
-                    important: false,
-                },
-            ],
-            children: vec![],
-            span: ParserSpan::new(0, 55),
-        });
-        let diags = rule.check(&node, &make_context());
-        assert!(diags.is_empty(), "different vendor prefixes should not be flagged");
-    }
-
-    #[test]
-    fn flags_same_vendor_prefix_duplicate() {
-        // -webkit-transform + -webkit-transform IS a duplicate
-        let rule = DeclarationBlockNoDuplicateProperties;
-        let node = CssNode::Style(StyleRule {
-            selector: "a".to_string(),
-            declarations: vec![
-                Declaration {
-                    property: "-webkit-transform".to_string(),
-                    value: "scale(2)".to_string(),
-                    span: ParserSpan::new(4, 25),
-                    important: false,
-                },
-                Declaration {
-                    property: "-webkit-transform".to_string(),
-                    value: "scale(2)".to_string(),
-                    span: ParserSpan::new(30, 25),
-                    important: false,
-                },
-            ],
-            children: vec![],
-            span: ParserSpan::new(0, 58),
-        });
-        let diags = rule.check(&node, &make_context());
-        assert_eq!(diags.len(), 1);
-    }
-
-    #[test]
-    fn allows_consecutive_duplicates_with_different_values() {
-        // display: -webkit-flex; display: flex; is a common fallback pattern
-        let rule = DeclarationBlockNoDuplicateProperties;
-        let node = CssNode::Style(StyleRule {
-            selector: "a".to_string(),
-            declarations: vec![
-                Declaration {
-                    property: "display".to_string(),
-                    value: "-webkit-flex".to_string(),
-                    span: ParserSpan::new(4, 22),
-                    important: false,
-                },
-                Declaration {
-                    property: "display".to_string(),
-                    value: "flex".to_string(),
-                    span: ParserSpan::new(28, 13),
-                    important: false,
-                },
-            ],
-            children: vec![],
-            span: ParserSpan::new(0, 44),
-        });
-        let diags = rule.check(&node, &make_context());
-        assert!(diags.is_empty(), "consecutive duplicates with different values should be allowed");
+        assert_eq!(diags.len(), 1, "consecutive duplicates with different values should be flagged by default");
     }
 
     #[test]
     fn flags_non_consecutive_duplicates_with_different_values() {
-        // color: red; display: block; color: blue; — non-consecutive, should flag
         let rule = DeclarationBlockNoDuplicateProperties;
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
@@ -429,5 +1098,29 @@ mod tests {
         });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
+    }
+
+    #[test]
+    fn test_tokenize_value() {
+        let tokens = tokenize_value("100vw");
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(&tokens[0], ValueToken::Dimension { unit } if unit == "vw"));
+
+        let tokens = tokenize_value("100dvw");
+        assert_eq!(tokens.len(), 1);
+        assert!(matches!(&tokens[0], ValueToken::Dimension { unit } if unit == "dvw"));
+    }
+
+    #[test]
+    fn test_equal_value_syntaxes_different_units() {
+        assert!(!is_equal_value_syntaxes("100vw", "100dvw", "width"));
+        assert!(is_equal_value_syntaxes("100vw", "100vw", "width"));
+        assert!(is_equal_value_syntaxes("100vw", "50vw", "width"));
+    }
+
+    #[test]
+    fn test_equal_value_syntaxes_different_functions() {
+        assert!(!is_equal_value_syntaxes("min(10px, 11px)", "max(10px, 11px)", "width"));
+        assert!(!is_equal_value_syntaxes("100%", "fit-content", "width"));
     }
 }

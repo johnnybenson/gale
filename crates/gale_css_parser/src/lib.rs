@@ -606,17 +606,120 @@ fn convert_style_rule(
     let search_start = rule_span.offset;
     let search_end = (rule_span.offset + rule_span.length).min(source.len());
 
-    let mut declarations = Vec::new();
-    let mut search_from = search_start;
+    // Merge normal and !important declarations into a single list, then
+    // assign spans in source order. lightningcss separates important and
+    // non-important declarations, which would assign wrong byte offsets if
+    // we processed them sequentially (non-important first, important second).
+    //
+    // Strategy: convert all declarations without spans first, find all
+    // property occurrences in source, determine which are important from
+    // source text, then match important/non-important proto-decls correctly.
+    let mut proto_decls: Vec<(String, String, bool)> = Vec::new(); // (property, value, important)
     for decl in &style.declarations.declarations {
-        let (d, next) = convert_property(decl, false, source, search_from, search_end);
-        search_from = next;
-        declarations.push(d);
+        let (d, _) = convert_property(decl, false, source, search_start, search_end);
+        proto_decls.push((d.property, d.value, false));
     }
     for decl in &style.declarations.important_declarations {
-        let (d, next) = convert_property(decl, true, source, search_from, search_end);
-        search_from = next;
-        declarations.push(d);
+        let (d, _) = convert_property(decl, true, source, search_start, search_end);
+        proto_decls.push((d.property, d.value, true));
+    }
+
+    // Find all property-name occurrences in source text, in order.
+    let total_decls = proto_decls.len();
+    let mut spans_in_order: Vec<Span> = Vec::with_capacity(total_decls);
+    let mut sf = search_start;
+    // We need to find `total_decls` declaration spans
+    // Collect all unique property names to search for
+    let mut prop_names: Vec<String> = proto_decls.iter().map(|(p, _, _)| p.clone()).collect();
+    prop_names.sort();
+    prop_names.dedup();
+
+    // Find all declarations by scanning source for any known property name
+    let mut found_count = 0;
+    while found_count < total_decls && sf < search_end {
+        // Try to find the next declaration starting from sf
+        let mut best_span = Span::empty();
+        let mut best_offset = usize::MAX;
+        for pname in &prop_names {
+            let span = find_declaration_span(source, sf, search_end, pname);
+            if span.length > 0 && span.offset < best_offset {
+                best_offset = span.offset;
+                best_span = span;
+            }
+        }
+        if best_span.length == 0 {
+            break;
+        }
+        spans_in_order.push(best_span);
+        sf = best_span.offset + best_span.length;
+        found_count += 1;
+    }
+
+    // Now match each span to the right proto_decl. Check if the source text
+    // at each span contains "!important" to determine which proto_decl it
+    // should be matched with.
+    let mut matched: Vec<bool> = vec![false; proto_decls.len()];
+    let mut declarations = Vec::new();
+
+    for span in &spans_in_order {
+        let span_text = source
+            .get(span.offset..(span.offset + span.length).min(source.len()))
+            .unwrap_or("");
+        let is_important_in_source = span_text.contains("!important")
+            || span_text.contains("! important");
+
+        // Extract the property name from the span
+        let span_lower = span_text.to_ascii_lowercase();
+        let span_prop = span_lower
+            .split(':')
+            .next()
+            .unwrap_or("")
+            .trim();
+
+        // Find the first unmatched proto_decl with matching property AND importance
+        let mut found_idx = None;
+        for (i, (prop, _, important)) in proto_decls.iter().enumerate() {
+            if !matched[i]
+                && prop.to_ascii_lowercase() == span_prop
+                && *important == is_important_in_source
+            {
+                found_idx = Some(i);
+                break;
+            }
+        }
+
+        // Fallback: match by property name only (if importance check fails)
+        if found_idx.is_none() {
+            for (i, (prop, _, _)) in proto_decls.iter().enumerate() {
+                if !matched[i] && prop.to_ascii_lowercase() == span_prop {
+                    found_idx = Some(i);
+                    break;
+                }
+            }
+        }
+
+        if let Some(idx) = found_idx {
+            matched[idx] = true;
+            let (ref prop, ref value, important) = proto_decls[idx];
+            declarations.push(Declaration {
+                property: prop.clone(),
+                value: value.clone(),
+                span: *span,
+                important,
+            });
+        }
+    }
+
+    // Add any unmatched declarations (shouldn't happen normally)
+    for (i, (prop, value, important)) in proto_decls.iter().enumerate() {
+        if !matched[i] {
+            declarations.push(Declaration {
+                property: prop.clone(),
+                value: value.clone(),
+                span: Span::empty(),
+                important: *important,
+            });
+        }
     }
 
     // Nested rules: extract nested style rules as children, and also pull
@@ -632,18 +735,20 @@ fn convert_style_rule(
                 children.push(convert_style_rule(&nesting.style, source, idx));
             }
             LcssRule::NestedDeclarations(nested_decls) => {
+                let mut nested_sf = sf;
                 for decl in &nested_decls.declarations.declarations {
                     let (d, next) =
-                        convert_property(decl, false, source, search_from, search_end);
-                    search_from = next;
+                        convert_property(decl, false, source, nested_sf, search_end);
+                    nested_sf = next;
                     declarations.push(d);
                 }
                 for decl in &nested_decls.declarations.important_declarations {
                     let (d, next) =
-                        convert_property(decl, true, source, search_from, search_end);
-                    search_from = next;
+                        convert_property(decl, true, source, nested_sf, search_end);
+                    nested_sf = next;
                     declarations.push(d);
                 }
+                sf = nested_sf;
             }
             _ => {}
         }

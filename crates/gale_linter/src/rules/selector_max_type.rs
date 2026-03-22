@@ -7,9 +7,104 @@ use crate::rule::{Rule, RuleContext};
 ///
 /// Equivalent to Stylelint's `selector-max-type` rule.
 /// Default maximum: 3. Counts bare element names (type selectors). Detection-only.
+///
+/// ## Options
+///
+/// Primary option: `<number>` — maximum allowed type selectors.
+///
+/// Secondary options:
+/// - `ignore: ["descendant", "child", "compounded", "next-sibling", "custom-elements"]`
+/// - `ignoreTypes: ["fieldset", "/^my-/"]` — type selectors matching these strings
+///   or regex patterns are ignored.
 pub struct SelectorMaxType;
 
 const MAX_TYPE: usize = 3;
+
+/// Configuration parsed from rule options.
+struct Config {
+    max: usize,
+    ignore_descendant: bool,
+    ignore_child: bool,
+    ignore_compounded: bool,
+    ignore_next_sibling: bool,
+    ignore_custom_elements: bool,
+    ignore_types: Vec<IgnorePattern>,
+}
+
+enum IgnorePattern {
+    Exact(String),
+    Regex(String), // stored without leading/trailing `/`
+}
+
+impl Config {
+    fn from_context(ctx: &RuleContext) -> Self {
+        let max = ctx
+            .primary_option()
+            .and_then(|v| v.as_u64())
+            .map(|n| n as usize)
+            .unwrap_or(MAX_TYPE);
+
+        let secondary = ctx.secondary_options();
+
+        let ignore_list: Vec<String> = secondary
+            .and_then(|v| v.get("ignore"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let ignore_types: Vec<IgnorePattern> = secondary
+            .and_then(|v| v.get("ignoreTypes"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(|s| {
+                        if s.starts_with('/') && s.ends_with('/') && s.len() > 2 {
+                            IgnorePattern::Regex(s[1..s.len() - 1].to_string())
+                        } else {
+                            IgnorePattern::Exact(s.to_string())
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Config {
+            max,
+            ignore_descendant: ignore_list.iter().any(|s| s == "descendant"),
+            ignore_child: ignore_list.iter().any(|s| s == "child"),
+            ignore_compounded: ignore_list.iter().any(|s| s == "compounded"),
+            ignore_next_sibling: ignore_list.iter().any(|s| s == "next-sibling"),
+            ignore_custom_elements: ignore_list.iter().any(|s| s == "custom-elements"),
+            ignore_types,
+        }
+    }
+
+    fn is_type_ignored(&self, type_name: &str) -> bool {
+        for pat in &self.ignore_types {
+            match pat {
+                IgnorePattern::Exact(s) => {
+                    if s.eq_ignore_ascii_case(type_name) {
+                        return true;
+                    }
+                }
+                IgnorePattern::Regex(re) => {
+                    // Simple regex support: only `^prefix` patterns
+                    if let Some(prefix) = re.strip_prefix('^') {
+                        if type_name.starts_with(prefix) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        false
+    }
+}
 
 impl Rule for SelectorMaxType {
     fn name(&self) -> &'static str {
@@ -29,12 +124,7 @@ impl Rule for SelectorMaxType {
             return vec![];
         };
 
-        // Read configured max from options (primary option is a number).
-        let max = ctx
-            .options
-            .and_then(|v| v.as_u64())
-            .map(|n| n as usize)
-            .unwrap_or(MAX_TYPE);
+        let config = Config::from_context(ctx);
 
         let selector = if matches!(
             ctx.syntax,
@@ -42,7 +132,7 @@ impl Rule for SelectorMaxType {
                 | gale_css_parser::Syntax::Sass
                 | gale_css_parser::Syntax::Less
         ) {
-            strip_scss_constructs(&rule.selector)
+            strip_preprocessor_constructs(&rule.selector, ctx.syntax)
         } else {
             rule.selector.clone()
         };
@@ -54,13 +144,14 @@ impl Rule for SelectorMaxType {
             if sel.is_empty() {
                 continue;
             }
-            let count = count_type_selectors(sel);
-            if count > max {
+            let count = count_type_selectors(sel, &config);
+            if count > config.max {
                 diags.push(
                     Diagnostic::new(
                         self.name(),
                         format!(
                             "Expected selector \"{sel}\" to have no more than {max} type selector(s), found {count}",
+                            max = config.max,
                         ),
                     )
                     .severity(self.default_severity())
@@ -72,51 +163,134 @@ impl Rule for SelectorMaxType {
     }
 }
 
-/// Count type selectors (bare element names like `div`, `span`, `a`).
-///
-/// A type selector is an identifier that is not preceded by `.`, `#`, `:`, `@`, `[`, or `*`.
-/// We split by combinators and whitespace and examine each simple selector segment.
-fn count_type_selectors(selector: &str) -> usize {
+/// Represents a simple selector segment with its context.
+struct SelectorSegment {
+    name: String,
+    is_after_descendant_combinator: bool,
+    is_after_child_combinator: bool,
+    is_after_next_sibling_combinator: bool,
+    is_compounded: bool,
+    is_custom_element: bool,
+}
+
+/// Count type selectors (bare element names like `div`, `span`, `a`),
+/// respecting the `ignore` and `ignoreTypes` configuration.
+fn count_type_selectors(selector: &str, config: &Config) -> usize {
+    let segments = parse_selector_segments(selector);
     let mut count = 0;
+
+    for seg in &segments {
+        if !is_type_name(&seg.name) {
+            continue;
+        }
+
+        // Check ignoreTypes
+        if config.is_type_ignored(&seg.name) {
+            continue;
+        }
+
+        // Check ignore options
+        if config.ignore_custom_elements && seg.is_custom_element {
+            continue;
+        }
+        if config.ignore_descendant && seg.is_after_descendant_combinator {
+            continue;
+        }
+        if config.ignore_child && seg.is_after_child_combinator {
+            continue;
+        }
+        if config.ignore_next_sibling && seg.is_after_next_sibling_combinator {
+            continue;
+        }
+        if config.ignore_compounded && seg.is_compounded {
+            continue;
+        }
+
+        count += 1;
+    }
+    count
+}
+
+/// Check if a name is a valid type selector (not a pseudo-class name, etc.)
+fn is_type_name(name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    let first = name.as_bytes()[0];
+    (first.is_ascii_alphabetic() || first > 127)
+        && !name.eq_ignore_ascii_case("from")
+        && !name.eq_ignore_ascii_case("to")
+}
+
+/// Parse a single (non-comma-separated) selector into segments.
+fn parse_selector_segments(selector: &str) -> Vec<SelectorSegment> {
+    let mut segments: Vec<SelectorSegment> = Vec::new();
     let chars: Vec<char> = selector.chars().collect();
     let len = chars.len();
     let mut i = 0;
 
+    // Track the last combinator seen
+    let mut last_combinator: Option<char> = None; // ' ', '>', '+', '~'
+    let mut compound_has_other = false; // has other simple selectors in this compound
+    // Track indices into `segments` for type selectors in the current compound
+    let mut compound_type_indices: Vec<usize> = Vec::new();
+
     while i < len {
-        // Skip whitespace and combinators.
-        while i < len
-            && (chars[i].is_ascii_whitespace()
-                || chars[i] == '>'
-                || chars[i] == '+'
-                || chars[i] == '~'
-                || chars[i] == ',')
-        {
+        // Skip whitespace — counts as descendant combinator
+        if chars[i].is_ascii_whitespace() {
+            // Finalize compound: mark type selectors as compounded if compound has other selectors
+            if compound_has_other {
+                for &idx in &compound_type_indices {
+                    segments[idx].is_compounded = true;
+                }
+            }
+            compound_has_other = false;
+            compound_type_indices.clear();
+
+            if last_combinator.is_none() {
+                last_combinator = Some(' ');
+            }
             i += 1;
-        }
-        if i >= len {
-            break;
+            continue;
         }
 
-        // Determine what kind of simple selector starts here.
         match chars[i] {
-            '.' | '#' | '*' => {
-                // Class, ID, or universal selector - skip the ident.
+            '>' | '+' | '~' => {
+                // Finalize current compound before starting new one
+                if compound_has_other {
+                    for &idx in &compound_type_indices {
+                        segments[idx].is_compounded = true;
+                    }
+                }
+                compound_has_other = false;
+                compound_type_indices.clear();
+
+                last_combinator = Some(chars[i]);
+                i += 1;
+            }
+            '.' | '#' => {
+                // Class or ID selector — marks compound as having other selectors
+                compound_has_other = true;
                 i += 1;
                 while i < len && is_ident_char(chars[i]) {
                     i += 1;
                 }
+                last_combinator = None;
+            }
+            '*' => {
+                compound_has_other = true;
+                i += 1;
+                last_combinator = None;
             }
             ':' => {
-                // Pseudo-class/element - skip through.
+                compound_has_other = true;
                 i += 1;
                 if i < len && chars[i] == ':' {
                     i += 1;
                 }
-                // Skip ident.
                 while i < len && is_ident_char(chars[i]) {
                     i += 1;
                 }
-                // Skip parenthesized args if present.
                 if i < len && chars[i] == '(' {
                     let mut depth = 1;
                     i += 1;
@@ -129,39 +303,74 @@ fn count_type_selectors(selector: &str) -> usize {
                         i += 1;
                     }
                 }
+                last_combinator = None;
             }
             '[' => {
-                // Attribute selector - skip until ].
+                compound_has_other = true;
                 while i < len && chars[i] != ']' {
                     i += 1;
                 }
                 if i < len {
                     i += 1;
                 }
+                last_combinator = None;
             }
-            _ if chars[i].is_ascii_alphabetic() || !chars[i].is_ascii() => {
-                // This looks like a type selector.
-                count += 1;
+            '&' => {
+                compound_has_other = true;
+                i += 1;
                 while i < len && is_ident_char(chars[i]) {
                     i += 1;
                 }
+                last_combinator = None;
+            }
+            _ if chars[i].is_ascii_alphabetic() || !chars[i].is_ascii() => {
+                let start = i;
+                while i < len && is_ident_char(chars[i]) {
+                    i += 1;
+                }
+                let name = &selector[start..i];
+                let is_custom_element = name.contains('-');
+
+                let comb = last_combinator;
+
+                let seg_idx = segments.len();
+                segments.push(SelectorSegment {
+                    name: name.to_string(),
+                    is_after_descendant_combinator: comb == Some(' '),
+                    is_after_child_combinator: comb == Some('>'),
+                    is_after_next_sibling_combinator: comb == Some('+') || comb == Some('~'),
+                    is_compounded: false, // will be set in finalization
+                    is_custom_element,
+                });
+                compound_type_indices.push(seg_idx);
+
+                last_combinator = None;
             }
             _ => {
                 i += 1;
             }
         }
     }
-    count
+
+    // Finalize the last compound
+    if compound_has_other {
+        for &idx in &compound_type_indices {
+            segments[idx].is_compounded = true;
+        }
+    }
+
+    segments
 }
 
 fn is_ident_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || c == '-' || c == '_' || !c.is_ascii()
 }
 
-/// Strip SCSS-specific constructs from a selector string:
+/// Strip SCSS/Less-specific constructs from a selector string:
 /// - `//` line comments
-/// - `#{...}` interpolation (replaced with empty string)
-fn strip_scss_constructs(selector: &str) -> String {
+/// - `#{...}` interpolation (SCSS, replaced with empty string)
+/// - `@{...}` interpolation (Less, replaced with empty string)
+fn strip_preprocessor_constructs(selector: &str, syntax: gale_css_parser::Syntax) -> String {
     // First strip line comments
     let no_comments: String = selector
         .lines()
@@ -169,15 +378,36 @@ fn strip_scss_constructs(selector: &str) -> String {
         .collect::<Vec<_>>()
         .join("\n");
 
-    // Then strip #{...} interpolation
+    // Then strip interpolation
     let mut result = String::with_capacity(no_comments.len());
     let chars: Vec<char> = no_comments.chars().collect();
     let len = chars.len();
     let mut i = 0;
 
     while i < len {
-        if i + 1 < len && chars[i] == '#' && chars[i + 1] == '{' {
-            // Skip #{...}
+        // SCSS: #{...}
+        if matches!(syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass)
+            && i + 1 < len
+            && chars[i] == '#'
+            && chars[i + 1] == '{'
+        {
+            let mut depth = 1;
+            i += 2;
+            while i < len && depth > 0 {
+                if chars[i] == '{' {
+                    depth += 1;
+                } else if chars[i] == '}' {
+                    depth -= 1;
+                }
+                i += 1;
+            }
+        }
+        // Less: @{...}
+        else if matches!(syntax, gale_css_parser::Syntax::Less)
+            && i + 1 < len
+            && chars[i] == '@'
+            && chars[i + 1] == '{'
+        {
             let mut depth = 1;
             i += 2;
             while i < len && depth > 0 {
@@ -207,6 +437,15 @@ mod tests {
             source: "",
             syntax: Syntax::Css,
             options: None,
+        }
+    }
+
+    fn ctx_with_options(opts: &serde_json::Value) -> RuleContext<'_> {
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: Some(opts),
         }
     }
 
@@ -246,6 +485,65 @@ mod tests {
     #[test]
     fn does_not_count_id_selectors() {
         let d = SelectorMaxType.check(&style_with_selector("#a #b #c #d"), &ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn max_zero_rejects_single_type() {
+        let opts = serde_json::json!([0]);
+        let c = ctx_with_options(&opts);
+        let d = SelectorMaxType.check(&style_with_selector("foo {}"), &c);
+        assert_eq!(d.len(), 1);
+    }
+
+    #[test]
+    fn max_zero_accepts_class() {
+        let opts = serde_json::json!([0]);
+        let c = ctx_with_options(&opts);
+        let d = SelectorMaxType.check(&style_with_selector(".bar {}"), &c);
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignore_descendant() {
+        let opts = serde_json::json!([0, {"ignore": ["descendant"]}]);
+        let c = ctx_with_options(&opts);
+        // `.foo div` — div is after descendant combinator, should be ignored
+        let d = SelectorMaxType.check(&style_with_selector(".foo div"), &c);
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignore_child() {
+        let opts = serde_json::json!([0, {"ignore": ["child"]}]);
+        let c = ctx_with_options(&opts);
+        // `.foo > div` — div is after child combinator, should be ignored
+        let d = SelectorMaxType.check(&style_with_selector(".foo > div"), &c);
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignore_compounded() {
+        let opts = serde_json::json!([0, {"ignore": ["compounded"]}]);
+        let c = ctx_with_options(&opts);
+        // `.foo.bar div.baz` — div.baz is compounded with class, should be ignored
+        let d = SelectorMaxType.check(&style_with_selector("div.baz"), &c);
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignore_types_exact() {
+        let opts = serde_json::json!([0, {"ignoreTypes": ["fieldset"]}]);
+        let c = ctx_with_options(&opts);
+        let d = SelectorMaxType.check(&style_with_selector("fieldset"), &c);
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignore_types_regex() {
+        let opts = serde_json::json!([0, {"ignoreTypes": ["/^my-/"]}]);
+        let c = ctx_with_options(&opts);
+        let d = SelectorMaxType.check(&style_with_selector("my-type"), &c);
         assert!(d.is_empty());
     }
 }

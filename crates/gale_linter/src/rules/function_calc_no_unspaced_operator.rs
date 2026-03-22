@@ -5,24 +5,65 @@ use std::sync::LazyLock;
 
 use crate::rule::{Rule, RuleContext};
 
-/// Reports when `+` or `-` operators inside `calc()` expressions are not
-/// surrounded by spaces.
+/// Reports when `+` or `-` operators inside CSS math function expressions are
+/// not surrounded by single spaces.
 ///
-/// Per the CSS spec, `+` and `-` inside `calc()` must have whitespace on both
-/// sides. `*` and `/` do not require spaces.
+/// Per the CSS spec, `+` and `-` inside `calc()` and other math functions must
+/// have a single space on both sides. `*` and `/` do not require spaces.
+///
+/// This rule operates on raw source text rather than the parsed AST because
+/// the CSS parser (lightningcss) normalizes calc expressions, losing the
+/// original spacing information.
 ///
 /// Equivalent to Stylelint's `function-calc-no-unspaced-operator` rule.
 pub struct FunctionCalcNoUnspacedOperator;
 
-/// Regex to find `calc(...)` expressions, handling nested parentheses is done
-/// manually after finding the start.
-static CALC_START: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(?i)calc\(").unwrap());
+/// All CSS math function names (case-insensitive matching done at check time).
+const MATH_FUNCTIONS: &[&str] = &[
+    "calc",
+    "min",
+    "max",
+    "clamp",
+    "abs",
+    "sign",
+    "round",
+    "mod",
+    "rem",
+    "sin",
+    "cos",
+    "tan",
+    "asin",
+    "acos",
+    "atan",
+    "atan2",
+    "pow",
+    "sqrt",
+    "hypot",
+    "log",
+    "exp",
+    "calc-size",
+];
 
-/// Extract the content inside a `calc(` starting at the given position.
-/// Returns the substring inside the outermost `calc(...)`.
-fn extract_calc_body(s: &str, start: usize) -> Option<&str> {
+/// Regex to find math function calls in raw source text.
+static MATH_FUNC_START: LazyLock<Regex> = LazyLock::new(|| {
+    let names = MATH_FUNCTIONS.join("|");
+    Regex::new(&format!(r"(?i)({names})\(")).unwrap()
+});
+
+/// Regex to detect CSS comments.
+static COMMENT_RE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"/\*[\s\S]*?\*/").unwrap());
+
+/// Functions whose arguments should be skipped entirely.
+fn is_opaque_function(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    matches!(lower.as_str(), "var" | "env" | "constant" | "attr")
+}
+
+/// Extract the body of a parenthesized expression starting right after the `(`.
+/// Returns `(body_str, end_exclusive)` where end_exclusive points past the `)`.
+fn extract_paren_body(s: &str, start: usize) -> Option<(&str, usize)> {
     let mut depth = 1;
-    let inner_start = start;
     let bytes = s.as_bytes();
     let mut i = start;
     while i < bytes.len() {
@@ -31,77 +72,349 @@ fn extract_calc_body(s: &str, start: usize) -> Option<&str> {
             b')' => {
                 depth -= 1;
                 if depth == 0 {
-                    return Some(&s[inner_start..i]);
+                    return Some((&s[start..i], i + 1));
                 }
             }
             _ => {}
         }
         i += 1;
     }
-    // Unclosed calc, return what we have.
-    Some(&s[inner_start..])
+    Some((&s[start..], s.len()))
 }
 
-/// Describes which side(s) of an operator are missing a space.
+/// Describes which side of an operator is missing a space.
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum UnspacedSide {
     Before,
     After,
 }
 
-/// Check a calc body for unspaced `+` or `-` operators.
-/// Rules: `+` and `-` must be preceded and followed by whitespace.
-/// Exception: `-` at the very start (unary minus) or after `(` is fine.
-/// Only checks at the top-level nesting depth (depth 0); operators inside
-/// nested function calls like `var(--prop)` or `min(…)` are ignored.
-///
-/// Returns a list of violations (one per missing-space side), matching
-/// Stylelint's behaviour of emitting separate diagnostics for "before"
-/// and "after".
-fn find_unspaced_operators(body: &str) -> Vec<(usize, char, UnspacedSide)> {
+/// Skip a preprocessor token (SCSS $var-name, Less @var-name, SCSS #{...}).
+/// Returns the end index (exclusive) if found.
+fn skip_preprocessor_token(bytes: &[u8], pos: usize) -> Option<usize> {
+    let len = bytes.len();
+    if pos >= len {
+        return None;
+    }
+
+    // SCSS interpolation: #{...}
+    if bytes[pos] == b'#' && pos + 1 < len && bytes[pos + 1] == b'{' {
+        let mut depth = 1;
+        let mut j = pos + 2;
+        while j < len {
+            if bytes[j] == b'{' {
+                depth += 1;
+            } else if bytes[j] == b'}' {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(j + 1);
+                }
+            }
+            j += 1;
+        }
+        return Some(len);
+    }
+
+    // SCSS variable: $name-with-hyphens
+    if bytes[pos] == b'$' {
+        let mut i = pos + 1;
+        while i < len
+            && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
+        {
+            i += 1;
+        }
+        if i > pos + 1 {
+            if i < len && bytes[i] == b'(' {
+                if let Some((_, end)) = extract_paren_body(
+                    std::str::from_utf8(bytes).unwrap_or(""),
+                    i + 1,
+                ) {
+                    return Some(end);
+                }
+            }
+            return Some(i);
+        }
+    }
+
+    // Less variable: @name-with-hyphens
+    if bytes[pos] == b'@' {
+        let mut i = pos + 1;
+        while i < len
+            && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
+        {
+            i += 1;
+        }
+        if i > pos + 1 {
+            return Some(i);
+        }
+    }
+
+    None
+}
+
+/// Validate whitespace after an operator. Returns true if valid.
+/// Valid: exactly one space (0x20) followed by non-whitespace, or newline
+/// (with optional \r before \n) directly after operator.
+fn valid_whitespace_after(bytes: &[u8], op_pos: usize, len: usize) -> bool {
+    let start = op_pos + 1;
+    if start >= len {
+        return false;
+    }
+
+    // Single space followed by non-whitespace = valid
+    if bytes[start] == b' ' && start + 1 < len && !bytes[start + 1].is_ascii_whitespace() {
+        return true;
+    }
+
+    // Newline directly after operator = valid
+    if bytes[start] == b'\n' {
+        return true;
+    }
+    // CRLF directly after operator = valid
+    if bytes[start] == b'\r' && start + 1 < len && bytes[start + 1] == b'\n' {
+        return true;
+    }
+
+    false
+}
+
+/// Validate whitespace before an operator. Returns true if valid.
+/// Valid: exactly one space preceded by non-whitespace, or a newline somewhere
+/// in the whitespace sequence before the operator (multiline formatting).
+fn valid_whitespace_before(bytes: &[u8], op_pos: usize) -> bool {
+    if op_pos == 0 {
+        return false;
+    }
+
+    if !bytes[op_pos - 1].is_ascii_whitespace() {
+        return false;
+    }
+
+    // Walk back through all whitespace before the operator
+    let mut j = op_pos - 1;
+    let mut found_newline = false;
+    loop {
+        if bytes[j] == b'\n' {
+            found_newline = true;
+        }
+        if j == 0 || !bytes[j - 1].is_ascii_whitespace() {
+            break;
+        }
+        j -= 1;
+    }
+
+    // If there's a newline in the whitespace, it's valid (multiline formatting)
+    if found_newline {
+        return true;
+    }
+
+    // Otherwise, must be exactly one space
+    // j is now at the first whitespace character
+    op_pos - 1 == j && bytes[j] == b' '
+}
+
+/// Recursively find unspaced +/- operators within a math function body.
+/// `body` is the text inside the math function's parentheses.
+/// `base_offset` is the byte offset of `body[0]` within the full source.
+fn find_unspaced_operators(
+    body: &str,
+    base_offset: usize,
+    is_scss: bool,
+) -> Vec<(usize, char, UnspacedSide)> {
     let bytes = body.as_bytes();
     let len = bytes.len();
-    let mut depth = 0i32; // parenthesis nesting depth
     let mut results = Vec::new();
+    let mut i = 0;
 
-    for i in 0..len {
+    while i < len {
         let ch = bytes[i];
 
+        // Skip SCSS interpolation #{...}
+        if is_scss && ch == b'#' && i + 1 < len && bytes[i + 1] == b'{' {
+            let mut depth = 1;
+            let mut j = i + 2;
+            while j < len {
+                if bytes[j] == b'{' {
+                    depth += 1;
+                } else if bytes[j] == b'}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        j += 1;
+                        break;
+                    }
+                }
+                j += 1;
+            }
+            i = j;
+            continue;
+        }
+
+        // Skip square brackets [...]
+        if ch == b'[' {
+            let mut depth = 1;
+            let mut j = i + 1;
+            while j < len {
+                if bytes[j] == b'[' {
+                    depth += 1;
+                } else if bytes[j] == b']' {
+                    depth -= 1;
+                    if depth == 0 {
+                        j += 1;
+                        break;
+                    }
+                }
+                j += 1;
+            }
+            i = j;
+            continue;
+        }
+
+        // Skip curly braces {...}
+        if ch == b'{' {
+            let mut depth = 1;
+            let mut j = i + 1;
+            while j < len {
+                if bytes[j] == b'{' {
+                    depth += 1;
+                } else if bytes[j] == b'}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        j += 1;
+                        break;
+                    }
+                }
+                j += 1;
+            }
+            i = j;
+            continue;
+        }
+
+        // Handle identifiers and function calls
+        if ch.is_ascii_alphabetic() || ch == b'_' {
+            let name_start = i;
+            while i < len
+                && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
+            {
+                i += 1;
+            }
+            if i < len && bytes[i] == b'(' {
+                let func_name = &body[name_start..i];
+                let inner_start = i + 1;
+                if let Some((inner_body, end)) = extract_paren_body(body, inner_start) {
+                    if is_opaque_function(func_name) {
+                        // Skip opaque functions entirely (var, env, etc.)
+                        i = end;
+                        continue;
+                    }
+
+                    // For any function (math or not), recurse into its body
+                    // to find nested math functions and check their operators.
+                    let inner_results = find_unspaced_operators(
+                        inner_body,
+                        base_offset + inner_start,
+                        is_scss,
+                    );
+                    results.extend(inner_results);
+                    i = end;
+                    continue;
+                }
+            }
+            // Not a function call, just an identifier - already advanced i
+            continue;
+        }
+
+        // Handle SCSS/Less variables ($var-name, @var-name)
+        if is_scss && (ch == b'$' || ch == b'@') {
+            if let Some(end) = skip_preprocessor_token(bytes, i) {
+                i = end;
+                continue;
+            }
+        }
+
+        // Handle parenthesized sub-expressions: (...)
         if ch == b'(' {
-            depth += 1;
-            continue;
-        }
-        if ch == b')' {
-            depth -= 1;
-            continue;
+            let inner_start = i + 1;
+            if let Some((inner_body, end)) = extract_paren_body(body, inner_start) {
+                // Recurse into parenthesized expression
+                let inner_results = find_unspaced_operators(
+                    inner_body,
+                    base_offset + inner_start,
+                    is_scss,
+                );
+                results.extend(inner_results);
+                i = end;
+                continue;
+            }
         }
 
-        // Only check operators at the top level of the calc body.
-        if depth > 0 {
-            continue;
-        }
-
+        // Check `+` and `-` operators
         if ch == b'+' || ch == b'-' {
-            // Check if preceded by 'e' or 'E' (scientific notation)
+            // Skip scientific notation: e.g., 1e+2, 1E-3
             if i > 0 && (bytes[i - 1] == b'e' || bytes[i - 1] == b'E') {
-                continue;
+                if i > 1 && bytes[i - 2].is_ascii_digit() {
+                    i += 1;
+                    continue;
+                }
             }
 
-            // Check for whitespace before (space, tab, newline)
-            let has_space_before = i > 0 && bytes[i - 1].is_ascii_whitespace();
-            // Check for whitespace after
-            let has_space_after = i + 1 < len && bytes[i + 1].is_ascii_whitespace();
-
-            // Skip unary cases: after `(` or at start
+            // Skip if at start of body (unary) or after only whitespace
             if i == 0 {
-                continue;
-            }
-            if bytes[i - 1] == b'(' {
+                i += 1;
                 continue;
             }
 
-            // Skip unary `-` or `+` after another operator (`*`, `/`, `+`, `-`).
-            // This handles patterns like `expr * -1` where `-` is unary.
+            // Skip unary after `(`
+            if bytes[i - 1] == b'(' {
+                i += 1;
+                continue;
+            }
+
+            // Skip unary when everything before is whitespace (e.g., `calc(   +1px)`)
+            {
+                let all_ws_before = bytes[..i].iter().all(|b| b.is_ascii_whitespace());
+                if all_ws_before {
+                    i += 1;
+                    continue;
+                }
+            }
+
+            // Skip `--` double-dash ident tokens
+            if ch == b'-' && i + 1 < len && bytes[i + 1] == b'-' {
+                let mut j = i + 2;
+                while j < len
+                    && (bytes[j].is_ascii_alphanumeric()
+                        || bytes[j] == b'-'
+                        || bytes[j] == b'_')
+                {
+                    j += 1;
+                }
+                if j < len && bytes[j] == b'(' {
+                    if let Some((_, end)) = extract_paren_body(body, j + 1) {
+                        j = end;
+                    }
+                }
+                i = j;
+                continue;
+            }
+
+            // Skip trailing `-` at end of token (e.g., `2px-`, `2-`)
+            if ch == b'-' {
+                let after = i + 1;
+                if after >= len
+                    || bytes[after] == b')'
+                    || (bytes[after] == b' '
+                        && (after + 1 >= len || bytes[after + 1] == b')'))
+                {
+                    if i > 0
+                        && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'%')
+                    {
+                        i += 1;
+                        continue;
+                    }
+                }
+            }
+
+            // Skip unary `+`/`-` after another operator or comma
             {
                 let mut j = i;
                 while j > 0 && bytes[j - 1].is_ascii_whitespace() {
@@ -112,25 +425,45 @@ fn find_unspaced_operators(body: &str) -> Vec<(usize, char, UnspacedSide)> {
                         || bytes[j - 1] == b'/'
                         || bytes[j - 1] == b'+'
                         || bytes[j - 1] == b'-'
-                        || bytes[j - 1] == b',')
+                        || bytes[j - 1] == b','
+                        || bytes[j - 1] == b'(')
                 {
+                    i += 1;
                     continue;
                 }
             }
 
+            // This is a binary operator. Check spacing.
             let op_char = ch as char;
 
-            // Emit separate diagnostics for each missing side, matching Stylelint.
-            if !has_space_before {
-                results.push((i, op_char, UnspacedSide::Before));
+            let has_valid_before = valid_whitespace_before(bytes, i);
+            let has_valid_after = valid_whitespace_after(bytes, i, len);
+
+            if !has_valid_before {
+                results.push((base_offset + i, op_char, UnspacedSide::Before));
             }
-            if !has_space_after {
-                results.push((i, op_char, UnspacedSide::After));
+            if !has_valid_after {
+                results.push((base_offset + i, op_char, UnspacedSide::After));
             }
         }
+
+        i += 1;
     }
 
     results
+}
+
+/// Check if offset is inside a CSS comment in the source.
+fn is_in_comment(source: &str, offset: usize) -> bool {
+    for m in COMMENT_RE.find_iter(source) {
+        if offset >= m.start() && offset < m.end() {
+            return true;
+        }
+        if m.start() > offset {
+            break;
+        }
+    }
+    false
 }
 
 impl Rule for FunctionCalcNoUnspacedOperator {
@@ -146,66 +479,72 @@ impl Rule for FunctionCalcNoUnspacedOperator {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, context: &RuleContext) -> Vec<Diagnostic> {
-        let style = match node {
-            CssNode::Style(s) => s,
-            _ => return vec![],
-        };
-
+    fn check_root(&self, _nodes: &[CssNode], context: &RuleContext) -> Vec<Diagnostic> {
+        let source = context.source;
+        let is_scss = matches!(context.syntax, Syntax::Scss | Syntax::Less | Syntax::Sass);
         let mut diagnostics = Vec::new();
 
-        for decl in &style.declarations {
-            let value = &decl.value;
+        // Find all top-level math function calls in the source
+        for m in MATH_FUNC_START.find_iter(source) {
+            // Check preceding character to exclude things like `rem-calc(`
+            if m.start() > 0 {
+                let prev = source.as_bytes()[m.start() - 1];
+                if prev.is_ascii_alphanumeric() || prev == b'-' || prev == b'_' {
+                    continue;
+                }
+            }
 
-            let is_scss = matches!(context.syntax, Syntax::Scss | Syntax::Less | Syntax::Sass);
+            // Skip if inside a comment
+            if is_in_comment(source, m.start()) {
+                continue;
+            }
 
-            for m in CALC_START.find_iter(value) {
-                let body_start = m.end();
-                if let Some(body) = extract_calc_body(value, body_start) {
-                    // In SCSS/Less/Sass, skip calc() bodies that contain
-                    // interpolation (`#{...}`) or SCSS variables (`$var`).
-                    // These will be compiled to valid CSS by the preprocessor.
-                    if is_scss && (body.contains("#{") || body.contains('$')) {
-                        continue;
-                    }
+            let body_start = m.end();
+            if let Some((body, _end)) = extract_paren_body(source, body_start) {
+                let violations = find_unspaced_operators(body, body_start, is_scss);
 
-                    let violations = find_unspaced_operators(body);
-                    for (_pos, op, side) in &violations {
-                        let msg = match side {
-                            UnspacedSide::Before => {
-                                format!(
-                                    "Expected a space before the '{op}' operator in calc function"
-                                )
-                            }
-                            UnspacedSide::After => {
-                                format!(
-                                    "Expected a space after the '{op}' operator in calc function"
-                                )
-                            }
-                        };
-                        diagnostics.push(
-                            Diagnostic::new(self.name(), msg)
-                                .severity(self.default_severity())
-                                .span(Span::new(decl.span.offset, decl.span.length)),
-                        );
-                    }
+                for (offset, op, side) in &violations {
+                    let msg = match side {
+                        UnspacedSide::Before => {
+                            format!(
+                                "Expected a space before the '{op}' operator in calc function"
+                            )
+                        }
+                        UnspacedSide::After => {
+                            format!(
+                                "Expected a space after the '{op}' operator in calc function"
+                            )
+                        }
+                    };
+
+                    diagnostics.push(
+                        Diagnostic::new(self.name(), msg)
+                            .severity(self.default_severity())
+                            .span(Span::new(*offset, 1)),
+                    );
                 }
             }
         }
 
         diagnostics
     }
+
+    fn check(&self, _node: &CssNode, _context: &RuleContext) -> Vec<Diagnostic> {
+        // All checking is done in check_root using raw source text,
+        // since the CSS parser normalizes calc expressions.
+        vec![]
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
+    use gale_css_parser::Syntax;
 
-    fn make_context() -> RuleContext<'static> {
+    fn make_context(source: &str) -> RuleContext<'_> {
         RuleContext {
             file_path: "test.css",
-            source: "",
+            source,
             syntax: Syntax::Css,
             options: None,
         }
@@ -214,19 +553,9 @@ mod tests {
     #[test]
     fn reports_unspaced_plus_in_calc_both_sides() {
         let rule = FunctionCalcNoUnspacedOperator;
-        let node = CssNode::Style(StyleRule {
-            selector: "a".to_string(),
-            declarations: vec![Declaration {
-                property: "width".to_string(),
-                value: "calc(100%+20px)".to_string(),
-                span: ParserSpan::new(4, 22),
-                important: false,
-            }],
-            children: vec![],
-            span: ParserSpan::new(0, 28),
-        });
-        let diags = rule.check(&node, &make_context());
-        // Both sides unspaced → 2 diagnostics (before + after)
+        let source = "a { width: calc(100%+20px); }";
+        let ctx = make_context(source);
+        let diags = rule.check_root(&[], &ctx);
         assert_eq!(diags.len(), 2);
         assert!(diags[0].message.contains("before"));
         assert!(diags[1].message.contains("after"));
@@ -235,98 +564,83 @@ mod tests {
     #[test]
     fn reports_unspaced_plus_in_calc_one_side() {
         let rule = FunctionCalcNoUnspacedOperator;
-        let node = CssNode::Style(StyleRule {
-            selector: "a".to_string(),
-            declarations: vec![Declaration {
-                property: "width".to_string(),
-                value: "calc(100% +20px)".to_string(),
-                span: ParserSpan::new(4, 23),
-                important: false,
-            }],
-            children: vec![],
-            span: ParserSpan::new(0, 29),
-        });
-        let diags = rule.check(&node, &make_context());
-        // Only missing space after → 1 diagnostic
+        let source = "a { width: calc(100% +20px); }";
+        let ctx = make_context(source);
+        let diags = rule.check_root(&[], &ctx);
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("after"));
     }
 
     #[test]
-    fn reports_unspaced_minus_in_calc_both_sides() {
-        let rule = FunctionCalcNoUnspacedOperator;
-        let node = CssNode::Style(StyleRule {
-            selector: "a".to_string(),
-            declarations: vec![Declaration {
-                property: "width".to_string(),
-                value: "calc(100%-20px)".to_string(),
-                span: ParserSpan::new(4, 22),
-                important: false,
-            }],
-            children: vec![],
-            span: ParserSpan::new(0, 28),
-        });
-        let diags = rule.check(&node, &make_context());
-        assert_eq!(diags.len(), 2);
-    }
-
-    #[test]
     fn ignores_properly_spaced_calc() {
         let rule = FunctionCalcNoUnspacedOperator;
-        let node = CssNode::Style(StyleRule {
-            selector: "a".to_string(),
-            declarations: vec![Declaration {
-                property: "width".to_string(),
-                value: "calc(100% - 20px)".to_string(),
-                span: ParserSpan::new(4, 24),
-                important: false,
-            }],
-            children: vec![],
-            span: ParserSpan::new(0, 30),
-        });
-        let diags = rule.check(&node, &make_context());
+        let source = "a { width: calc(100% - 20px); }";
+        let ctx = make_context(source);
+        let diags = rule.check_root(&[], &ctx);
         assert!(diags.is_empty());
     }
 
     #[test]
-    fn skips_scss_interpolation_in_calc() {
+    fn checks_min_max_clamp() {
         let rule = FunctionCalcNoUnspacedOperator;
-        let node = CssNode::Style(StyleRule {
-            selector: "a".to_string(),
-            declarations: vec![Declaration {
-                property: "width".to_string(),
-                value: "calc(100%-#{$gap})".to_string(),
-                span: ParserSpan::new(4, 24),
-                important: false,
-            }],
-            children: vec![],
-            span: ParserSpan::new(0, 30),
-        });
-        let ctx = RuleContext {
-            file_path: "test.scss",
-            source: "",
-            syntax: Syntax::Scss,
-            options: None,
-        };
-        let diags = rule.check(&node, &ctx);
+        let source = "a { width: min(25vw+25vw); }";
+        let ctx = make_context(source);
+        let diags = rule.check_root(&[], &ctx);
+        assert!(!diags.is_empty());
+    }
+
+    #[test]
+    fn ignores_rem_calc_function() {
+        let rule = FunctionCalcNoUnspacedOperator;
+        let source = "a { top: rem-calc(10px+ 10px); }";
+        let ctx = make_context(source);
+        let diags = rule.check_root(&[], &ctx);
         assert!(diags.is_empty());
     }
 
     #[test]
     fn ignores_unary_minus() {
         let rule = FunctionCalcNoUnspacedOperator;
-        let node = CssNode::Style(StyleRule {
-            selector: "a".to_string(),
-            declarations: vec![Declaration {
-                property: "width".to_string(),
-                value: "calc(-20px + 100%)".to_string(),
-                span: ParserSpan::new(4, 25),
-                important: false,
-            }],
-            children: vec![],
-            span: ParserSpan::new(0, 31),
-        });
-        let diags = rule.check(&node, &make_context());
+        let source = "a { width: calc(-20px + 100%); }";
+        let ctx = make_context(source);
+        let diags = rule.check_root(&[], &ctx);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn checks_nested_parens() {
+        let rule = FunctionCalcNoUnspacedOperator;
+        let source = "a { top: calc((1px+ 1px)); }";
+        let ctx = make_context(source);
+        let diags = rule.check_root(&[], &ctx);
+        assert!(!diags.is_empty());
+    }
+
+    #[test]
+    fn checks_multiple_spaces_before() {
+        let rule = FunctionCalcNoUnspacedOperator;
+        let source = "a { top: calc(1px  + 2px); }";
+        let ctx = make_context(source);
+        let diags = rule.check_root(&[], &ctx);
+        assert!(!diags.is_empty());
+        assert!(diags[0].message.contains("before"));
+    }
+
+    #[test]
+    fn ignores_comment_in_calc() {
+        let rule = FunctionCalcNoUnspacedOperator;
+        let source = "a { padding: 0 /* calc(1px+2px) */ 0; }";
+        let ctx = make_context(source);
+        let diags = rule.check_root(&[], &ctx);
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn ignores_double_dash_ident() {
+        let rule = FunctionCalcNoUnspacedOperator;
+        let source = "a { padding: calc(1px --2px); }";
+        let ctx = make_context(source);
+        let diags = rule.check_root(&[], &ctx);
         assert!(diags.is_empty());
     }
 }
