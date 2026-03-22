@@ -1,0 +1,410 @@
+use gale_css_parser::{CssNode, Syntax};
+use gale_diagnostics::{Diagnostic, Severity, Span};
+
+use crate::rule::{Rule, RuleContext};
+
+/// Require or disallow an empty line before `//` comments.
+///
+/// Primary option: `"always"` or `"never"`.
+///
+/// Secondary options:
+/// - `except: ["first-nested"]` — reverse the primary option for comments that
+///   are the first child of a block.
+/// - `ignore: ["between-comments", "stylelint-commands"]` — skip checking in
+///   these situations.
+///
+/// Equivalent to `scss/double-slash-comment-empty-line-before`.
+pub struct ScssDoubleSlashCommentEmptyLineBefore;
+
+impl Rule for ScssDoubleSlashCommentEmptyLineBefore {
+    fn name(&self) -> &'static str {
+        "scss/double-slash-comment-empty-line-before"
+    }
+
+    fn description(&self) -> &'static str {
+        "Require or disallow an empty line before //-comments"
+    }
+
+    fn default_severity(&self) -> Severity {
+        Severity::Warning
+    }
+
+    fn check_root(&self, _nodes: &[CssNode], ctx: &RuleContext) -> Vec<Diagnostic> {
+        if !matches!(ctx.syntax, Syntax::Scss | Syntax::Sass) {
+            return vec![];
+        }
+
+        let option = ctx.primary_option_str().unwrap_or("always");
+        let secondary = ctx.secondary_options();
+
+        let except_first_nested = secondary
+            .and_then(|s| s.get("except"))
+            .and_then(|v| v.as_array())
+            .is_some_and(|arr| arr.iter().any(|v| v.as_str() == Some("first-nested")));
+
+        let ignore_between_comments = secondary
+            .and_then(|s| s.get("ignore"))
+            .and_then(|v| v.as_array())
+            .is_some_and(|arr| arr.iter().any(|v| v.as_str() == Some("between-comments")));
+
+        let ignore_stylelint_commands = secondary
+            .and_then(|s| s.get("ignore"))
+            .and_then(|v| v.as_array())
+            .is_some_and(|arr| arr.iter().any(|v| v.as_str() == Some("stylelint-commands")));
+
+        let source = ctx.source;
+        let bytes = source.as_bytes();
+        let len = bytes.len();
+        let mut diagnostics = Vec::new();
+
+        let mut i = 0;
+        while i < len {
+            // Skip string literals
+            if bytes[i] == b'"' || bytes[i] == b'\'' {
+                let quote = bytes[i];
+                i += 1;
+                while i < len {
+                    if bytes[i] == b'\\' {
+                        i += 2;
+                        continue;
+                    }
+                    if bytes[i] == quote {
+                        i += 1;
+                        break;
+                    }
+                    i += 1;
+                }
+                continue;
+            }
+
+            // Skip block comments
+            if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+                i += 2;
+                while i + 1 < len {
+                    if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                        i += 2;
+                        break;
+                    }
+                    i += 1;
+                }
+                continue;
+            }
+
+            // Found a `//` comment
+            if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+                let comment_start = i;
+
+                // Check if this is inline (non-whitespace before // on same line)
+                // Inline comments are not subject to this rule.
+                if has_non_whitespace_before_on_line(bytes, comment_start) {
+                    // Skip to end of line
+                    while i < len && bytes[i] != b'\n' {
+                        i += 1;
+                    }
+                    continue;
+                }
+
+                // Get comment text for checking stylelint commands
+                let end = source[i..].find('\n').map(|p| i + p).unwrap_or(len);
+                let comment_text = &source[i + 2..end];
+
+                // Check ignore conditions
+                if ignore_stylelint_commands && is_stylelint_command(comment_text) {
+                    i = end;
+                    continue;
+                }
+
+                if ignore_between_comments && is_preceded_by_slash_comment(source, comment_start) {
+                    i = end;
+                    continue;
+                }
+
+                // Comment at the very start of the file — no preceding content
+                if comment_start == 0 || is_first_content_in_source(source, comment_start) {
+                    i = end;
+                    continue;
+                }
+
+                let has_empty_line = has_empty_line_before(source, comment_start);
+                let is_first_nested = is_first_nested_in_block(source, comment_start);
+
+                // Determine the effective expectation
+                let mut expect_empty_line = option == "always";
+                if except_first_nested && is_first_nested {
+                    expect_empty_line = !expect_empty_line;
+                }
+
+                let comment_len = end - comment_start;
+
+                if expect_empty_line && !has_empty_line {
+                    diagnostics.push(
+                        Diagnostic::new(
+                            self.name(),
+                            "Expected empty line before comment",
+                        )
+                        .severity(self.default_severity())
+                        .span(Span::new(comment_start, comment_len)),
+                    );
+                } else if !expect_empty_line && has_empty_line {
+                    diagnostics.push(
+                        Diagnostic::new(
+                            self.name(),
+                            "Unexpected empty line before comment",
+                        )
+                        .severity(self.default_severity())
+                        .span(Span::new(comment_start, comment_len)),
+                    );
+                }
+
+                i = end;
+                continue;
+            }
+
+            i += 1;
+        }
+
+        diagnostics
+    }
+}
+
+/// Returns true if the comment is the first non-whitespace content in the source.
+fn is_first_content_in_source(source: &str, offset: usize) -> bool {
+    let bytes = source.as_bytes();
+    let mut j = offset;
+    while j > 0 {
+        j -= 1;
+        match bytes[j] {
+            b' ' | b'\t' | b'\n' | b'\r' => continue,
+            _ => return false,
+        }
+    }
+    true
+}
+
+fn has_non_whitespace_before_on_line(bytes: &[u8], pos: usize) -> bool {
+    let mut j = pos;
+    while j > 0 {
+        j -= 1;
+        match bytes[j] {
+            b'\n' | b'\r' => return false,
+            b' ' | b'\t' => continue,
+            _ => return true,
+        }
+    }
+    false
+}
+
+fn has_empty_line_before(source: &str, offset: usize) -> bool {
+    let before = &source[..offset];
+    let bytes = before.as_bytes();
+    let mut pos = before.len();
+
+    // Skip whitespace immediately before the comment
+    while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t') {
+        pos -= 1;
+    }
+
+    // Skip the newline
+    if pos > 0 && bytes[pos - 1] == b'\n' {
+        pos -= 1;
+        if pos > 0 && bytes[pos - 1] == b'\r' {
+            pos -= 1;
+        }
+    } else {
+        return false;
+    }
+
+    // Skip whitespace
+    while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t') {
+        pos -= 1;
+    }
+
+    // Empty line if we hit another newline or start of file
+    pos == 0 || bytes[pos - 1] == b'\n'
+}
+
+/// Check if this comment is the first non-whitespace content after an opening brace `{`.
+fn is_first_nested_in_block(source: &str, offset: usize) -> bool {
+    let bytes = source.as_bytes();
+    let mut j = offset;
+    while j > 0 {
+        j -= 1;
+        match bytes[j] {
+            b' ' | b'\t' | b'\n' | b'\r' => continue,
+            b'{' => return true,
+            _ => return false,
+        }
+    }
+    false
+}
+
+/// Check if the previous non-blank line is also a `//` comment.
+fn is_preceded_by_slash_comment(source: &str, offset: usize) -> bool {
+    let bytes = source.as_bytes();
+    let mut pos = offset;
+
+    // Skip whitespace before the comment on the current line
+    while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t') {
+        pos -= 1;
+    }
+
+    // Skip the newline
+    if pos > 0 && bytes[pos - 1] == b'\n' {
+        pos -= 1;
+        if pos > 0 && bytes[pos - 1] == b'\r' {
+            pos -= 1;
+        }
+    } else {
+        return false;
+    }
+
+    // Now we're at the end of the previous line. Find the start of that line.
+    let line_end = pos;
+    while pos > 0 && bytes[pos - 1] != b'\n' {
+        pos -= 1;
+    }
+    let line_start = pos;
+
+    // Trim leading whitespace
+    let line = &source[line_start..line_end];
+    let trimmed = line.trim_start();
+    trimmed.starts_with("//")
+}
+
+fn is_stylelint_command(comment_text: &str) -> bool {
+    let trimmed = comment_text.trim();
+    trimmed.starts_with("stylelint-disable")
+        || trimmed.starts_with("stylelint-enable")
+        || trimmed.starts_with("gale-disable")
+        || trimmed.starts_with("gale-enable")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gale_css_parser::Syntax;
+
+    fn scss_ctx(source: &str) -> RuleContext {
+        RuleContext {
+            file_path: "t.scss",
+            source,
+            syntax: Syntax::Scss,
+            options: None,
+        }
+    }
+
+    fn scss_ctx_with_option<'a>(source: &'a str, opts: &'a serde_json::Value) -> RuleContext<'a> {
+        RuleContext {
+            file_path: "t.scss",
+            source,
+            syntax: Syntax::Scss,
+            options: Some(opts),
+        }
+    }
+
+    #[test]
+    fn always_allows_empty_line_before() {
+        let src = ".foo { color: red; }\n\n// comment\n.bar {}";
+        let d = ScssDoubleSlashCommentEmptyLineBefore.check_root(&[], &scss_ctx(src));
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn always_reports_no_empty_line_before() {
+        let src = ".foo { color: red; }\n// comment\n.bar {}";
+        let d = ScssDoubleSlashCommentEmptyLineBefore.check_root(&[], &scss_ctx(src));
+        assert_eq!(d.len(), 1);
+        assert!(d[0].message.contains("Expected empty line"));
+    }
+
+    #[test]
+    fn never_allows_no_empty_line() {
+        let opts = serde_json::json!("never");
+        let src = ".foo { color: red; }\n// comment\n.bar {}";
+        let d =
+            ScssDoubleSlashCommentEmptyLineBefore.check_root(&[], &scss_ctx_with_option(src, &opts));
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn never_reports_empty_line() {
+        let opts = serde_json::json!("never");
+        let src = ".foo { color: red; }\n\n// comment\n.bar {}";
+        let d =
+            ScssDoubleSlashCommentEmptyLineBefore.check_root(&[], &scss_ctx_with_option(src, &opts));
+        assert_eq!(d.len(), 1);
+        assert!(d[0].message.contains("Unexpected empty line"));
+    }
+
+    #[test]
+    fn always_except_first_nested() {
+        let opts = serde_json::json!(["always", { "except": ["first-nested"] }]);
+        let src = ".foo {\n  // first nested comment\n  color: red;\n}";
+        let d =
+            ScssDoubleSlashCommentEmptyLineBefore.check_root(&[], &scss_ctx_with_option(src, &opts));
+        // first-nested reverses "always" to "never", so no empty line is fine
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn always_except_first_nested_reports_empty_line() {
+        let opts = serde_json::json!(["always", { "except": ["first-nested"] }]);
+        let src = ".foo {\n\n  // first nested comment\n  color: red;\n}";
+        let d =
+            ScssDoubleSlashCommentEmptyLineBefore.check_root(&[], &scss_ctx_with_option(src, &opts));
+        // first-nested reverses "always" to "never", so empty line is bad
+        assert_eq!(d.len(), 1);
+        assert!(d[0].message.contains("Unexpected empty line"));
+    }
+
+    #[test]
+    fn ignore_between_comments() {
+        let opts = serde_json::json!(["always", { "ignore": ["between-comments"] }]);
+        let src = ".foo { color: red; }\n\n// first comment\n// second comment\n.bar {}";
+        let d =
+            ScssDoubleSlashCommentEmptyLineBefore.check_root(&[], &scss_ctx_with_option(src, &opts));
+        // first comment has empty line before - ok
+        // second comment has no empty line but previous line is a // comment - ignored
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn ignore_stylelint_commands() {
+        let opts = serde_json::json!(["always", { "ignore": ["stylelint-commands"] }]);
+        let src = ".foo { color: red; }\n// stylelint-disable color-no-invalid-hex\n.bar {}";
+        let d =
+            ScssDoubleSlashCommentEmptyLineBefore.check_root(&[], &scss_ctx_with_option(src, &opts));
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn skips_inline_comments() {
+        let src = ".foo { color: red; // inline\n}";
+        let d = ScssDoubleSlashCommentEmptyLineBefore.check_root(&[], &scss_ctx(src));
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn skips_non_scss() {
+        let ctx = RuleContext {
+            file_path: "t.css",
+            source: ".foo {}\n// comment",
+            syntax: Syntax::Css,
+            options: None,
+        };
+        assert!(
+            ScssDoubleSlashCommentEmptyLineBefore
+                .check_root(&[], &ctx)
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn allows_first_line_comment() {
+        // Comment at the very start of the file — no previous content
+        let src = "// first line comment\n.foo {}";
+        let d = ScssDoubleSlashCommentEmptyLineBefore.check_root(&[], &scss_ctx(src));
+        // At start of file, there's effectively an "empty line" (start of file)
+        assert!(d.is_empty());
+    }
+}
