@@ -372,8 +372,29 @@ impl Rule for FontFamilyNameQuotes {
                 continue;
             }
 
+            // If the value contains CSS var(), SCSS variables/interpolation, skip
+            // source scanning to avoid edge cases with complex values.
+            if decl.value.contains("var(") || decl.value.contains("#{")
+                || decl.value.starts_with('$') || decl.value.starts_with("var(")
+            {
+                self.check_from_parsed_value(decl, mode, &mut diagnostics);
+                continue;
+            }
+
+            // Guard: if span offset is 0 or past source, fall back to parsed value
+            if decl.span.offset == 0 && !source.starts_with(&decl.property) {
+                self.check_from_parsed_value(decl, mode, &mut diagnostics);
+                continue;
+            }
+
             let value_start = find_value_start(source, decl.span.offset, decl.property.len());
             let value_end = find_value_end(source, value_start);
+
+            // Sanity: if the detected value is unreasonably long, fall back
+            if value_end.saturating_sub(value_start) > 2000 {
+                self.check_from_parsed_value(decl, mode, &mut diagnostics);
+                continue;
+            }
 
             let family_start = if prop_lower == "font" {
                 match find_font_family_start_in_source(source, value_start, value_end) {

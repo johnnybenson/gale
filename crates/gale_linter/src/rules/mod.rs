@@ -178,8 +178,27 @@ pub mod stylistic_number_no_trailing_zeros;
 pub mod stylistic_property_case;
 pub mod stylistic_selector_attribute_operator_space_before;
 pub mod stylistic_selector_list_comma_newline_after;
+pub mod stylistic_selector_list_comma_newline_before;
+pub mod stylistic_selector_list_comma_space_after;
+pub mod stylistic_selector_list_comma_space_before;
+pub mod stylistic_selector_max_empty_lines;
+pub mod stylistic_selector_pseudo_class_parentheses_space_inside;
+pub mod stylistic_function_max_empty_lines;
+pub mod stylistic_value_list_comma_newline_before;
+pub mod stylistic_media_feature_range_operator_space_before;
+pub mod stylistic_media_feature_parentheses_space_inside;
+pub mod stylistic_block_closing_brace_newline_before;
 pub mod stylistic_unicode_bom;
 pub mod stylistic_unit_case;
+pub mod stylistic_indentation;
+pub mod stylistic_no_eol_whitespace;
+pub mod stylistic_no_extra_semicolons;
+pub mod stylistic_number_leading_zero;
+pub mod stylistic_declaration_block_semicolon_newline_after;
+pub mod stylistic_declaration_colon_newline_after;
+pub mod stylistic_selector_combinator_space_after;
+pub mod stylistic_selector_attribute_operator_space_after;
+pub mod stylistic_block_opening_brace_space_before;
 
 // SCSS-specific rules (scss/ prefix)
 pub mod scss_at_else_closing_brace_newline_after;
@@ -191,6 +210,7 @@ pub mod scss_at_if_closing_brace_newline_after;
 pub mod scss_at_if_closing_brace_space_after;
 pub mod scss_at_if_no_null;
 pub mod scss_at_import_partial_extension;
+pub mod scss_at_import_partial_extension_disallowed_list;
 pub mod scss_at_mixin_argumentless_call_parentheses;
 pub mod scss_at_mixin_pattern;
 pub mod scss_at_rule_conditional_no_parentheses;
@@ -514,8 +534,63 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(
         stylistic_selector_list_comma_newline_after::StylisticSelectorListCommaNewlineAfter,
     ));
+    registry.register(Box::new(
+        stylistic_selector_list_comma_newline_before::StylisticSelectorListCommaNewlineBefore,
+    ));
+    registry.register(Box::new(
+        stylistic_selector_list_comma_space_after::StylisticSelectorListCommaSpaceAfter,
+    ));
+    registry.register(Box::new(
+        stylistic_selector_list_comma_space_before::StylisticSelectorListCommaSpaceBefore,
+    ));
+    registry.register(Box::new(
+        stylistic_selector_max_empty_lines::StylisticSelectorMaxEmptyLines,
+    ));
+    registry.register(Box::new(
+        stylistic_selector_pseudo_class_parentheses_space_inside::StylisticSelectorPseudoClassParenthesesSpaceInside,
+    ));
+    registry.register(Box::new(
+        stylistic_function_max_empty_lines::StylisticFunctionMaxEmptyLines,
+    ));
+    registry.register(Box::new(
+        stylistic_value_list_comma_newline_before::StylisticValueListCommaNewlineBefore,
+    ));
+    registry.register(Box::new(
+        stylistic_media_feature_range_operator_space_before::StylisticMediaFeatureRangeOperatorSpaceBefore,
+    ));
+    registry.register(Box::new(
+        stylistic_media_feature_parentheses_space_inside::StylisticMediaFeatureParenthesesSpaceInside,
+    ));
+    registry.register(Box::new(
+        stylistic_block_closing_brace_newline_before::StylisticBlockClosingBraceNewlineBefore,
+    ));
     registry.register(Box::new(stylistic_unicode_bom::StylisticUnicodeBom));
     registry.register(Box::new(stylistic_unit_case::StylisticUnitCase));
+    // registry.register(Box::new(stylistic_indentation::StylisticIndentation));
+    registry.register(Box::new(
+        stylistic_no_eol_whitespace::StylisticNoEolWhitespace,
+    ));
+    registry.register(Box::new(
+        stylistic_no_extra_semicolons::StylisticNoExtraSemicolons,
+    ));
+    registry.register(Box::new(
+        stylistic_number_leading_zero::StylisticNumberLeadingZero,
+    ));
+    registry.register(Box::new(
+        stylistic_declaration_block_semicolon_newline_after::StylisticDeclarationBlockSemicolonNewlineAfter,
+    ));
+    registry.register(Box::new(
+        stylistic_declaration_colon_newline_after::StylisticDeclarationColonNewlineAfter,
+    ));
+    registry.register(Box::new(
+        stylistic_selector_combinator_space_after::StylisticSelectorCombinatorSpaceAfter,
+    ));
+    registry.register(Box::new(
+        stylistic_selector_attribute_operator_space_after::StylisticSelectorAttributeOperatorSpaceAfter,
+    ));
+    registry.register(Box::new(
+        stylistic_block_opening_brace_space_before::StylisticBlockOpeningBraceSpaceBefore,
+    ));
 
     // SCSS-specific rules
     registry.register(Box::new(
@@ -537,6 +612,9 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(scss_at_if_no_null::ScssAtIfNoNull));
     registry.register(Box::new(
         scss_at_import_partial_extension::ScssAtImportPartialExtension,
+    ));
+    registry.register(Box::new(
+        scss_at_import_partial_extension_disallowed_list::ScssAtImportPartialExtensionDisallowedList,
     ));
     registry.register(Box::new(
         scss_at_mixin_argumentless_call_parentheses::ScssAtMixinArgumentlessCallParentheses,
