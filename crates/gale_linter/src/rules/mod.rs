@@ -154,12 +154,14 @@ pub mod stylistic_at_rule_semicolon_space_before;
 pub mod stylistic_block_closing_brace_newline_after;
 pub mod stylistic_block_closing_brace_newline_before;
 pub mod stylistic_block_opening_brace_newline_after;
+pub mod stylistic_block_opening_brace_space_after;
 pub mod stylistic_block_opening_brace_space_before;
 pub mod stylistic_color_hex_case;
 pub mod stylistic_declaration_bang_space_after;
 pub mod stylistic_declaration_bang_space_before;
 pub mod stylistic_declaration_block_semicolon_newline_after;
 pub mod stylistic_declaration_block_semicolon_newline_before;
+pub mod stylistic_declaration_block_semicolon_space_after;
 pub mod stylistic_declaration_block_semicolon_space_before;
 pub mod stylistic_declaration_block_trailing_semicolon;
 pub mod stylistic_declaration_colon_newline_after;
@@ -168,6 +170,7 @@ pub mod stylistic_declaration_colon_space_before;
 pub mod stylistic_function_comma_space_after;
 pub mod stylistic_function_comma_space_before;
 pub mod stylistic_function_max_empty_lines;
+pub mod stylistic_function_parentheses_newline_inside;
 pub mod stylistic_function_parentheses_space_inside;
 pub mod stylistic_function_whitespace_after;
 pub mod stylistic_indentation;
@@ -191,6 +194,7 @@ pub mod stylistic_selector_attribute_operator_space_after;
 pub mod stylistic_selector_attribute_operator_space_before;
 pub mod stylistic_selector_combinator_space_after;
 pub mod stylistic_selector_combinator_space_before;
+pub mod stylistic_selector_descendant_combinator_no_non_space;
 pub mod stylistic_selector_list_comma_newline_after;
 pub mod stylistic_selector_list_comma_newline_before;
 pub mod stylistic_selector_list_comma_space_after;
@@ -206,6 +210,7 @@ pub mod stylistic_value_list_comma_newline_after;
 pub mod stylistic_value_list_comma_newline_before;
 pub mod stylistic_value_list_comma_space_after;
 pub mod stylistic_value_list_comma_space_before;
+pub mod stylistic_value_list_max_empty_lines;
 
 // SCSS-specific rules (scss/ prefix)
 pub mod scss_at_else_closing_brace_newline_after;
@@ -575,6 +580,9 @@ pub fn register_all(registry: &mut RuleRegistry) {
         stylistic_function_comma_space_before::StylisticFunctionCommaSpaceBefore,
     ));
     registry.register(Box::new(
+        stylistic_function_parentheses_newline_inside::StylisticFunctionParenthesesNewlineInside,
+    ));
+    registry.register(Box::new(
         stylistic_function_parentheses_space_inside::StylisticFunctionParenthesesSpaceInside,
     ));
     registry.register(Box::new(
@@ -587,6 +595,9 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(stylistic_color_hex_case::StylisticColorHexCase));
     registry.register(Box::new(
         stylistic_declaration_block_semicolon_newline_before::StylisticDeclarationBlockSemicolonNewlineBefore,
+    ));
+    registry.register(Box::new(
+        stylistic_declaration_block_semicolon_space_after::StylisticDeclarationBlockSemicolonSpaceAfter,
     ));
     registry.register(Box::new(
         stylistic_declaration_block_semicolon_space_before::StylisticDeclarationBlockSemicolonSpaceBefore,
@@ -684,6 +695,15 @@ pub fn register_all(registry: &mut RuleRegistry) {
     ));
     registry.register(Box::new(
         stylistic_value_list_comma_space_before::StylisticValueListCommaSpaceBefore,
+    ));
+    registry.register(Box::new(
+        stylistic_value_list_max_empty_lines::StylisticValueListMaxEmptyLines,
+    ));
+    registry.register(Box::new(
+        stylistic_selector_descendant_combinator_no_non_space::StylisticSelectorDescendantCombinatorNoNonSpace,
+    ));
+    registry.register(Box::new(
+        stylistic_block_opening_brace_space_after::StylisticBlockOpeningBraceSpaceAfter,
     ));
 
     // SCSS-specific rules
