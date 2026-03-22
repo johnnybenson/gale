@@ -59,6 +59,26 @@ impl Rule for StylisticDeclarationBlockSemicolonNewlineAfter {
                 continue;
             }
 
+            // Skip SCSS interpolation #{...}
+            if bytes[i] == b'#' && i + 1 < len && bytes[i + 1] == b'{' {
+                i += 2;
+                let mut interp_depth = 1;
+                while i < len && interp_depth > 0 {
+                    if bytes[i] == b'{' {
+                        interp_depth += 1;
+                    } else if bytes[i] == b'}' {
+                        interp_depth -= 1;
+                    }
+                    if interp_depth > 0 {
+                        i += 1;
+                    }
+                }
+                if i < len {
+                    i += 1;
+                }
+                continue;
+            }
+
             if bytes[i] == b'{' {
                 depth += 1;
                 i += 1;
