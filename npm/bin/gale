@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "Gale binary not found. Run 'npm rebuild @lyricalstring/gale' to install."
+exit 1
