@@ -515,7 +515,12 @@ impl FontFamilyNameQuotes {
     ) {
         let families = parse_font_families_from_value(&decl.value);
         for (name, quoted) in families {
-            if name.starts_with('$') || name.starts_with("var(") || name.starts_with('@') {
+            if name.starts_with('$')
+                || name.starts_with("var(")
+                || name.starts_with('@')
+                || name.contains("#{")
+                || name.contains('(')
+            {
                 continue;
             }
             let family = FontFamilyToken {

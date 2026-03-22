@@ -47,6 +47,16 @@ impl Rule for MediaFeatureRangeNotation {
             return vec![];
         }
 
+        // Skip media queries containing SCSS/Less variables or interpolation —
+        // the actual values are unknown until compilation, so range notation
+        // cannot be determined.
+        if at.params.contains('$')
+            || at.params.contains("#{")
+            || at.params.contains("@{")
+        {
+            return vec![];
+        }
+
         let params_lower = at.params.to_ascii_lowercase();
         let mut diags = Vec::new();
 

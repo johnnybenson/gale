@@ -9,7 +9,20 @@ use crate::rule::{Rule, RuleContext};
 /// E.g., `@media (-webkit-min-device-pixel-ratio: 2)` should be flagged.
 pub struct MediaFeatureNameNoVendorPrefix;
 
-const VENDOR_PREFIXES: &[&str] = &["-webkit-", "-moz-", "-ms-", "-o-"];
+/// Specific vendor-prefixed media features that Stylelint flags.
+/// This matches Stylelint's approach: only known autoprefixable features are
+/// flagged, NOT every occurrence of a vendor prefix in a media query.
+const VENDOR_PREFIXED_FEATURES: &[&str] = &[
+    "-webkit-device-pixel-ratio",
+    "-webkit-min-device-pixel-ratio",
+    "-webkit-max-device-pixel-ratio",
+    "-o-device-pixel-ratio",
+    "-o-min-device-pixel-ratio",
+    "-o-max-device-pixel-ratio",
+    "-moz-device-pixel-ratio",
+    "min--moz-device-pixel-ratio",
+    "max--moz-device-pixel-ratio",
+];
 
 impl Rule for MediaFeatureNameNoVendorPrefix {
     fn name(&self) -> &'static str {
@@ -37,8 +50,8 @@ impl Rule for MediaFeatureNameNoVendorPrefix {
         let params_lower = rule.params.to_ascii_lowercase();
         let mut diags = Vec::new();
 
-        for prefix in VENDOR_PREFIXES {
-            if params_lower.contains(prefix) {
+        for feature in VENDOR_PREFIXED_FEATURES {
+            if params_lower.contains(feature) {
                 diags.push(
                     Diagnostic::new(
                         self.name(),

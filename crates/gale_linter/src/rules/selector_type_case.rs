@@ -113,6 +113,45 @@ fn extract_type_selectors(selector: &str) -> Vec<String> {
     while i < len {
         let ch = chars[i];
 
+        // Skip SCSS/Less interpolation blocks: #{...} or @{...}
+        // Also consume any trailing identifier characters that are part of the
+        // interpolated name (e.g. `.#{$prefix}__itemsWrapper` — the suffix
+        // `__itemsWrapper` belongs to the same class selector).
+        if (ch == '#' || ch == '@') && i + 1 < len && chars[i + 1] == '{' {
+            i += 2;
+            let mut depth = 1;
+            while i < len && depth > 0 {
+                if chars[i] == '{' {
+                    depth += 1;
+                } else if chars[i] == '}' {
+                    depth -= 1;
+                }
+                i += 1;
+            }
+            // Consume trailing identifier chars (part of the interpolated token)
+            while i < len && (chars[i].is_alphanumeric() || chars[i] == '-' || chars[i] == '_') {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Skip SCSS variables ($var)
+        if ch == '$' {
+            i += 1;
+            while i < len && (chars[i].is_alphanumeric() || chars[i] == '-' || chars[i] == '_') {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Skip SCSS line comments (// ...)
+        if ch == '/' && i + 1 < len && chars[i + 1] == '/' {
+            while i < len && chars[i] != '\n' {
+                i += 1;
+            }
+            continue;
+        }
+
         // Skip attribute selectors entirely.
         if ch == '[' {
             while i < len && chars[i] != ']' {

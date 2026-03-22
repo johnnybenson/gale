@@ -27,6 +27,11 @@ impl Rule for SelectorNotNotation {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+        // Skip selectors with SCSS/Less interpolation — the final selector is
+        // unknown until compilation, so checking notation is meaningless.
+        if rule.selector.contains("#{") || rule.selector.contains("@{") {
+            return vec![];
+        }
         let lower = rule.selector.to_ascii_lowercase();
         if has_chained_not(&lower) {
             vec![Diagnostic::new(

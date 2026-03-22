@@ -46,19 +46,37 @@ impl Rule for CommentWhitespaceInside {
             return vec![];
         }
 
-        // Extract the inner content between /* and */
-        let inner = &raw[2..raw.len() - 2];
+        // Extract the inner content between /* and */, skipping any extra
+        // asterisks that form part of the opener/closer (e.g. /** ... **/).
+        // Stylelint treats `/**` the same as `/*` — the extra `*` chars are
+        // part of the comment marker, not the content.
+        let inner_full = &raw[2..raw.len() - 2];
+        let leading_stars = inner_full.chars().take_while(|c| *c == '*').count();
+        let trailing_stars = inner_full.chars().rev().take_while(|c| *c == '*').count();
+        let inner_start = leading_stars;
+        let inner_end = inner_full.len().saturating_sub(trailing_stars);
+        let inner = if inner_start >= inner_end {
+            ""
+        } else {
+            &inner_full[inner_start..inner_end]
+        };
 
-        // Skip empty comments /**/
+        // Skip empty comments /**/ or /****/
         if inner.is_empty() {
+            return vec![];
+        }
+
+        // Skip Stylelint/Gale command comments (disable/enable directives).
+        let inner_trimmed = inner.trim();
+        if inner_trimmed.starts_with("stylelint-") || inner_trimmed.starts_with("gale-") {
             return vec![];
         }
 
         let mut diags = Vec::new();
 
-        // Check for whitespace after /*
+        // Check for whitespace after the opener (e.g. after /** or /*)
         let missing_start = !inner.starts_with(|c: char| c.is_whitespace());
-        // Check for whitespace before */
+        // Check for whitespace before the closer (e.g. before */ or **/)
         let missing_end = !inner.ends_with(|c: char| c.is_whitespace());
 
         if missing_start {

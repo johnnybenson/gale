@@ -53,6 +53,12 @@ impl Rule for KeyframesNamePattern {
             return vec![];
         }
 
+        // Skip names with SCSS/Less interpolation — the actual runtime value
+        // is unknown, so pattern matching would produce false positives.
+        if name.contains("#{") || name.contains("@{") {
+            return vec![];
+        }
+
         // Strip optional quotes around the keyframes name
         let name = name
             .strip_prefix('"')

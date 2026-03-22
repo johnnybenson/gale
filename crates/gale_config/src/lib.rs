@@ -1169,6 +1169,42 @@ fn extract_imports(source: &str) -> Vec<(String, String)> {
 
 /// Extract a string literal value from text that starts with `'`, `"`, or a
 /// backtick. Returns the content without quotes.
+/// Detect re-export patterns like `module.exports = require("./path")`.
+///
+/// Returns the require path if the entire JS file is a re-export, i.e. the
+/// exported value is a `require()` call rather than an object literal.
+fn extract_reexport_require(source: &str) -> Option<String> {
+    for line in source.lines() {
+        let trimmed = line.trim();
+        // Skip comments and empty lines
+        if trimmed.is_empty()
+            || trimmed.starts_with("//")
+            || trimmed.starts_with("/*")
+            || trimmed.starts_with('*')
+            || trimmed.starts_with('"')
+        {
+            continue;
+        }
+        // Match: module.exports = require("./path")
+        // or:    module.exports=require('./path');
+        for prefix in &["module.exports", "exports"] {
+            if let Some(rest) = trimmed.strip_prefix(prefix) {
+                let rest = rest.trim_start();
+                if let Some(rest) = rest.strip_prefix('=') {
+                    let rest = rest.trim_start();
+                    if let Some(rest) = rest.strip_prefix("require(") {
+                        let rest = rest.trim_start();
+                        if let Some(path) = extract_string_literal(rest) {
+                            return Some(path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 fn extract_string_literal(s: &str) -> Option<String> {
     let s = s.trim();
     let quote = s.chars().next()?;
@@ -1536,6 +1572,20 @@ fn substitute_scalar_vars(source: &str) -> String {
 /// When `file_dir` is provided, relative imports (`./` or `../`) are resolved
 /// by reading the imported file and inlining the exported value.
 fn parse_js_config(source: &str, file_dir: Option<&Path>) -> Result<ConfigFile, ConfigError> {
+    // Handle re-export pattern: `module.exports = require("./relative")`
+    // This is common in npm config packages where index.js delegates to another file.
+    if let Some(file_dir) = file_dir {
+        if let Some(reexport_path) = extract_reexport_require(source) {
+            if reexport_path.starts_with("./") || reexport_path.starts_with("../") {
+                if let Some(resolved) = resolve_import_path(file_dir, &reexport_path) {
+                    if let Ok(contents) = std::fs::read_to_string(&resolved) {
+                        return parse_js_config(&contents, resolved.parent());
+                    }
+                }
+            }
+        }
+    }
+
     // Pre-process: resolve relative imports and inline their exported values.
     let source = resolve_js_imports(source, file_dir);
     // Strip remaining import/require lines that would confuse the JSON converter.
@@ -2904,6 +2954,9 @@ fn resolve_npm_config(package_name: &str, base_dir: &Path) -> Option<ConfigFile>
     for name in &[
         "index.json",
         "index.js",
+        "stylelint.config.js",
+        "stylelint.config.cjs",
+        "stylelint.config.mjs",
         ".stylelintrc.json",
         ".stylelintrc",
     ] {
@@ -3040,15 +3093,15 @@ fn collect_rules_from_extends(
                     rules.extend(sub_rules);
                     overrides.extend(sub_overrides);
                 }
-                // Then apply this config's own rules (later configs win)
+                // Then apply this config's own rules (later configs win).
+                // Off rules are kept in the map (not removed) so that they
+                // propagate upward through recursive extends and override
+                // rules enabled by earlier extends.  They are stripped out
+                // at the very end in `resolve_raw`.
                 let config_rules_raw = config.rules.unwrap_or_default();
                 for (name, value) in &config_rules_raw {
                     let resolved = value.resolve();
-                    if resolved.severity == Some(Severity::Off) {
-                        rules.remove(name);
-                    } else {
-                        rules.insert(name.clone(), resolved);
-                    }
+                    rules.insert(name.clone(), resolved);
                 }
                 // Collect rules explicitly set to null/Off by this config.
                 // These "nullified" rules must remain off even when an
@@ -3180,6 +3233,12 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
         rules = ext_rules;
         extended_overrides = ext_overrides;
     }
+
+    // 1b. Strip rules that extended configs disabled (severity == Off).
+    //     These Off entries were kept in the map during recursive extends
+    //     resolution so they could propagate upward and override rules
+    //     enabled by earlier extends.
+    rules.retain(|_, rc| rc.severity != Some(Severity::Off));
 
     // 2. Overlay user rules on top — user always wins.
     for (name, value) in raw.rules.unwrap_or_default() {
@@ -4077,6 +4136,29 @@ module.exports = data
 "#;
         let val = extract_default_export(src).unwrap();
         assert_eq!(val, "[1, 2, 3]");
+    }
+
+    #[test]
+    fn extract_reexport_require_detects_pattern() {
+        let src = r#""use strict"
+module.exports = require("./stylelint.config")
+"#;
+        let path = extract_reexport_require(src);
+        assert_eq!(path, Some("./stylelint.config".to_string()));
+    }
+
+    #[test]
+    fn extract_reexport_require_no_match_for_object() {
+        let src = r#"module.exports = { rules: {} }"#;
+        let path = extract_reexport_require(src);
+        assert_eq!(path, None);
+    }
+
+    #[test]
+    fn extract_reexport_require_single_quotes() {
+        let src = "module.exports = require('./config');\n";
+        let path = extract_reexport_require(src);
+        assert_eq!(path, Some("./config".to_string()));
     }
 
     #[test]
