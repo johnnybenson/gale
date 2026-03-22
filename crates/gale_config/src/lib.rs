@@ -69,27 +69,44 @@ pub struct RuleConfig {
 pub struct ResolvedOverride {
     pub file_patterns: Vec<String>,
     matchers: Vec<GlobMatcher>,
+    exclude_matchers: Vec<GlobMatcher>,
     pub rules: HashMap<String, RuleConfig>,
 }
 
 impl ResolvedOverride {
-    /// Create a new resolved override from glob pattern strings and rules.
-    pub fn new(file_patterns: Vec<String>, rules: HashMap<String, RuleConfig>) -> Self {
+    /// Create a new resolved override from glob pattern strings, exclusion
+    /// patterns, and rules.
+    pub fn new(
+        file_patterns: Vec<String>,
+        ignore_patterns: Vec<String>,
+        rules: HashMap<String, RuleConfig>,
+    ) -> Self {
         let matchers = file_patterns
+            .iter()
+            .filter_map(|pat| Glob::new(pat).ok().map(|g| g.compile_matcher()))
+            .collect();
+        let exclude_matchers = ignore_patterns
             .iter()
             .filter_map(|pat| Glob::new(pat).ok().map(|g| g.compile_matcher()))
             .collect();
         Self {
             file_patterns,
             matchers,
+            exclude_matchers,
             rules,
         }
     }
 
-    /// Check whether a file path matches any of this override's glob patterns.
+    /// Check whether a file path matches any of this override's glob patterns
+    /// and is NOT excluded by the `ignoreFiles` patterns.
     pub fn matches(&self, file_path: &str) -> bool {
         let path = Path::new(file_path);
-        self.matchers.iter().any(|m| m.is_match(path))
+        let included = self.matchers.iter().any(|m| m.is_match(path));
+        if !included {
+            return false;
+        }
+        // Check exclusions
+        !self.exclude_matchers.iter().any(|m| m.is_match(path))
     }
 }
 
@@ -226,6 +243,10 @@ pub struct ConfigOverride {
     /// Accepts a single string or an array of strings.
     #[serde(default, deserialize_with = "string_or_vec")]
     pub files: Option<Vec<String>>,
+    /// Glob patterns for files to EXCLUDE from this override.
+    /// Stylelint's `ignoreFiles` field within an override entry.
+    #[serde(default, alias = "ignoreFiles", deserialize_with = "string_or_vec")]
+    pub ignore_files: Option<Vec<String>>,
     /// Rules to apply for matching files.
     pub rules: Option<HashMap<String, RuleConfigValue>>,
     /// Shared configs to extend for matching files.
@@ -2416,7 +2437,6 @@ fn convert_single_to_double_quotes(s: &str) -> String {
     let mut result = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
     let mut in_double_quote = false;
-    let mut in_template = false;
     let mut escape_next = false;
 
     while let Some(c) = chars.next() {
@@ -2426,19 +2446,37 @@ fn convert_single_to_double_quotes(s: &str) -> String {
             continue;
         }
 
-        // Handle template literal toggling
+        // Convert template literals (backtick strings) to double-quoted
+        // strings, same as single quotes.  Template literals in config files
+        // are virtually always plain strings without `${...}` interpolation.
         if c == '`' && !in_double_quote {
-            in_template = !in_template;
-            result.push(c);
-            continue;
-        }
-
-        // While inside a template literal, pass everything through unchanged
-        if in_template {
-            if c == '\\' {
-                escape_next = true;
+            result.push('"');
+            // Collect until closing backtick.
+            loop {
+                match chars.next() {
+                    None => break,
+                    Some('\\') => {
+                        if let Some(ec) = chars.next() {
+                            if ec == '`' {
+                                result.push('`');
+                            } else {
+                                result.push('\\');
+                                result.push(ec);
+                            }
+                        }
+                    }
+                    Some('`') => {
+                        result.push('"');
+                        break;
+                    }
+                    Some('"') => {
+                        // Escape inner double quotes.
+                        result.push('\\');
+                        result.push('"');
+                    }
+                    Some(ch) => result.push(ch),
+                }
             }
-            result.push(c);
             continue;
         }
 
@@ -3299,7 +3337,8 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
             }
         }
 
-        Some(ResolvedOverride::new(file_patterns, ov_rules))
+        let ignore_patterns = ov.ignore_files.unwrap_or_default();
+        Some(ResolvedOverride::new(file_patterns, ignore_patterns, ov_rules))
     };
 
     // Combine: extended overrides first, then user overrides.
@@ -4533,7 +4572,7 @@ module.exports = {
 
     #[test]
     fn resolved_override_matches_glob() {
-        let ov = ResolvedOverride::new(vec!["**/*.scss".to_string()], HashMap::new());
+        let ov = ResolvedOverride::new(vec!["**/*.scss".to_string()], vec![], HashMap::new());
         assert!(ov.matches("src/styles/main.scss"));
         assert!(ov.matches("main.scss"));
         assert!(!ov.matches("main.css"));
@@ -4544,6 +4583,7 @@ module.exports = {
     fn resolved_override_matches_multiple_patterns() {
         let ov = ResolvedOverride::new(
             vec!["**/*.scss".to_string(), "**/*.less".to_string()],
+            vec![],
             HashMap::new(),
         );
         assert!(ov.matches("main.scss"));

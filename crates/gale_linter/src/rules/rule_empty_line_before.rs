@@ -193,7 +193,6 @@ fn is_first_nested_by_source(source: &str, offset: usize) -> bool {
         return false;
     }
     let before = &source[..offset];
-    // Walk backwards past whitespace only (do NOT skip comments).
     let trimmed = before.trim_end();
     trimmed.ends_with('{')
 }
@@ -263,21 +262,42 @@ fn prev_is_comment(nodes: &[CssNode], index: usize) -> bool {
     matches!(&nodes[index - 1], CssNode::Comment(_))
 }
 
-/// Source-based check: is the non-empty line immediately before `offset` a comment?
-/// This catches SCSS `//` comments that may not be in the AST.
+/// Source-based check: is the previous non-whitespace content before `offset` a comment?
+/// This catches both single-line and multi-line block comments (`/** ... */`),
+/// as well as SCSS `//` comments that may not be in the AST.
 fn prev_line_is_comment(source: &str, offset: usize) -> bool {
     if offset == 0 || offset > source.len() {
         return false;
     }
     let before = &source[..offset];
-    // Walk backwards past the newline that ends the preceding line, then find the line content.
-    let trimmed = before.trim_end_matches([' ', '\t']);
-    let trimmed = trimmed.strip_suffix('\n').unwrap_or(trimmed);
-    let trimmed = trimmed.strip_suffix('\r').unwrap_or(trimmed);
-    // Now find the start of this line.
+    let bytes = before.as_bytes();
+    let mut pos = before.len();
+
+    // Walk backwards past whitespace
+    while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t' | b'\n' | b'\r') {
+        pos -= 1;
+    }
+    if pos == 0 {
+        return false;
+    }
+
+    // `pos` is a byte offset into ASCII whitespace, so it's always a valid
+    // char boundary.  However, the content *before* the whitespace may contain
+    // multi-byte characters.  Use the trimmed slice for all subsequent checks.
+    let trimmed = &before[..pos];
+
+    // Check if the previous content ends with `*/` (block comment)
+    if trimmed.ends_with("*/") {
+        // Find the matching `/*`
+        if trimmed[..trimmed.len() - 2].rfind("/*").is_some() {
+            return true;
+        }
+    }
+
+    // Check if the previous line starts with `//` (SCSS line comment)
     let line_start = trimmed.rfind('\n').map(|p| p + 1).unwrap_or(0);
     let line = trimmed[line_start..].trim();
-    line.starts_with("//") || (line.starts_with("/*") && line.ends_with("*/"))
+    line.starts_with("//")
 }
 
 /// Source-based check: is the non-empty line immediately before `offset` a
@@ -732,6 +752,158 @@ mod tests {
         ];
         let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx_with_options(src, &opts));
         assert!(d.is_empty(), "ignore after-comment should skip the check");
+    }
+
+    #[test]
+    fn ignore_after_multi_line_block_comment_skips() {
+        // With ignore: ["after-comment"], a rule after a multi-line block comment
+        // (e.g. /** ... */) should be ignored — this was previously broken because
+        // prev_line_is_comment only checked the single line immediately before.
+        let opts = serde_json::json!(["always", {"ignore": ["after-comment"]}]);
+        let src = "/**\n * Multi-line comment\n */\nb { color: blue; }";
+        let b_offset = src.find("b {").unwrap();
+        let comment_offset = 0;
+        let comment_len = src.find("*/").unwrap() + 2;
+        let nodes = vec![
+            CssNode::Comment(gale_css_parser::Comment {
+                is_line: false,
+                text: "*\n * Multi-line comment\n ".to_string(),
+                span: ParserSpan::new(comment_offset, comment_len),
+            }),
+            CssNode::Style(StyleRule {
+                selector: "b".to_string(),
+                declarations: vec![],
+                children: vec![],
+                span: ParserSpan::new(b_offset, 18),
+            }),
+        ];
+        let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx_with_options(src, &opts));
+        assert!(
+            d.is_empty(),
+            "ignore after-comment should skip rules after multi-line block comments"
+        );
+    }
+
+    #[test]
+    fn ignore_after_multi_line_comment_source_based() {
+        // Source-based detection: even without the comment in the AST,
+        // prev_line_is_comment should detect multi-line block comments.
+        let opts = serde_json::json!(["always", {"ignore": ["after-comment"]}]);
+        let src = "a { color: red; }\n/**\n * docs\n */\nb { color: blue; }";
+        let b_offset = src.find("b {").unwrap();
+        let nodes = vec![
+            CssNode::Style(StyleRule {
+                selector: "a".to_string(),
+                declarations: vec![],
+                children: vec![],
+                span: ParserSpan::new(0, 17),
+            }),
+            // No Comment node in AST — rely on source-based detection
+            CssNode::Style(StyleRule {
+                selector: "b".to_string(),
+                declarations: vec![],
+                children: vec![],
+                span: ParserSpan::new(b_offset, 18),
+            }),
+        ];
+        let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx_with_options(src, &opts));
+        assert!(
+            d.is_empty(),
+            "source-based detection should handle multi-line block comments for ignore after-comment"
+        );
+    }
+
+    #[test]
+    fn is_first_nested_not_when_comment_between_brace_and_rule() {
+        // A rule that follows a block comment after `{` is NOT first-nested
+        // because the comment is the actual first child. Stylelint's
+        // `isFirstNested` only returns true if the node is the literal first
+        // child — no intervening comments.
+        let opts = serde_json::json!(["always", {"except": ["first-nested"]}]);
+        let src = "a {\n  /** comment */\n  b { color: red; }\n}";
+        let b_offset = src.find("b {").unwrap();
+        let nodes = vec![CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![],
+            children: vec![StyleRule {
+                selector: "b".to_string(),
+                declarations: vec![Declaration {
+                    property: "color".to_string(),
+                    value: "red".to_string(),
+                    span: ParserSpan::new(b_offset + 4, 10),
+                    important: false,
+                }],
+                children: vec![],
+                span: ParserSpan::new(b_offset, 18),
+            }],
+            span: ParserSpan::new(0, src.len()),
+        })];
+        let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx_with_options(src, &opts));
+        assert!(
+            !d.is_empty(),
+            "first-nested exception should NOT apply when a comment sits between {{ and the rule"
+        );
+    }
+
+    #[test]
+    fn is_first_nested_not_when_multi_line_comment_between_brace_and_rule() {
+        // A rule that follows a multi-line block comment after `{` is NOT
+        // first-nested — the comment is the first child.
+        let opts = serde_json::json!(["always", {"except": ["first-nested"]}]);
+        let src = "a {\n  /**\n   * docs\n   */\n  b { color: red; }\n}";
+        let b_offset = src.find("b {").unwrap();
+        let nodes = vec![CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![],
+            children: vec![StyleRule {
+                selector: "b".to_string(),
+                declarations: vec![Declaration {
+                    property: "color".to_string(),
+                    value: "red".to_string(),
+                    span: ParserSpan::new(b_offset + 4, 10),
+                    important: false,
+                }],
+                children: vec![],
+                span: ParserSpan::new(b_offset, 18),
+            }],
+            span: ParserSpan::new(0, src.len()),
+        })];
+        let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx_with_options(src, &opts));
+        assert!(
+            !d.is_empty(),
+            "first-nested exception should NOT apply with multi-line block comment between {{ and rule"
+        );
+    }
+
+    #[test]
+    fn prev_line_is_comment_detects_multi_line() {
+        // Unit test for the prev_line_is_comment helper
+        let src = "/**\n * Multi-line\n */\n.foo {}";
+        let offset = src.find(".foo").unwrap();
+        assert!(
+            prev_line_is_comment(src, offset),
+            "should detect multi-line block comment"
+        );
+    }
+
+    #[test]
+    fn prev_line_is_comment_detects_single_line_block() {
+        let src = "/* single line */\n.foo {}";
+        let offset = src.find(".foo").unwrap();
+        assert!(
+            prev_line_is_comment(src, offset),
+            "should detect single-line block comment"
+        );
+    }
+
+    #[test]
+    fn prev_line_is_comment_detects_scss_line_comment() {
+        let src = "// scss comment\n.foo {}";
+        let offset = src.find(".foo").unwrap();
+        assert!(
+            prev_line_is_comment(src, offset),
+            "should detect SCSS line comment"
+        );
     }
 
     #[test]
