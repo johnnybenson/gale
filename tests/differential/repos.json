@@ -94,8 +94,8 @@
     "name": "elastic-eui",
     "repo": "elastic/eui",
     "branch": "main",
-    "paths": ["packages"],
-    "notes": "Elastic UI framework. Requires Node 22.22.0+."
+    "paths": ["packages/eui"],
+    "notes": "Elastic UI framework. Requires Node 22.22.0. Yarn workspace monorepo."
   },
   {
     "name": "wp-calypso",

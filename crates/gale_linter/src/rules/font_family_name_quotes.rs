@@ -372,58 +372,9 @@ impl Rule for FontFamilyNameQuotes {
                 continue;
             }
 
-            // If the value contains CSS var(), SCSS variables/interpolation, skip
-            // source scanning to avoid edge cases with complex values.
-            if decl.value.contains("var(") || decl.value.contains("#{")
-                || decl.value.starts_with('$') || decl.value.starts_with("var(")
-            {
-                self.check_from_parsed_value(decl, mode, &mut diagnostics);
-                continue;
-            }
-
-            // Guard: if span offset is 0 or past source, fall back to parsed value
-            if decl.span.offset == 0 && !source.starts_with(&decl.property) {
-                self.check_from_parsed_value(decl, mode, &mut diagnostics);
-                continue;
-            }
-
-            // Guard: if span offset + property length would exceed source, fall back
-            if decl.span.offset + decl.property.len() >= source.len() {
-                self.check_from_parsed_value(decl, mode, &mut diagnostics);
-                continue;
-            }
-
-            let value_start = find_value_start(source, decl.span.offset, decl.property.len());
-            let value_end = find_value_end(source, value_start);
-
-            // Sanity: if the detected value is unreasonably long, fall back
-            if value_end.saturating_sub(value_start) > 1000 {
-                self.check_from_parsed_value(decl, mode, &mut diagnostics);
-                continue;
-            }
-
-            let family_start = if prop_lower == "font" {
-                match find_font_family_start_in_source(source, value_start, value_end) {
-                    Some(start) => start,
-                    None => continue,
-                }
-            } else {
-                value_start
-            };
-
-            let families = parse_font_families_from_source(source, family_start, value_end);
-
-            for family in &families {
-                // Skip SCSS variables, CSS custom properties, Less variables
-                if family.name.starts_with('$')
-                    || family.name.starts_with("var(")
-                    || family.name.starts_with('@')
-                {
-                    continue;
-                }
-
-                self.check_family(family, mode, &mut diagnostics);
-            }
+            // Use parsed value for checking — source scanning is fragile
+            // with multi-line values, SCSS variables, and CSS var().
+            self.check_from_parsed_value(decl, mode, &mut diagnostics);
         }
 
         diagnostics
