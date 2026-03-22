@@ -9,6 +9,67 @@ use crate::rule::{Rule, RuleContext};
 /// Equivalent to Stylelint's `no-irregular-whitespace` rule.
 pub struct NoIrregularWhitespace;
 
+/// Find byte ranges of comments in CSS/SCSS source.
+/// Returns a list of (start, end) byte offset pairs.
+/// Handles both block comments (`/* ... */`) and single-line comments (`// ...`).
+fn find_comment_ranges(source: &str) -> Vec<(usize, usize)> {
+    let mut ranges = Vec::new();
+    let bytes = source.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    // Track if we're inside a string to avoid matching comment delimiters in strings.
+    let mut in_string: Option<u8> = None;
+
+    while i < len {
+        if let Some(quote) = in_string {
+            if bytes[i] == b'\\' {
+                i += 2; // skip escaped char
+                continue;
+            }
+            if bytes[i] == quote {
+                in_string = None;
+            }
+            i += 1;
+            continue;
+        }
+
+        if bytes[i] == b'"' || bytes[i] == b'\'' {
+            in_string = Some(bytes[i]);
+            i += 1;
+            continue;
+        }
+
+        if i + 1 < len && bytes[i] == b'/' {
+            if bytes[i + 1] == b'*' {
+                // Block comment
+                let start = i;
+                i += 2;
+                while i + 1 < len {
+                    if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                        i += 2;
+                        break;
+                    }
+                    i += 1;
+                }
+                ranges.push((start, i));
+                continue;
+            } else if bytes[i + 1] == b'/' {
+                // Single-line comment (SCSS/Less)
+                let start = i;
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                ranges.push((start, i));
+                continue;
+            }
+        }
+
+        i += 1;
+    }
+
+    ranges
+}
+
 /// Characters considered irregular whitespace.
 const IRREGULAR_WHITESPACE_CHARS: &[char] = &[
     '\u{00A0}', // Non-breaking space
@@ -47,8 +108,16 @@ impl Rule for NoIrregularWhitespace {
     fn check_root(&self, _nodes: &[CssNode], context: &RuleContext) -> Vec<Diagnostic> {
         let mut diagnostics = Vec::new();
 
+        // Build a set of byte ranges that are inside comments so we can skip them.
+        // Stylelint does not flag irregular whitespace inside comments.
+        let comment_ranges = find_comment_ranges(context.source);
+
         for (i, ch) in context.source.char_indices() {
             if IRREGULAR_WHITESPACE_CHARS.contains(&ch) {
+                // Skip if inside a comment
+                if comment_ranges.iter().any(|&(start, end)| i >= start && i < end) {
+                    continue;
+                }
                 diagnostics.push(
                     Diagnostic::new(
                         self.name(),

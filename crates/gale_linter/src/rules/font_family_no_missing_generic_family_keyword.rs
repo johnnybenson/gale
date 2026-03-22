@@ -84,23 +84,21 @@ impl Rule for FontFamilyNoMissingGenericFamilyKeyword {
                 }
             }
 
-            // Split by comma and check the last entry.
-            let last_family = match value.rsplit(',').next() {
-                Some(f) => f.trim(),
-                None => continue,
-            };
+            // Split by comma and check if ANY entry is a generic family keyword.
+            // Stylelint accepts the declaration if any family in the list is generic,
+            // not just the last one.
+            let has_generic = value.split(',').any(|family| {
+                let trimmed = family.trim();
+                let unquoted = trimmed
+                    .trim_start_matches(['"', '\''])
+                    .trim_end_matches(['"', '\''])
+                    .trim();
+                GENERIC_FAMILIES
+                    .iter()
+                    .any(|&g| g.eq_ignore_ascii_case(unquoted))
+            });
 
-            // Remove surrounding quotes if present.
-            let last_family_unquoted = last_family
-                .trim_start_matches(['"', '\''])
-                .trim_end_matches(['"', '\''])
-                .trim();
-
-            let is_generic = GENERIC_FAMILIES
-                .iter()
-                .any(|&g| g.eq_ignore_ascii_case(last_family_unquoted));
-
-            if !is_generic {
+            if !has_generic {
                 diagnostics.push(
                     Diagnostic::new(self.name(), "Unexpected missing generic font family")
                         .severity(self.default_severity())

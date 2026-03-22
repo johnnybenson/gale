@@ -118,6 +118,10 @@ fn check_urls(
             if except_empty && url_content.is_empty() {
                 continue;
             }
+            // Skip data URIs — Stylelint does not flag data URIs in either mode
+            if is_data_uri(&url_content) {
+                continue;
+            }
             let abs_offset = base_offset + rel_offset;
             let total_len = url_content.len() + 2 * quote_len;
             diags.push(
@@ -226,6 +230,10 @@ fn find_empty_urls(value: &str) -> Vec<(usize, ())> {
     let mut search_from = 0;
     while let Some(pos) = lower[search_from..].find("url(") {
         let abs_pos = search_from + pos;
+        if !is_standalone_url(&lower, abs_pos) {
+            search_from = abs_pos + 4;
+            continue;
+        }
         let content_start = abs_pos + 4;
         if content_start < value.len() {
             let rest = &value[content_start..];
@@ -241,6 +249,18 @@ fn find_empty_urls(value: &str) -> Vec<(usize, ())> {
     results
 }
 
+/// Check whether the `url(` match at `abs_pos` is a standalone `url()` call
+/// and not part of a longer function name like `static-url(`.
+fn is_standalone_url(value: &str, abs_pos: usize) -> bool {
+    if abs_pos == 0 {
+        return true;
+    }
+    let prev = value.as_bytes()[abs_pos - 1];
+    // If the char before "url(" is alphanumeric, underscore or hyphen,
+    // then "url(" is part of a longer identifier (e.g. "static-url(").
+    !(prev.is_ascii_alphanumeric() || prev == b'_' || prev == b'-')
+}
+
 /// Find quoted URL contents inside `url(...)` calls.
 /// Returns (byte_offset_of_quote, inner_content_string, quote_char_len).
 fn find_quoted_urls(value: &str) -> Vec<(usize, String, usize)> {
@@ -249,6 +269,11 @@ fn find_quoted_urls(value: &str) -> Vec<(usize, String, usize)> {
     let mut search_from = 0;
     while let Some(pos) = lower[search_from..].find("url(") {
         let abs_pos = search_from + pos;
+        // Skip if "url(" is part of a longer function name like "static-url("
+        if !is_standalone_url(&lower, abs_pos) {
+            search_from = abs_pos + 4;
+            continue;
+        }
         let content_start = abs_pos + 4; // skip "url("
         if content_start < value.len() {
             let rest = &value[content_start..];
@@ -281,6 +306,10 @@ fn find_unquoted_urls(value: &str, syntax: Syntax) -> Vec<(usize, String)> {
     let mut search_from = 0;
     while let Some(pos) = lower[search_from..].find("url(") {
         let abs_pos = search_from + pos;
+        if !is_standalone_url(&lower, abs_pos) {
+            search_from = abs_pos + 4;
+            continue;
+        }
         let content_start = abs_pos + 4; // skip "url("
         if content_start < value.len() {
             let rest = &value[content_start..];

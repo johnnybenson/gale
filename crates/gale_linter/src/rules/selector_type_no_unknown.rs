@@ -83,6 +83,18 @@ fn extract_type_selectors(selector: &str) -> Vec<String> {
         let ch = chars[i];
 
         match ch {
+            // Skip block comments (/* ... */)
+            '/' if i + 1 < len && chars[i + 1] == '*' => {
+                i += 2;
+                while i + 1 < len && !(chars[i] == '*' && chars[i + 1] == '/') {
+                    i += 1;
+                }
+                if i + 1 < len {
+                    i += 2; // skip closing */
+                }
+                expect_type = true;
+                continue;
+            }
             // Skip pseudo-elements (::name)
             ':' if i + 1 < len && chars[i + 1] == ':' => {
                 i += 2;

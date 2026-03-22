@@ -20,10 +20,6 @@ fn longhands_for(shorthand: &str) -> Option<&'static [&'static str]> {
             "padding-left",
         ]),
         "border" => Some(&[
-            "border-top",
-            "border-right",
-            "border-bottom",
-            "border-left",
             "border-color",
             "border-style",
             "border-width",
