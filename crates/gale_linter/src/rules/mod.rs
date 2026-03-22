@@ -199,6 +199,13 @@ pub mod stylistic_declaration_colon_newline_after;
 pub mod stylistic_selector_combinator_space_after;
 pub mod stylistic_selector_attribute_operator_space_after;
 pub mod stylistic_block_opening_brace_space_before;
+pub mod stylistic_at_rule_name_case;
+pub mod stylistic_at_rule_semicolon_space_before;
+pub mod stylistic_block_opening_brace_newline_after;
+pub mod stylistic_media_feature_colon_space_after;
+pub mod stylistic_selector_attribute_brackets_space_inside;
+pub mod stylistic_selector_pseudo_class_case;
+pub mod stylistic_value_list_comma_space_before;
 
 // SCSS-specific rules (scss/ prefix)
 pub mod scss_at_else_closing_brace_newline_after;
@@ -566,7 +573,7 @@ pub fn register_all(registry: &mut RuleRegistry) {
     ));
     registry.register(Box::new(stylistic_unicode_bom::StylisticUnicodeBom));
     registry.register(Box::new(stylistic_unit_case::StylisticUnitCase));
-    // registry.register(Box::new(stylistic_indentation::StylisticIndentation));
+    registry.register(Box::new(stylistic_indentation::StylisticIndentation));
     registry.register(Box::new(
         stylistic_no_eol_whitespace::StylisticNoEolWhitespace,
     ));
@@ -590,6 +597,27 @@ pub fn register_all(registry: &mut RuleRegistry) {
     ));
     registry.register(Box::new(
         stylistic_block_opening_brace_space_before::StylisticBlockOpeningBraceSpaceBefore,
+    ));
+    registry.register(Box::new(
+        stylistic_at_rule_name_case::StylisticAtRuleNameCase,
+    ));
+    registry.register(Box::new(
+        stylistic_at_rule_semicolon_space_before::StylisticAtRuleSemicolonSpaceBefore,
+    ));
+    registry.register(Box::new(
+        stylistic_block_opening_brace_newline_after::StylisticBlockOpeningBraceNewlineAfter,
+    ));
+    registry.register(Box::new(
+        stylistic_media_feature_colon_space_after::StylisticMediaFeatureColonSpaceAfter,
+    ));
+    registry.register(Box::new(
+        stylistic_selector_attribute_brackets_space_inside::StylisticSelectorAttributeBracketsSpaceInside,
+    ));
+    registry.register(Box::new(
+        stylistic_selector_pseudo_class_case::StylisticSelectorPseudoClassCase,
+    ));
+    registry.register(Box::new(
+        stylistic_value_list_comma_space_before::StylisticValueListCommaSpaceBefore,
     ));
 
     // SCSS-specific rules
