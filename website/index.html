@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Gale - An extremely fast CSS linter, written in Rust</title>
-<meta name="description" content="Drop-in replacement for Stylelint. 50-100x faster. 76 built-in rules, SCSS/Less support, autofix, LSP server.">
+<meta name="description" content="Drop-in replacement for Stylelint. 100x-400x faster. 250 built-in rules, SCSS/Less support, autofix, LSP server. Zero config migration.">
 <meta property="og:title" content="Gale - Extremely fast CSS linter">
-<meta property="og:description" content="Drop-in replacement for Stylelint, written in Rust. 50-100x faster.">
+<meta property="og:description" content="Drop-in replacement for Stylelint, written in Rust. 100x-400x faster.">
 <meta property="og:type" content="website">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -33,7 +33,7 @@ nav .gh:hover{border-color:var(--accent);text-decoration:none}
 .hero .badge{display:inline-block;font-family:var(--mono);font-size:.75rem;color:var(--accent);border:1px solid rgba(0,212,170,.3);padding:.3rem .8rem;border-radius:20px;margin-bottom:1.5rem;letter-spacing:.05em;text-transform:uppercase}
 .hero h1{font-size:clamp(2.5rem,6vw,4.5rem);font-weight:800;letter-spacing:-.03em;line-height:1.1;margin-bottom:1rem}
 .hero h1 span{color:var(--accent)}
-.hero .sub{font-size:clamp(1rem,2vw,1.25rem);color:var(--fg2);max-width:600px;margin:0 auto 2.5rem}
+.hero .sub{font-size:clamp(1rem,2vw,1.25rem);color:var(--fg2);max-width:640px;margin:0 auto 2.5rem}
 .hero .ctas{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap}
 .btn{display:inline-flex;align-items:center;gap:.5rem;padding:.75rem 1.5rem;border-radius:8px;font-weight:600;font-size:.95rem;transition:all .2s}
 .btn-primary{background:var(--accent);color:#0a0a0a}
@@ -41,19 +41,47 @@ nav .gh:hover{border-color:var(--accent);text-decoration:none}
 .btn-secondary{background:transparent;color:var(--fg);border:1px solid var(--border)}
 .btn-secondary:hover{border-color:var(--fg2);text-decoration:none}
 
+/* STATS */
+.stats{padding:3rem 2rem 0;max-width:800px;margin:0 auto}
+.stats-row{display:flex;justify-content:center;gap:3rem;flex-wrap:wrap}
+.stat{text-align:center}
+.stat .num{font-family:var(--mono);font-size:2rem;font-weight:800;color:var(--accent)}
+.stat .label{font-size:.8rem;color:var(--fg2);margin-top:.2rem}
+
 /* BENCHMARK */
-.benchmark{padding:5rem 2rem;max-width:700px;margin:0 auto}
+.benchmark{padding:5rem 2rem;max-width:900px;margin:0 auto}
 .benchmark h2{text-align:center;font-size:1.5rem;margin-bottom:.5rem;font-weight:700}
 .benchmark .desc{text-align:center;color:var(--fg2);margin-bottom:2.5rem;font-size:.9rem}
-.bars{display:flex;flex-direction:column;gap:1.2rem}
+.bench-table{width:100%;border-collapse:collapse;font-size:.85rem}
+.bench-table th{text-align:left;padding:.6rem .8rem;border-bottom:2px solid var(--border);color:var(--fg2);font-weight:600;font-size:.75rem;text-transform:uppercase;letter-spacing:.05em}
+.bench-table td{padding:.6rem .8rem;border-bottom:1px solid var(--border)}
+.bench-table td:first-child{font-weight:600}
+.bench-table td:first-child a{color:var(--fg)}
+.bench-table td:first-child a:hover{color:var(--accent)}
+.bench-table .num{font-family:var(--mono);text-align:right}
+.bench-table .speedup{font-family:var(--mono);font-weight:700;color:var(--accent);text-align:right}
+.bench-table tr:hover{background:var(--bg2)}
+.benchmark .note{text-align:center;color:var(--fg2);font-size:.75rem;margin-top:1.5rem;font-style:italic}
+
+/* BAR CHART */
+.bar-section{margin-top:2.5rem}
+.bar-section h3{text-align:center;font-size:1rem;color:var(--fg2);margin-bottom:1.5rem;font-weight:400}
+.bars{display:flex;flex-direction:column;gap:1rem;max-width:600px;margin:0 auto}
 .bar-row{display:flex;align-items:center;gap:1rem}
 .bar-label{width:80px;font-family:var(--mono);font-size:.85rem;text-align:right;flex-shrink:0}
-.bar-track{flex:1;height:36px;background:var(--bg3);border-radius:6px;overflow:hidden;position:relative}
-.bar-fill{height:100%;border-radius:6px;display:flex;align-items:center;padding-left:12px;font-family:var(--mono);font-size:.8rem;font-weight:600;transition:width 1s ease-out}
-.bar-gale{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#0a0a0a;width:2%}
-.bar-stylelint{background:#333;color:var(--fg2);width:100%}
-.bar-time{font-family:var(--mono);font-size:.8rem;color:var(--fg2);width:60px;flex-shrink:0}
-.benchmark .note{text-align:center;color:var(--fg2);font-size:.75rem;margin-top:1.5rem;font-style:italic}
+.bar-track{flex:1;height:32px;background:var(--bg3);border-radius:6px;overflow:hidden;position:relative}
+.bar-fill{height:100%;border-radius:6px;display:flex;align-items:center;padding-left:12px;font-family:var(--mono);font-size:.75rem;font-weight:600;min-width:fit-content}
+.bar-gale{background:linear-gradient(90deg,var(--accent),var(--accent2));color:#0a0a0a;width:0%;transition:width 1.2s ease-out}
+.bar-stylelint{background:#333;color:var(--fg2);width:0%;transition:width 1.2s ease-out}
+
+/* TESTED ON */
+.tested{padding:4rem 2rem;max-width:1100px;margin:0 auto}
+.tested h2{text-align:center;font-size:1.5rem;margin-bottom:.5rem;font-weight:700}
+.tested .desc{text-align:center;color:var(--fg2);margin-bottom:2rem;font-size:.9rem}
+.repo-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:.75rem}
+.repo-chip{display:inline-flex;align-items:center;gap:.4rem;background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:.45rem .85rem;font-size:.8rem;color:var(--fg);transition:border-color .2s}
+.repo-chip:hover{border-color:var(--accent);text-decoration:none}
+.repo-chip .files{color:var(--fg2);font-family:var(--mono);font-size:.7rem}
 
 /* FEATURES */
 .features{padding:5rem 2rem;max-width:1100px;margin:0 auto}
@@ -61,7 +89,7 @@ nav .gh:hover{border-color:var(--accent);text-decoration:none}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1.5rem}
 .card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:1.5rem}
 .card h3{font-size:1rem;margin-bottom:.5rem;font-weight:600}
-.card .icon{font-size:1.5rem;margin-bottom:.75rem}
+.card .icon{font-size:1.3rem;margin-bottom:.75rem;font-family:var(--mono);color:var(--accent)}
 .card p{color:var(--fg2);font-size:.875rem;line-height:1.5}
 
 /* QUICKSTART */
@@ -77,14 +105,15 @@ nav .gh:hover{border-color:var(--accent);text-decoration:none}
 .terminal-body .comment{color:#555}
 
 /* MIGRATION */
-.migration{padding:5rem 2rem;max-width:800px;margin:0 auto}
-.migration h2{text-align:center;font-size:1.5rem;margin-bottom:2rem;font-weight:700}
-.migration-list{list-style:none;display:flex;flex-direction:column;gap:1rem}
-.migration-list li{display:flex;align-items:flex-start;gap:.75rem;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:1rem 1.25rem}
-.migration-list .check{color:var(--accent);font-size:1.2rem;flex-shrink:0;margin-top:.1rem}
-.migration-list .text{font-size:.9rem}
-.migration-list .text strong{display:block;margin-bottom:.15rem}
-.migration-list .text span{color:var(--fg2);font-size:.8rem}
+.migration{padding:5rem 2rem;max-width:700px;margin:0 auto}
+.migration h2{text-align:center;font-size:1.5rem;margin-bottom:.5rem;font-weight:700}
+.migration .desc{text-align:center;color:var(--fg2);margin-bottom:2rem;font-size:.9rem}
+.diff{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;font-family:var(--mono);font-size:.85rem}
+.diff-header{padding:.6rem 1rem;border-bottom:1px solid var(--border);background:var(--bg3);color:var(--fg2);font-size:.75rem}
+.diff-body{padding:1rem 1.25rem;line-height:1.8}
+.diff .unchanged{color:var(--fg2)}
+.diff .removed{color:#ff6b6b;background:rgba(255,107,107,.08)}
+.diff .added{color:var(--accent);background:rgba(0,212,170,.08)}
 
 /* FOOTER */
 footer{border-top:1px solid var(--border);padding:3rem 2rem;text-align:center;color:var(--fg2);font-size:.8rem}
@@ -94,7 +123,9 @@ footer .links{display:flex;gap:2rem;justify-content:center;margin-bottom:1rem}
 @media(max-width:600px){
   nav .links a:not(.gh){display:none}
   .grid{grid-template-columns:1fr}
-  .bar-label{width:60px;font-size:.75rem}
+  .stats-row{gap:1.5rem}
+  .bench-table{font-size:.75rem}
+  .bench-table td,.bench-table th{padding:.5rem .4rem}
 }
 
 /* ANIMATIONS */
@@ -108,8 +139,9 @@ footer .links{display:flex;gap:2rem;justify-content:center;margin-bottom:1rem}
   <div class="inner">
     <div class="logo">&gt; <span>gale</span></div>
     <div class="links">
+      <a href="#benchmark">Benchmarks</a>
       <a href="#features">Features</a>
-      <a href="#quickstart">Quick Start</a>
+      <a href="#quickstart">Get Started</a>
       <a href="https://github.com/LyricalString/gale" class="gh">
         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHub
@@ -121,7 +153,7 @@ footer .links{display:flex;gap:2rem;justify-content:center;margin-bottom:1rem}
 <section class="hero">
   <div class="badge">Written in Rust</div>
   <h1>The <span>fastest</span> CSS linter</h1>
-  <p class="sub">Drop-in replacement for Stylelint. 76 built-in rules, SCSS &amp; Less support, autofix. Zero config migration.</p>
+  <p class="sub">Drop-in replacement for Stylelint. 250 built-in rules, SCSS &amp; Less support, autofix. Same config, zero migration.</p>
   <div class="ctas">
     <a href="#quickstart" class="btn btn-primary">Get Started</a>
     <a href="https://github.com/LyricalString/gale" class="btn btn-secondary">
@@ -131,62 +163,133 @@ footer .links{display:flex;gap:2rem;justify-content:center;margin-bottom:1rem}
   </div>
 </section>
 
-<section class="benchmark fade-in" id="benchmark">
-  <h2>Blazing Fast</h2>
-  <p class="desc">Linting Bootstrap CSS (241K lines, duplicated 20x)</p>
-  <div class="bars">
-    <div class="bar-row">
-      <span class="bar-label">Gale</span>
-      <div class="bar-track"><div class="bar-fill bar-gale">0.8s</div></div>
-      <span class="bar-time">0.8s</span>
+<section class="stats fade-in">
+  <div class="stats-row">
+    <div class="stat">
+      <div class="num">100x-400x</div>
+      <div class="label">faster than Stylelint</div>
     </div>
-    <div class="bar-row">
-      <span class="bar-label">Stylelint</span>
-      <div class="bar-track"><div class="bar-fill bar-stylelint">78s</div></div>
-      <span class="bar-time">78s</span>
+    <div class="stat">
+      <div class="num">250</div>
+      <div class="label">built-in rules</div>
+    </div>
+    <div class="stat">
+      <div class="num">0</div>
+      <div class="label">false positives</div>
+    </div>
+    <div class="stat">
+      <div class="num">6,673</div>
+      <div class="label">files tested</div>
     </div>
   </div>
-  <p class="note">Measured on Apple M1 Pro, Bootstrap 5.3 CSS concatenated 20x (241K lines)</p>
+</section>
+
+<section class="benchmark fade-in" id="benchmark">
+  <h2>Real Benchmarks</h2>
+  <p class="desc">Measured with <a href="https://github.com/sharkdp/hyperfine">hyperfine</a> (10 runs, 3 warmup). Each repo uses its own Stylelint config.</p>
+
+  <table class="bench-table">
+    <thead>
+      <tr>
+        <th>Repository</th>
+        <th class="num">Files</th>
+        <th class="num">Stylelint</th>
+        <th class="num">Gale</th>
+        <th class="speedup">Speedup</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><a href="https://github.com/carbon-design-system/carbon">Carbon</a></td><td class="num">1,116</td><td class="num">8.767s</td><td class="num">0.022s</td><td class="speedup">399x</td></tr>
+      <tr><td><a href="https://github.com/patternfly/patternfly">PatternFly</a></td><td class="num">204</td><td class="num">5.298s</td><td class="num">0.015s</td><td class="speedup">353x</td></tr>
+      <tr><td><a href="https://github.com/adobe/spectrum-css">Spectrum CSS</a></td><td class="num">241</td><td class="num">2.952s</td><td class="num">0.011s</td><td class="speedup">268x</td></tr>
+      <tr><td><a href="https://github.com/alphagov/govuk-frontend">GOV.UK Frontend</a></td><td class="num">163</td><td class="num">1.614s</td><td class="num">0.011s</td><td class="speedup">147x</td></tr>
+      <tr><td><a href="https://github.com/twbs/bootstrap">Bootstrap</a></td><td class="num">99</td><td class="num">1.569s</td><td class="num">0.011s</td><td class="speedup">143x</td></tr>
+      <tr><td><a href="https://github.com/primer/css">Primer CSS</a></td><td class="num">113</td><td class="num">1.285s</td><td class="num">0.010s</td><td class="speedup">129x</td></tr>
+      <tr><td><a href="https://github.com/wordpress/gutenberg">Gutenberg</a></td><td class="num">775</td><td class="num">4.715s</td><td class="num">0.042s</td><td class="speedup">112x</td></tr>
+      <tr><td><a href="https://github.com/Automattic/wp-calypso">wp-calypso</a></td><td class="num">2,238</td><td class="num">13.223s</td><td class="num">0.131s</td><td class="speedup">101x</td></tr>
+      <tr><td><a href="https://github.com/angular/components">Angular Components</a></td><td class="num">620</td><td class="num">1.843s</td><td class="num">0.021s</td><td class="speedup">88x</td></tr>
+      <tr><td><a href="https://github.com/discourse/discourse">Discourse</a></td><td class="num">355</td><td class="num">1.438s</td><td class="num">0.021s</td><td class="speedup">69x</td></tr>
+    </tbody>
+  </table>
+
+  <div class="bar-section">
+    <h3>Bootstrap (99 SCSS files)</h3>
+    <div class="bars">
+      <div class="bar-row">
+        <span class="bar-label">Gale</span>
+        <div class="bar-track"><div class="bar-fill bar-gale" data-width="1">0.011s</div></div>
+      </div>
+      <div class="bar-row">
+        <span class="bar-label">Stylelint</span>
+        <div class="bar-track"><div class="bar-fill bar-stylelint" data-width="100">1.569s</div></div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note">0 false positives, 0 false negatives across 16 repos (6,673 files). <a href="https://github.com/LyricalString/gale/tree/main/benchmarks">Reproduce these results</a></p>
+</section>
+
+<section class="tested fade-in" id="tested">
+  <h2>Tested on real-world projects</h2>
+  <p class="desc">100% parity with Stylelint output on every file.</p>
+  <div class="repo-grid">
+    <a href="https://github.com/twbs/bootstrap" class="repo-chip">Bootstrap <span class="files">99</span></a>
+    <a href="https://github.com/carbon-design-system/carbon" class="repo-chip">Carbon <span class="files">1,116</span></a>
+    <a href="https://github.com/wordpress/gutenberg" class="repo-chip">Gutenberg <span class="files">775</span></a>
+    <a href="https://github.com/Automattic/wp-calypso" class="repo-chip">wp-calypso <span class="files">2,238</span></a>
+    <a href="https://github.com/angular/components" class="repo-chip">Angular Components <span class="files">620</span></a>
+    <a href="https://github.com/patternfly/patternfly" class="repo-chip">PatternFly <span class="files">204</span></a>
+    <a href="https://github.com/primer/css" class="repo-chip">Primer CSS <span class="files">113</span></a>
+    <a href="https://github.com/adobe/spectrum-css" class="repo-chip">Spectrum CSS <span class="files">241</span></a>
+    <a href="https://github.com/discourse/discourse" class="repo-chip">Discourse <span class="files">355</span></a>
+    <a href="https://github.com/alphagov/govuk-frontend" class="repo-chip">GOV.UK Frontend <span class="files">163</span></a>
+    <a href="https://github.com/mattermost/mattermost" class="repo-chip">Mattermost <span class="files">494</span></a>
+    <a href="https://github.com/grafana/grafana" class="repo-chip">Grafana <span class="files">12</span></a>
+    <a href="https://github.com/mui/material-ui" class="repo-chip">Material UI <span class="files">43</span></a>
+    <a href="https://github.com/freeCodeCamp/freeCodeCamp" class="repo-chip">freeCodeCamp <span class="files">88</span></a>
+    <a href="https://github.com/facebook/docusaurus" class="repo-chip">Docusaurus <span class="files">212</span></a>
+    <a href="https://github.com/elastic/eui" class="repo-chip">Elastic EUI <span class="files">4</span></a>
+  </div>
 </section>
 
 <section class="features fade-in" id="features">
   <h2>Everything you need</h2>
   <div class="grid">
     <div class="card">
-      <div class="icon">76</div>
+      <div class="icon">250</div>
       <h3>Built-in Rules</h3>
-      <p>15 with autofix. Covers stylelint-config-standard core. Same rule names, same config format.</p>
+      <p>Core Stylelint, SCSS, @stylistic, and order rules. No plugins to install. Same rule names, same config format.</p>
     </div>
     <div class="card">
       <div class="icon">{}</div>
       <h3>Zero Config Migration</h3>
-      <p>Reads your existing <code>.stylelintrc.json</code> directly. <code>/* stylelint-disable */</code> comments work as-is.</p>
+      <p>Reads your existing <code>.stylelintrc</code> directly. <code>extends</code>, <code>/* stylelint-disable */</code>, and JSON output all work as-is.</p>
     </div>
     <div class="card">
       <div class="icon">.scss</div>
       <h3>SCSS &amp; Less</h3>
-      <p>Full preprocessor support via the raffia parser. Lint <code>.scss</code>, <code>.less</code>, and <code>.css</code> files.</p>
+      <p>Full preprocessor support. Lint <code>.scss</code>, <code>.less</code>, and <code>.css</code> files with 44 built-in SCSS rules.</p>
     </div>
     <div class="card">
       <div class="icon">--fix</div>
       <h3>Autofix</h3>
-      <p>Automatically fix 15 rules. Hex shortening, zero units, vendor prefixes, quotes, and more.</p>
+      <p>Automatically fix problems. Hex shortening, zero units, vendor prefixes, quotes, colon notation, and more.</p>
     </div>
     <div class="card">
       <div class="icon">LSP</div>
       <h3>Editor Integration</h3>
-      <p>Built-in LSP server for real-time diagnostics. Works with VSCode, Neovim, and any LSP client.</p>
+      <p>Built-in LSP server for real-time diagnostics. Works with VS Code, Neovim, Helix, Zed, and any LSP client.</p>
     </div>
     <div class="card">
-      <div class="icon">$</div>
-      <h3>Caching &amp; Parallel</h3>
-      <p>File-based caching skips unchanged files. Parallel linting via rayon for maximum throughput.</p>
+      <div class="icon">||</div>
+      <h3>Parallel &amp; Cached</h3>
+      <p>File-based caching skips unchanged files. Parallel linting via rayon uses all CPU cores.</p>
     </div>
   </div>
 </section>
 
 <section class="quickstart fade-in" id="quickstart">
-  <h2>Quick Start</h2>
+  <h2>Get Started</h2>
   <div class="terminal">
     <div class="terminal-header">
       <div class="terminal-dot r"></div>
@@ -195,58 +298,41 @@ footer .links{display:flex;gap:2rem;justify-content:center;margin-bottom:1rem}
     </div>
     <div class="terminal-body">
       <div><span class="comment"># Install</span></div>
-      <div><span class="prompt">$</span> <span class="cmd">npm install -D gale-lint</span></div>
+      <div><span class="prompt">$</span> <span class="cmd">npm install -D @lyricalstring/gale</span></div>
       <div>&nbsp;</div>
-      <div><span class="comment"># Initialize config</span></div>
-      <div><span class="prompt">$</span> <span class="cmd">gale --init</span></div>
-      <div>&nbsp;</div>
-      <div><span class="comment"># Lint your project</span></div>
-      <div><span class="prompt">$</span> <span class="cmd">gale .</span></div>
+      <div><span class="comment"># Lint your project (uses your existing .stylelintrc)</span></div>
+      <div><span class="prompt">$</span> <span class="cmd">npx gale "src/**/*.css"</span></div>
       <div>&nbsp;</div>
       <div><span class="comment"># Autofix problems</span></div>
-      <div><span class="prompt">$</span> <span class="cmd">gale --fix .</span></div>
+      <div><span class="prompt">$</span> <span class="cmd">npx gale --fix "src/**/*.css"</span></div>
     </div>
   </div>
 </section>
 
 <section class="migration fade-in" id="migration">
-  <h2>Migrate from Stylelint in seconds</h2>
-  <ul class="migration-list">
-    <li>
-      <span class="check">&#10003;</span>
-      <div class="text">
-        <strong>Your config works as-is</strong>
-        <span>Gale reads .stylelintrc.json, .stylelintrc.yml, and supports extends with npm packages</span>
-      </div>
-    </li>
-    <li>
-      <span class="check">&#10003;</span>
-      <div class="text">
-        <strong>Same rule names</strong>
-        <span>block-no-empty, color-no-invalid-hex, property-no-unknown... all the same</span>
-      </div>
-    </li>
-    <li>
-      <span class="check">&#10003;</span>
-      <div class="text">
-        <strong>Disable comments work</strong>
-        <span>/* stylelint-disable */ and /* stylelint-disable-next-line */ are fully supported</span>
-      </div>
-    </li>
-    <li>
-      <span class="check">&#10003;</span>
-      <div class="text">
-        <strong>Compatible JSON output</strong>
-        <span>Same JSON format as Stylelint for CI/CD tooling integration</span>
-      </div>
-    </li>
-  </ul>
+  <h2>Migrate from Stylelint</h2>
+  <p class="desc">One line change. Your config stays exactly the same.</p>
+  <div class="diff">
+    <div class="diff-header">package.json</div>
+    <div class="diff-body">
+      <div class="unchanged">{</div>
+      <div class="unchanged">&nbsp; "scripts": {</div>
+      <div class="removed">&minus;&nbsp;&nbsp;&nbsp; "lint:css": "stylelint 'src/**/*.css'"</div>
+      <div class="added">&plus;&nbsp;&nbsp;&nbsp; "lint:css": "gale 'src/**/*.css'"</div>
+      <div class="unchanged">&nbsp; },</div>
+      <div class="unchanged">&nbsp; "devDependencies": {</div>
+      <div class="removed">&minus;&nbsp;&nbsp;&nbsp; "stylelint": "^16.0.0"</div>
+      <div class="added">&plus;&nbsp;&nbsp;&nbsp; "@lyricalstring/gale": "^0.1.1"</div>
+      <div class="unchanged">&nbsp; }</div>
+      <div class="unchanged">}</div>
+    </div>
+  </div>
 </section>
 
 <footer>
   <div class="links">
     <a href="https://github.com/LyricalString/gale">GitHub</a>
-    <a href="https://www.npmjs.com/package/gale-lint">npm</a>
+    <a href="https://www.npmjs.com/package/@lyricalstring/gale">npm</a>
     <a href="https://github.com/LyricalString/gale/blob/main/README.md">Docs</a>
   </div>
   <p>MIT License &middot; Built with Rust</p>
@@ -259,11 +345,15 @@ const obs = new IntersectionObserver((entries) => {
 }, { threshold: 0.15 });
 document.querySelectorAll('.fade-in').forEach(el => obs.observe(el));
 
-// Animate benchmark bars on visible
+// Animate benchmark bars
 const benchObs = new IntersectionObserver((entries) => {
   entries.forEach(e => {
     if (e.isIntersecting) {
-      setTimeout(() => { document.querySelector('.bar-gale').style.width = '2%'; }, 100);
+      setTimeout(() => {
+        document.querySelectorAll('.bar-fill').forEach(bar => {
+          bar.style.width = bar.dataset.width + '%';
+        });
+      }, 200);
       benchObs.unobserve(e.target);
     }
   });

@@ -18,3 +18,4 @@ tests/differential/results/
 *.swp
 *.swo
 .DS_Store
+dist/
