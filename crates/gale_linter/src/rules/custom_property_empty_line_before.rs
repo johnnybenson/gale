@@ -245,80 +245,98 @@ fn has_empty_line_before(source: &str, offset: usize) -> bool {
 }
 
 /// Check if the declaration is the first thing after an opening brace.
+///
+/// Handles block comments and SCSS line comments between `{` and the declaration.
 fn is_first_in_block_by_source(source: &str, offset: usize) -> bool {
     if offset == 0 || offset > source.len() {
         return false;
     }
     let before = &source[..offset];
 
-    // Walk backwards line by line
-    for line in before.lines().rev() {
-        let stripped = line.trim();
-        if stripped.is_empty() {
-            continue;
+    // Walk backwards through the source, skipping comments and whitespace,
+    // to see if we eventually reach an opening brace.
+    let bytes = before.as_bytes();
+    let mut pos = before.len();
+    loop {
+        // Skip trailing whitespace
+        while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t' | b'\n' | b'\r') {
+            pos -= 1;
         }
-        // If the line is a pure SCSS comment (starts with //), skip it
-        if stripped.starts_with("//") {
-            continue;
+        if pos == 0 {
+            return false;
         }
-        // Check if the line ends with `{` (possibly followed by a comment)
-        let effective = if let Some(pos) = stripped.find("//") {
-            stripped[..pos].trim()
-        } else {
-            stripped
-        };
-        // Also handle inline block comments like `{ /* comment */`
-        let effective = strip_block_comments_from_end(effective);
-        return effective.ends_with('{');
-    }
-    false
-}
-
-/// Strip trailing block comments from a line, e.g. "{ /* comment */" -> "{"
-fn strip_block_comments_from_end(s: &str) -> &str {
-    let trimmed = s.trim();
-    if let Some(pos) = trimmed.rfind("/*") {
-        // Check if the comment is closed on this line
-        if let Some(end) = trimmed[pos..].find("*/") {
-            let without = format!("{}{}", &trimmed[..pos], &trimmed[pos + end + 2..]);
-            let without_trimmed = without.trim();
-            if without_trimmed.is_empty() {
-                return trimmed[..pos].trim();
+        // Check for end of a block comment `*/`
+        if pos >= 2 && &before[pos - 2..pos] == "*/" {
+            // Find the matching `/*`
+            if let Some(open) = before[..pos - 2].rfind("/*") {
+                pos = open;
+                continue;
             }
-            // Can't easily return a reference to a newly built string here,
-            // but we can check if the part before `/*` ends with `{`.
-            return trimmed[..pos].trim();
+            return false;
         }
+        // Check for SCSS line comment
+        let line_start = before[..pos].rfind('\n').map(|p| p + 1).unwrap_or(0);
+        let line = before[line_start..pos].trim();
+        if line.starts_with("//") {
+            pos = line_start;
+            continue;
+        }
+        // If the line contains a `//` comment after a `{`, strip the comment
+        if let Some(comment_pos) = line.find("//") {
+            let before_comment = line[..comment_pos].trim();
+            if before_comment.ends_with('{') {
+                return true;
+            }
+        }
+        // Not a comment — check if it's `{`
+        return bytes[pos - 1] == b'{';
     }
-    trimmed
 }
 
 /// Check if preceded by a comment.
+///
+/// Stylelint considers a node to be "after-comment" when the previous
+/// line (before the declaration's line) ends with a comment. This includes:
+/// - A standalone comment on its own line: `/* comment */\n decl`
+/// - A trailing inline comment: `color: pink; /* comment */\n decl`
+/// - SCSS line comments on their own line
+///
+/// NOT considered after-comment:
+/// - Comment on the same line as the declaration
+/// - Comment on the opening brace line: `a {/* comment */\n decl`
 fn is_after_comment(source: &str, offset: usize) -> bool {
     if offset < 2 || offset > source.len() {
         return false;
     }
     let before = &source[..offset];
 
-    // Walk backwards to find the previous meaningful content
-    for line in before.lines().rev() {
+    // The declaration must be on a different line from the comment.
+    let decl_line_start = before.rfind('\n').map(|p| p + 1).unwrap_or(0);
+    let before_decl_line = &before[..decl_line_start];
+
+    for line in before_decl_line.lines().rev() {
         let stripped = line.trim();
         if stripped.is_empty() {
             continue;
         }
-        // Check for block comment ending
         if stripped.ends_with("*/") {
+            // Not after-comment if the line starts with `{`
+            let before_comment = if let Some(open) = stripped.rfind("/*") {
+                stripped[..open].trim()
+            } else {
+                ""
+            };
+            if before_comment.ends_with('{') {
+                return false;
+            }
             return true;
         }
-        // Check for SCSS line comment
         if stripped.starts_with("//") {
             return true;
         }
-        // Check for inline comment on the same line: "/* comment */ --prop"
-        // This case is handled differently — the comment is on the same line
-        // as the declaration. Stylelint considers `/* comment */ --custom-prop`
-        // as a comment on the same line, which counts as "after-comment" only
-        // if the comment is on the _previous_ line.
+        if stripped.contains("//") {
+            return true;
+        }
         return false;
     }
     false

@@ -37,6 +37,8 @@ struct Options {
     except_first_nested: bool,
     except_after_single_line_comment: bool,
     except_after_rule: bool,
+    except_inside_block_and_after_rule: bool,
+    except_inside_block: bool,
     ignore_after_comment: bool,
     ignore_first_nested: bool,
     ignore_inside_block: bool,
@@ -57,6 +59,8 @@ impl Options {
             except_first_nested: false,
             except_after_single_line_comment: false,
             except_after_rule: false,
+            except_inside_block_and_after_rule: false,
+            except_inside_block: false,
             ignore_after_comment: false,
             ignore_first_nested: false,
             ignore_inside_block: false,
@@ -105,6 +109,8 @@ fn parse_secondary(opts: &mut Options, value: &serde_json::Value) {
                     "first-nested" => opts.except_first_nested = true,
                     "after-single-line-comment" => opts.except_after_single_line_comment = true,
                     "after-rule" => opts.except_after_rule = true,
+                    "inside-block-and-after-rule" => opts.except_inside_block_and_after_rule = true,
+                    "inside-block" => opts.except_inside_block = true,
                     _ => {}
                 }
             }
@@ -334,6 +340,34 @@ fn prev_line_is_single_line_comment(source: &str, offset: usize) -> bool {
     line.starts_with("//") || (line.starts_with("/*") && line.ends_with("*/"))
 }
 
+/// Source-based check: is there a multi-line comment (e.g. `/** ... */`)
+/// immediately before the offset?  This is used to distinguish multi-line
+/// from single-line comments for `except: ["after-single-line-comment"]`.
+fn prev_is_multi_line_comment_by_source(source: &str, offset: usize) -> bool {
+    if offset < 4 || offset > source.len() {
+        return false;
+    }
+    let before = &source[..offset];
+    // Walk backwards past whitespace
+    let bytes = before.as_bytes();
+    let mut pos = before.len();
+    while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t' | b'\n' | b'\r') {
+        pos -= 1;
+    }
+    if pos < 2 {
+        return false;
+    }
+    // Check for `*/`
+    if &before[pos - 2..pos] == "*/" {
+        // Find the matching `/*`
+        if let Some(open) = before[..pos - 2].rfind("/*") {
+            // Multi-line if contains a newline between /* and */
+            return before[open..pos].contains('\n');
+        }
+    }
+    false
+}
+
 /// Check whether a selector contains preprocessor interpolation (`#{`, `@{`)
 /// or other non-standard-syntax patterns that Stylelint would skip.
 fn has_interpolation(selector: &str) -> bool {
@@ -346,6 +380,36 @@ fn prev_is_rule(nodes: &[CssNode], index: usize) -> bool {
         return false;
     }
     matches!(&nodes[index - 1], CssNode::Style(_))
+}
+
+/// Source-based check: is the previous meaningful content before `offset`
+/// a closing brace `}` (indicating the rule follows another rule/block)?
+fn prev_is_rule_by_source(source: &str, offset: usize) -> bool {
+    if offset == 0 || offset > source.len() {
+        return false;
+    }
+    let before = &source[..offset];
+    // Walk backwards past whitespace and comments
+    let bytes = before.as_bytes();
+    let mut pos = before.len();
+    loop {
+        while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t' | b'\n' | b'\r') {
+            pos -= 1;
+        }
+        if pos == 0 {
+            return false;
+        }
+        // Skip block comments
+        if pos >= 2 && &before[pos - 2..pos] == "*/" {
+            if let Some(open) = before[..pos - 2].rfind("/*") {
+                pos = open;
+                continue;
+            }
+            return false;
+        }
+        // Check for `}`
+        return bytes[pos - 1] == b'}';
+    }
 }
 
 /// Check if a style rule is multi-line by looking at the source.
@@ -386,14 +450,7 @@ fn check_nodes(
             let offset = style.span.offset;
 
             // Determine if this is first-nested: the first meaningful content after
-            // the opening `{` of the parent block. We rely on source analysis
-            // rather than the node list, because the node list may not include
-            // all sibling types (declarations, at-rules) that appear before this
-            // style rule in the source.
-            //
-            // For the document root, we use the list-based check since there is no
-            // opening `{` — the first rule (or first after only comments) should be
-            // skipped (nothing before it to separate from).
+            // the opening `{` of the parent block.
             let first_nested = if is_root {
                 is_first_nested_in_list(nodes, i)
             } else {
@@ -402,7 +459,6 @@ fn check_nodes(
 
             // At the document root, the very first rule (or first after only comments)
             // is never checked — there's nothing before it to separate from.
-            // This matches Stylelint behavior.
             if is_root && first_nested {
                 check_children(rule_impl, style, ctx, opts, diags);
                 continue;
@@ -415,11 +471,15 @@ fn check_nodes(
             }
 
             // ignore: ["after-comment"] — skip if preceded by a comment.
-            // Use both AST-based check and source-based check (for SCSS //
-            // comments that may not be represented in the AST).
             if opts.ignore_after_comment
                 && (prev_is_comment(nodes, i) || prev_line_is_comment(ctx.source, offset))
             {
+                check_children(rule_impl, style, ctx, opts, diags);
+                continue;
+            }
+
+            // ignore: ["inside-block"] — skip all rules that are inside a block (not root level)
+            if opts.ignore_inside_block && !is_root {
                 check_children(rule_impl, style, ctx, opts, diags);
                 continue;
             }
@@ -451,27 +511,34 @@ fn check_nodes(
 
             // Apply exceptions — flip the expectation at most once.
             // Stylelint evaluates exceptions in order and stops after the
-            // first match (PR #2920).  This prevents double-flipping when
-            // multiple exceptions apply simultaneously (e.g. a rule that is
-            // both first-nested AND after a single-line comment).
+            // first match (PR #2920).
             let mut expectation = expects_empty;
+
+            // Determine if this rule is after another rule — use both AST and source checks.
+            let after_rule = prev_is_rule(nodes, i) || prev_is_rule_by_source(ctx.source, offset);
 
             let exception_matched = if opts.except_first_nested && first_nested {
                 true
-            } else if opts.except_after_single_line_comment
-                && (prev_is_single_line_comment(nodes, i, ctx.source, offset)
-                    || prev_line_is_single_line_comment(ctx.source, offset))
-            {
+            } else if opts.except_after_single_line_comment {
+                // For after-single-line-comment, we must NOT match multi-line comments.
+                let is_after_single = prev_is_single_line_comment(nodes, i, ctx.source, offset)
+                    || prev_line_is_single_line_comment(ctx.source, offset);
+                let is_after_multi = prev_is_multi_line_comment_by_source(ctx.source, offset);
+                // Only match if it's after a single-line comment but NOT a multi-line one.
+                is_after_single && !is_after_multi
+            } else if opts.except_inside_block_and_after_rule && !is_root && after_rule {
+                true
+            } else if opts.except_inside_block && !is_root {
                 true
             } else {
-                opts.except_after_rule && prev_is_rule(nodes, i)
+                opts.except_after_rule && after_rule
             };
 
             if exception_matched {
                 expectation = !expectation;
             }
 
-            // Check and report — Stylelint's messages do not include selector text.
+            // Check and report
             if expectation && !has_empty {
                 diags.push(
                     Diagnostic::new(

@@ -30,19 +30,16 @@ impl Rule for DeclarationEmptyLineBefore {
         let opts = Options::from_ctx(ctx);
         let mut diags = Vec::new();
 
-        // Build a combined list of children (declarations + nested style rules as comments)
-        // so we can determine what precedes each declaration.
-        // For this rule, we only look at declarations within the rule.
-        // We need to check adjacent items: declarations and comments interleaved.
-        //
-        // The AST gives us rule.declarations (only declarations) but in the source
-        // there may be comments between them. We'll use source analysis for context.
-
-        for (i, decl) in rule.declarations.iter().enumerate() {
+        for (_i, decl) in rule.declarations.iter().enumerate() {
             // Stylelint's declaration-empty-line-before only checks standard
             // property declarations.  Custom properties (starting with `--`)
             // are handled by `custom-property-empty-line-before` instead.
             if decl.property.starts_with("--") {
+                continue;
+            }
+
+            // Skip SCSS variable declarations ($var: value)
+            if decl.property.starts_with('$') {
                 continue;
             }
 
@@ -70,8 +67,6 @@ impl Rule for DeclarationEmptyLineBefore {
             let has_empty = has_empty_line_before(ctx.source, decl_start);
 
             // Check if this is first-nested (first content after the opening `{`).
-            // Use source analysis rather than the declaration index, because
-            // at-rules like @include may precede the first declaration.
             let is_first = is_first_in_block_by_source(ctx.source, decl_start);
 
             // Check if this is a single-line block
@@ -80,28 +75,13 @@ impl Rule for DeclarationEmptyLineBefore {
             // Check if preceded by a comment (look at source before the declaration)
             let after_comment = is_after_comment(ctx.source, decl_start);
 
-            // Check if preceded by another standard (non-custom) declaration.
-            // In Stylelint, `except: after-declaration` only considers standard
-            // property declarations, NOT custom properties (those starting with `--`).
-            // Find the nearest previous standard declaration.
-            let prev_std_decl = rule.declarations[..i]
-                .iter()
-                .rev()
-                .find(|d| !d.property.starts_with("--"));
+            // Check if preceded by a block (rule or at-rule ending with `}`)
+            let after_block = is_after_block(ctx.source, decl_start);
 
-            let after_declaration = if let Some(prev) = prev_std_decl {
-                // Quick check: if a `}` appears between the previous standard
-                // declaration and this one, there's a block in between.
-                let prev_end = prev.span.offset + prev.span.length;
-                let between = if prev_end < decl_start && decl_start <= ctx.source.len() {
-                    &ctx.source[prev_end..decl_start]
-                } else {
-                    ""
-                };
-                !between.contains('}')
-            } else {
-                false
-            };
+            // Check if preceded by another standard (non-custom) declaration.
+            // Use source-based analysis to correctly handle $var lines and
+            // other non-declaration content.
+            let after_declaration = is_after_declaration(ctx.source, decl_start);
 
             // ignore: ["inside-single-line-block"]
             if opts.ignore_inside_single_line_block && is_single_line {
@@ -118,6 +98,11 @@ impl Rule for DeclarationEmptyLineBefore {
                 continue;
             }
 
+            // ignore: ["first-nested"]
+            if opts.ignore_first_nested && is_first {
+                continue;
+            }
+
             // Determine expectation
             let expects_empty = match opts.primary {
                 PrimaryOption::Always => true,
@@ -126,51 +111,35 @@ impl Rule for DeclarationEmptyLineBefore {
 
             let mut expectation = expects_empty;
 
-            // Apply exceptions (they flip the expectation)
-            if opts.except_first_nested && is_first {
-                expectation = !expectation;
-            }
+            // Apply exceptions — first match only (Stylelint behavior).
+            // Only the first matching exception flips the expectation.
+            let exception_matched = if opts.except_first_nested && is_first {
+                true
+            } else if opts.except_after_comment && after_comment {
+                true
+            } else if opts.except_after_declaration && after_declaration {
+                true
+            } else {
+                opts.except_after_block && after_block
+            };
 
-            if opts.except_after_comment && after_comment {
-                expectation = !expectation;
-            }
-
-            if opts.except_after_declaration && after_declaration {
+            if exception_matched {
                 expectation = !expectation;
             }
 
             // Report
             if expectation && !has_empty {
-                // Only report if not first item with no preceding content
-                // (first-nested without exception: for "always", first decl needs empty line
-                //  but that's unusual — Stylelint checks source context)
-                if is_first && is_first_in_block_by_source(ctx.source, decl_start) && !opts.except_first_nested {
-                    // First declaration right after opening brace — in "always" mode
-                    // Stylelint expects an empty line even here unless except first-nested
-                    diags.push(
-                        Diagnostic::new(
-                            self.name(),
-                            format!(
-                                "Expected empty line before declaration \"{}\"",
-                                decl.property
-                            ),
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(decl.span.offset, decl.span.length)),
-                    );
-                } else if !is_first || !is_first_in_block_by_source(ctx.source, decl_start) {
-                    diags.push(
-                        Diagnostic::new(
-                            self.name(),
-                            format!(
-                                "Expected empty line before declaration \"{}\"",
-                                decl.property
-                            ),
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(decl.span.offset, decl.span.length)),
-                    );
-                }
+                diags.push(
+                    Diagnostic::new(
+                        self.name(),
+                        format!(
+                            "Expected empty line before declaration \"{}\"",
+                            decl.property
+                        ),
+                    )
+                    .severity(self.default_severity())
+                    .span(Span::new(decl.span.offset, decl.span.length)),
+                );
             } else if !expectation && has_empty {
                 diags.push(
                     Diagnostic::new(
@@ -195,9 +164,11 @@ struct Options {
     except_first_nested: bool,
     except_after_comment: bool,
     except_after_declaration: bool,
+    except_after_block: bool,
     ignore_after_comment: bool,
     ignore_after_declaration: bool,
     ignore_inside_single_line_block: bool,
+    ignore_first_nested: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -213,9 +184,11 @@ impl Options {
             except_first_nested: false,
             except_after_comment: false,
             except_after_declaration: false,
+            except_after_block: false,
             ignore_after_comment: false,
             ignore_after_declaration: false,
             ignore_inside_single_line_block: false,
+            ignore_first_nested: false,
         };
 
         let Some(value) = ctx.options else {
@@ -256,6 +229,7 @@ fn parse_secondary(opts: &mut Options, value: &serde_json::Value) {
                     "first-nested" => opts.except_first_nested = true,
                     "after-comment" => opts.except_after_comment = true,
                     "after-declaration" => opts.except_after_declaration = true,
+                    "after-block" => opts.except_after_block = true,
                     _ => {}
                 }
             }
@@ -268,6 +242,7 @@ fn parse_secondary(opts: &mut Options, value: &serde_json::Value) {
                     "after-comment" => opts.ignore_after_comment = true,
                     "after-declaration" => opts.ignore_after_declaration = true,
                     "inside-single-line-block" => opts.ignore_inside_single_line_block = true,
+                    "first-nested" => opts.ignore_first_nested = true,
                     _ => {}
                 }
             }
@@ -305,59 +280,192 @@ fn has_empty_line_before(source: &str, offset: usize) -> bool {
 
 /// Check if the declaration is the first thing after an opening brace.
 ///
-/// Handles SCSS `//` comments that may appear after `{` on the same line,
-/// e.g. `.foo { // comment\n  decl: val; }` — `decl` is first-nested.
+/// Handles SCSS `//` comments and block `/* */` comments that may appear
+/// after `{` on the same line or between `{` and the declaration.
 fn is_first_in_block_by_source(source: &str, offset: usize) -> bool {
     if offset == 0 || offset > source.len() {
         return false;
     }
     let before = &source[..offset];
 
-    // Walk backwards line by line. Skip blank lines and lines that are
-    // only SCSS line comments.
-    for line in before.lines().rev() {
-        let stripped = line.trim();
-        if stripped.is_empty() {
+    // Walk backwards through the source, skipping whitespace, comments
+    let bytes = before.as_bytes();
+    let mut pos = before.len();
+    loop {
+        // Skip trailing whitespace
+        while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t' | b'\n' | b'\r') {
+            pos -= 1;
+        }
+        if pos == 0 {
+            return false;
+        }
+        // Check for end of a block comment `*/`
+        if pos >= 2 && &before[pos - 2..pos] == "*/" {
+            // Find the matching `/*`
+            if let Some(open) = before[..pos - 2].rfind("/*") {
+                pos = open;
+                continue;
+            }
+            return false;
+        }
+        // Check for SCSS line comment: find start of this line
+        let line_start = before[..pos].rfind('\n').map(|p| p + 1).unwrap_or(0);
+        let line = before[line_start..pos].trim();
+        if line.starts_with("//") {
+            // This is a line comment; skip past it
+            pos = line_start;
             continue;
         }
-        // If the line is a pure SCSS comment (starts with //), skip it
-        // and keep looking.
-        if stripped.starts_with("//") {
-            continue;
+        // If the line contains a `//` comment after a `{`, strip the comment
+        if let Some(comment_pos) = line.find("//") {
+            let before_comment = line[..comment_pos].trim();
+            if before_comment.ends_with('{') {
+                return true;
+            }
         }
-        // Check if the line ends with `{` (possibly followed by a //
-        // comment on the same line).
-        let effective = if let Some(pos) = stripped.find("//") {
-            stripped[..pos].trim()
-        } else {
-            stripped
-        };
-        return effective.ends_with('{');
+        // Not a comment — check if it's `{`
+        return bytes[pos - 1] == b'{';
     }
-    false
 }
 
 /// Check if the declaration is preceded by a comment in the source.
+///
+/// Stylelint considers a declaration to be "after-comment" when the
+/// previous line (before the declaration's line) ends with a comment.
+/// This includes:
+/// - A standalone comment on its own line: `/* comment */\n decl`
+/// - A trailing inline comment: `color: pink; /* comment */\n decl`
+/// - SCSS line comments on their own line: `// comment\n decl`
+///
+/// NOT considered after-comment:
+/// - Comment on the same line as the declaration: `/* comment */ decl`
+/// - Comment on the opening brace line when decl is first-nested:
+///   `a {/* comment */\n decl` (this is first-nested, not after-comment)
 fn is_after_comment(source: &str, offset: usize) -> bool {
     if offset < 2 || offset > source.len() {
         return false;
     }
     let before = &source[..offset];
-    let trimmed = before.trim();
-    // Check for block comment ending
-    if trimmed.ends_with("*/") {
-        return true;
+
+    // The declaration must be on a different line from the comment.
+    // Find the start of the declaration's line.
+    let decl_line_start = before.rfind('\n').map(|p| p + 1).unwrap_or(0);
+
+    // Look at lines BEFORE the declaration's line.
+    let before_decl_line = &before[..decl_line_start];
+
+    // Walk backwards through previous lines to find the last meaningful line.
+    for line in before_decl_line.lines().rev() {
+        let stripped = line.trim();
+        if stripped.is_empty() {
+            continue;
+        }
+        // If the line ends with `*/`, it's after a block comment
+        if stripped.ends_with("*/") {
+            // But not if the line also starts with `{` (opening brace line with comment)
+            // e.g. `a {/* comment */` -> not after-comment
+            let before_comment = if let Some(open) = stripped.rfind("/*") {
+                stripped[..open].trim()
+            } else {
+                ""
+            };
+            if before_comment.ends_with('{') {
+                return false;
+            }
+            return true;
+        }
+        // If the line starts with `//`, it's a SCSS line comment
+        if stripped.starts_with("//") {
+            return true;
+        }
+        // If the line contains `//`, it has a trailing SCSS comment
+        if stripped.contains("//") {
+            return true;
+        }
+        return false;
     }
-    // Check for SCSS line comment: find the last non-empty line before
-    // this declaration and see if it starts with "//".
+    false
+}
+
+/// Check if preceded by a block (a rule or at-rule ending with `}`).
+fn is_after_block(source: &str, offset: usize) -> bool {
+    if offset == 0 || offset > source.len() {
+        return false;
+    }
+    let before = &source[..offset];
+
+    // Walk backwards past whitespace to find the previous meaningful content
     for line in before.lines().rev() {
         let stripped = line.trim();
         if stripped.is_empty() {
             continue;
         }
-        return stripped.starts_with("//");
+        return stripped.ends_with('}');
     }
     false
+}
+
+/// Check if preceded by a standard declaration (not custom property, not $var).
+///
+/// Walks backwards through the source to find the previous non-empty, non-comment
+/// line and checks if it looks like a standard CSS declaration (contains `:` and
+/// doesn't start with `--`, `$`, or `@`).
+fn is_after_declaration(source: &str, offset: usize) -> bool {
+    if offset == 0 || offset > source.len() {
+        return false;
+    }
+    let before = &source[..offset];
+
+    // Walk backwards to find the previous meaningful line
+    for line in before.lines().rev() {
+        let stripped = line.trim();
+        if stripped.is_empty() {
+            continue;
+        }
+        // Skip comments
+        if stripped.starts_with("//") || stripped.starts_with("/*") || stripped.ends_with("*/") {
+            // If it's a trailing inline comment like `color: red; /* comment */`
+            // we need to check if there's a declaration before the comment
+            if let Some(comment_start) = stripped.find("/*") {
+                let before_comment = stripped[..comment_start].trim();
+                if !before_comment.is_empty() {
+                    return is_declaration_like(before_comment);
+                }
+            }
+            continue;
+        }
+        // If the line ends with `}`, it's a block, not a declaration
+        if stripped.ends_with('}') {
+            return false;
+        }
+        // If the line ends with `{`, it's a selector/at-rule
+        if stripped.ends_with('{') {
+            return false;
+        }
+        return is_declaration_like(stripped);
+    }
+    false
+}
+
+/// Check if a source line looks like a standard CSS declaration.
+fn is_declaration_like(line: &str) -> bool {
+    // Must contain a `:` to be a declaration
+    if !line.contains(':') {
+        return false;
+    }
+    // Custom properties are not "standard declarations"
+    if line.starts_with("--") {
+        return false;
+    }
+    // SCSS variables are not standard declarations
+    if line.starts_with('$') {
+        return false;
+    }
+    // At-rules are not declarations
+    if line.starts_with('@') {
+        return false;
+    }
+    true
 }
 
 /// Check if the style rule is a single-line block.
@@ -561,5 +669,26 @@ mod tests {
         });
         let d = DeclarationEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
         assert!(d.is_empty(), "Single-line block should be ignored");
+    }
+
+    #[test]
+    fn test_is_first_in_block_by_source_with_block_comment() {
+        let src = "a { /* comment */\n top: 15px;\n}";
+        let top_offset = src.find("top").unwrap();
+        assert_eq!(top_offset, 19);
+        assert!(
+            is_first_in_block_by_source(src, top_offset),
+            "top should be first-nested after {{ /* comment */"
+        );
+    }
+
+    #[test]
+    fn test_is_first_in_block_by_source_simple() {
+        let src = "a {\n top: 15px;\n}";
+        let top_offset = src.find("top").unwrap();
+        assert!(
+            is_first_in_block_by_source(src, top_offset),
+            "top should be first-nested after {{"
+        );
     }
 }
