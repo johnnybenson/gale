@@ -821,18 +821,44 @@ fn find_declaration_span(source: &str, from: usize, to: usize, property: &str) -
     let lower_area = area.to_ascii_lowercase();
     let lower_prop = property.to_ascii_lowercase();
 
-    if let Some(rel_idx) = lower_area.find(&lower_prop) {
-        let abs_start = from + rel_idx;
-        // Find the end: semicolon or closing brace.
-        let after_prop = abs_start + property.len();
-        let rest = &source[after_prop..to.min(source.len())];
-        let decl_end = rest
-            .find(';')
-            .map(|i| after_prop + i + 1) // include the semicolon
-            .unwrap_or_else(|| rest.find('}').map(|i| after_prop + i).unwrap_or(after_prop));
-        Span::new(abs_start, decl_end - abs_start)
-    } else {
-        Span::empty()
+    // Search for the property name followed by `:` (a CSS declaration).
+    // A simple `find` would match property names inside selectors (e.g.
+    // "border" in ".foo-border"), so we require the match to be followed
+    // by optional whitespace and then a colon.
+    let mut search_from = 0;
+    loop {
+        let rel_idx = match lower_area[search_from..].find(&lower_prop) {
+            Some(i) => search_from + i,
+            None => return Span::empty(),
+        };
+
+        let after_name = rel_idx + lower_prop.len();
+        // Check that the property name is followed by optional whitespace + ':'
+        let rest_of_area = &lower_area[after_name..];
+        let trimmed = rest_of_area.trim_start();
+        let is_declaration = trimmed.starts_with(':');
+
+        // Also ensure the match isn't in the middle of a longer identifier
+        // (e.g. "border" in "flex-border" or "border-radius")
+        let preceded_by_ident = rel_idx > 0 && {
+            let prev = lower_area.as_bytes()[rel_idx - 1];
+            prev.is_ascii_alphanumeric() || prev == b'-' || prev == b'_'
+        };
+
+        if is_declaration && !preceded_by_ident {
+            let abs_start = from + rel_idx;
+            let after_prop = abs_start + property.len();
+            let rest = &source[after_prop..to.min(source.len())];
+            let decl_end = rest
+                .find(';')
+                .map(|i| after_prop + i + 1)
+                .unwrap_or_else(|| {
+                    rest.find('}').map(|i| after_prop + i).unwrap_or(after_prop)
+                });
+            return Span::new(abs_start, decl_end - abs_start);
+        }
+
+        search_from = after_name;
     }
 }
 
@@ -1686,6 +1712,26 @@ mod tests {
             }
         } else {
             panic!("expected AtRule");
+        }
+    }
+
+    #[test]
+    fn declaration_span_not_confused_by_selector_substring() {
+        // Regression: "border" in selector ".ws-core-f-flex-border" was being
+        // matched as the declaration span for `border:`, causing wrong order.
+        let css = ".ws-core-f-flex-border,\n.ws-core-f-flex .pf-v6-l-flex .pf-v6-l-flex,\n.ws-core-f-flex .pf-v6-l-flex__item {\n  padding: var(--pf-t--global--spacer--sm);\n  border: var(--pf-t--global--border--width--box--default) dashed var(--pf-t--global--border--color--default);\n}";
+        let result = parse(css, Syntax::Css).unwrap();
+        if let CssNode::Style(ref rule) = result.nodes[0] {
+            assert_eq!(rule.declarations.len(), 2);
+            assert_eq!(rule.declarations[0].property, "padding");
+            assert_eq!(rule.declarations[1].property, "border");
+            assert!(
+                rule.declarations[0].span.offset < rule.declarations[1].span.offset,
+                "padding offset ({}) should precede border offset ({})",
+                rule.declarations[0].span.offset, rule.declarations[1].span.offset
+            );
+        } else {
+            panic!("expected Style node");
         }
     }
 }
