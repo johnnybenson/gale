@@ -33,25 +33,10 @@ CLONES_DIR = SCRIPT_DIR / ".clones"
 RESULTS_DIR = SCRIPT_DIR / "results"
 GALE_ROOT = SCRIPT_DIR.parent.parent  # gale/
 
-# Discover ALL rules Gale implements by scanning rule source files.
-# The diff test compares ALL warnings — Stylelint and Gale output must match
-# exactly for true drop-in replacement parity.  The only filtering is on the
-# Stylelint side: warnings from third-party plugins that Gale cannot run
-# (because they require JS execution) are excluded.
-def _discover_gale_rules() -> set[str]:
-    """Extract rule names from Gale source files (fn name() -> &'static str)."""
-    import re
-    rules_dir = GALE_ROOT / "crates" / "gale_linter" / "src" / "rules"
-    rules = set()
-    if not rules_dir.exists():
-        return rules
-    for rs_file in rules_dir.glob("*.rs"):
-        content = rs_file.read_text(errors="ignore")
-        for m in re.finditer(r'fn name\(&self\)\s*->\s*&\'static str\s*\{\s*"([^"]+)"', content):
-            rules.add(m.group(1))
-    return rules
-
-GALE_RULES = _discover_gale_rules()
+# No rule filtering. Both Stylelint and Gale output is compared as-is.
+# If Stylelint reports a warning, Gale must report it too. Period.
+# If a third-party plugin rule fires in Stylelint and Gale doesn't support it,
+# that's a legitimate false negative that needs to be fixed.
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -600,12 +585,11 @@ def process_repo(
     g_files = len(gale_results)
     print(f"  [lint] Gale: {g_count} warnings across {g_files} files")
 
-    # Normalize & compare.
-    # Stylelint side: filter to rules Gale implements (skip unsupported
-    # third-party plugins that require JS execution).
-    # Gale side: NO filter — every warning Gale emits is compared, so any
-    # false positive is caught.
-    s_norm = normalize_results(stylelint_results, clone_dir, filter_rules=GALE_RULES)
+    # Normalize & compare — NO FILTERS on either side.
+    # If Stylelint reports a warning, Gale must report it too (or it's a FN).
+    # If Gale reports a warning Stylelint doesn't, it's a FP.
+    # This is the only honest way to validate a drop-in replacement.
+    s_norm = normalize_results(stylelint_results, clone_dir, filter_rules=None)
     g_norm = normalize_results(gale_results, clone_dir, filter_rules=None)
     report = compare_results(s_norm, g_norm)
 
@@ -687,7 +671,7 @@ def main():
         print(f"\n{'='*70}")
         print(f"  FINAL SUMMARY")
         print(f"{'='*70}")
-        print(f"  Gale rules available for comparison: {len(GALE_RULES)}")
+        print(f"  Comparison: unfiltered (all rules, both sides)")
         print()
         header = f"  {'Repo':<20} {'Files':<8} {'Match':<8} {'FN':<8} {'FP':<8} {'Parity':<8}"
         sep_len = 60

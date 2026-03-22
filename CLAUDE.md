@@ -4,12 +4,13 @@ This document is a reference for AI assistants and developers working on the Gal
 
 ## Project overview
 
-Gale is a **drop-in replacement for [Stylelint](https://stylelint.io/)**, written in Rust. The goal is 100% compatibility with Stylelint's rule semantics, config format, CLI flags, and output -- so teams can switch with zero config changes.
+Gale is a **perfect substitute for [Stylelint](https://stylelint.io/)**, written in Rust. Not an alternative — a **drop-in replacement** that produces **exactly the same output**, just 100-400x faster.
 
-**Current state (v0.1.1):**
-- 250 built-in rules (144 core, 44 SCSS, 59 stylistic, 3 order)
-- 0 false positives, 0 false negatives across 16 real-world repos
-- 100x-400x faster than Stylelint
+The bar: `bunx gale 'src/**/*.scss'` must produce **byte-for-byte identical warnings** to `bunx stylelint 'src/**/*.scss'`. Same rules, same config, same warnings, same severity, same line/column. If Stylelint says it, Gale says it. If Stylelint doesn't say it, Gale doesn't say it. Zero false positives, zero false negatives.
+
+**Current state (v0.1.2):**
+- 260+ built-in rules (144 core, 44 SCSS, 64 stylistic, 3 order)
+- Differential tested against 20 real-world repos with ZERO rule filters
 - Published on npm as `@lyricalstring/gale`
 - Published on crates.io as `gale-lint` (binary name is `gale`)
 
@@ -402,25 +403,32 @@ The crate is published as `gale-lint` on crates.io (the name `gale` was taken). 
 
 ## Differential testing
 
-The differential testing harness (`tests/differential/`) validates Gale as a drop-in replacement by comparing output against Stylelint on 16 real-world repositories.
+The differential testing harness (`tests/differential/`) validates Gale as a **perfect substitute** by comparing its output against Stylelint on 20 real-world repositories. The comparison is **completely unfiltered** — every warning from both tools is compared, with zero exceptions.
+
+### Philosophy
+
+Stylelint is the source of truth. If Stylelint reports a warning, Gale must report it too. If Stylelint doesn't report it, Gale must not report it. There are no "known gaps", no "unsupported rules", no filtered comparisons. Any discrepancy is a bug that must be fixed.
 
 ### How it works
 
 1. Shallow-clones repos from `tests/differential/repos.json`
-2. Installs npm deps (auto-detects npm/yarn/pnpm/bun)
-3. Runs both Stylelint and Gale with JSON output using the repo's own config
-4. Normalizes output and compares by `(line, column, rule, severity, text)`
-5. Reports parity score, per-rule FN/FP breakdown, and sample diffs
+2. Installs deps (auto-detects npm/yarn/pnpm/bun)
+3. Runs `stylelint --formatter json <globs>` using the repo's own config
+4. Runs `gale --formatter json <globs>` using the same config and same globs
+5. Compares ALL warnings by `(line, column, rule, severity, text)` — **no rule filters**
+6. Reports exact FN/FP counts per rule and per file
 
-### Test corpus
+Both tools receive the **same glob patterns** (defined in `repos.json`), so they discover files identically. This mirrors the real drop-in workflow: `bunx stylelint 'src/**/*.scss'` → `bunx gale 'src/**/*.scss'`.
 
-Bootstrap, Gutenberg, Carbon, Angular Components, wp-calypso, Discourse, GOV.UK Frontend, Spectrum CSS, Docusaurus, Grafana, Material UI, freeCodeCamp, PatternFly, Primer CSS, Elastic EUI, and Mattermost.
+### Test corpus (20 repos)
+
+Bootstrap, Gutenberg, Carbon, Angular Components, wp-calypso, Discourse, GOV.UK Frontend, Spectrum CSS, Docusaurus, Grafana, Material UI, freeCodeCamp, PatternFly, Primer CSS, Elastic EUI, Mattermost, Mastodon, JupyterLab, Polaris, Joomla, and SLDS.
 
 ### Key metrics
 
-- **Parity score** = matching / (matching + FN + FP) * 100
-- **FN (False Negatives)** = Stylelint reports but Gale misses
-- **FP (False Positives)** = Gale reports but Stylelint does not
+- **FN (False Negatives)** = Stylelint reports but Gale misses → bug in Gale
+- **FP (False Positives)** = Gale reports but Stylelint does not → bug in Gale
+- **Target: 0 FN + 0 FP on every repo**
 
 ## Key decisions and constraints
 
@@ -458,9 +466,11 @@ Bootstrap, Gutenberg, Carbon, Angular Components, wp-calypso, Discourse, GOV.UK 
 - Tracing is controlled via `GALE_LOG` env var
 - File ignore supports `.galeignore` files (gitignore syntax) in addition to `.gitignore`
 
-## Known gaps
+## Known gaps (bugs to fix, not acceptable limitations)
 
-1. **Custom JavaScript plugins** -- No support for third-party rules. This is the biggest gap for repos using `@stylistic/*`, `scss/*`, etc. (though Gale has its own built-in versions of these).
-2. **`package.json` config** -- Stylelint uses `cosmiconfig` which also checks the `"stylelint"` field in `package.json`; Gale does not.
+Every gap here is a bug. Gale must produce identical output to Stylelint — "not yet supported" is not an acceptable answer.
+
+1. **Missing rules** -- Any rule Stylelint has that Gale skips with "not yet supported" is a bug. Run the differential test to find them. They must be implemented.
+2. **Custom JavaScript plugins** -- Gale cannot execute JS plugins, but it has built-in Rust implementations of all standard plugin rules (@stylistic, scss, order). If a repo uses a custom third-party JS plugin with rules Gale doesn't implement, those rules must be added.
 3. **Sass indented syntax** -- `.sass` files return `UnsupportedSyntax` error (`.scss` works fine).
-4. **macOS/Windows release binaries** -- The release workflow currently only builds Linux binaries. macOS and Windows are supported via `install.js` downloading from GitHub releases, but those binaries need to be built and uploaded manually or the workflow needs extending.
+4. **macOS/Windows release binaries** -- The release workflow currently only builds Linux binaries.
