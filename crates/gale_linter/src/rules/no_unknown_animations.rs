@@ -30,7 +30,9 @@ impl Rule for NoUnknownAnimations {
 
         let is_preprocessor = matches!(
             ctx.syntax,
-            gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less
+            gale_css_parser::Syntax::Scss
+                | gale_css_parser::Syntax::Sass
+                | gale_css_parser::Syntax::Less
         );
 
         // Second pass: find animation-name and animation declarations.
@@ -121,7 +123,13 @@ fn collect_animation_issues(
                 }
             }
             CssNode::AtRule(at_rule) => {
-                collect_animation_issues(&at_rule.children, keyframe_names, rule, diags, is_preprocessor);
+                collect_animation_issues(
+                    &at_rule.children,
+                    keyframe_names,
+                    rule,
+                    diags,
+                    is_preprocessor,
+                );
             }
             _ => {}
         }

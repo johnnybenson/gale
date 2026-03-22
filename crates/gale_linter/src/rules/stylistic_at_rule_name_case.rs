@@ -78,7 +78,11 @@ impl Rule for StylisticAtRuleNameCase {
                 };
 
                 if is_wrong {
-                    let expected = if option == "lower" { "lowercase" } else { "uppercase" };
+                    let expected = if option == "lower" {
+                        "lowercase"
+                    } else {
+                        "uppercase"
+                    };
                     diagnostics.push(
                         Diagnostic::new(
                             self.name(),

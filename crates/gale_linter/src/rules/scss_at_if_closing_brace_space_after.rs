@@ -30,9 +30,7 @@ impl Rule for ScssAtIfClosingBraceSpaceAfter {
             return vec![];
         }
 
-        let option = ctx
-            .primary_option_str()
-            .unwrap_or("always-intermediate");
+        let option = ctx.primary_option_str().unwrap_or("always-intermediate");
         let source = ctx.source;
         let bytes = source.as_bytes();
         let len = bytes.len();
@@ -43,8 +41,7 @@ impl Rule for ScssAtIfClosingBraceSpaceAfter {
             if bytes[i] == b'@' && i + 2 < len {
                 let rest = &source[i..];
                 let is_if = rest.starts_with("@if ") || rest.starts_with("@if(");
-                let is_else_if =
-                    rest.starts_with("@else if ") || rest.starts_with("@else if(");
+                let is_else_if = rest.starts_with("@else if ") || rest.starts_with("@else if(");
 
                 if is_if || is_else_if {
                     if let Some(close_brace) = find_closing_brace(source, i) {
@@ -58,8 +55,7 @@ impl Rule for ScssAtIfClosingBraceSpaceAfter {
                         }
 
                         // Check if followed by @else
-                        let followed_by_else =
-                            j < len && source[j..].starts_with("@else");
+                        let followed_by_else = j < len && source[j..].starts_with("@else");
 
                         if followed_by_else {
                             match option {

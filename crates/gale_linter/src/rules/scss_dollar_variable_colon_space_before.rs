@@ -145,6 +145,10 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssDollarVariableColonSpaceBefore.check_root(&[], &ctx).is_empty());
+        assert!(
+            ScssDollarVariableColonSpaceBefore
+                .check_root(&[], &ctx)
+                .is_empty()
+        );
     }
 }

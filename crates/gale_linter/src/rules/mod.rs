@@ -52,8 +52,8 @@ pub mod function_allowed_list;
 pub mod function_calc_no_unspaced_operator;
 pub mod function_disallowed_list;
 pub mod function_linear_gradient_no_nonstandard_direction;
-pub mod function_no_unknown;
 pub mod function_name_case;
+pub mod function_no_unknown;
 pub mod function_url_no_scheme_relative;
 pub mod function_url_quotes;
 pub mod function_url_scheme_allowed_list;
@@ -61,9 +61,9 @@ pub mod function_url_scheme_disallowed_list;
 pub mod hue_degree_notation;
 pub mod import_notation;
 pub mod keyframe_block_no_duplicate_selectors;
+pub mod keyframe_declaration_no_important;
 pub mod keyframe_selector_notation;
 pub mod keyframes_name_pattern;
-pub mod keyframe_declaration_no_important;
 pub mod layer_name_pattern;
 pub mod length_zero_no_unit;
 pub mod lightness_notation;
@@ -147,71 +147,73 @@ pub mod value_keyword_case;
 pub mod value_no_vendor_prefix;
 
 // @stylistic rules
+pub mod stylistic_at_rule_name_case;
 pub mod stylistic_at_rule_name_space_after;
 pub mod stylistic_at_rule_semicolon_newline_after;
+pub mod stylistic_at_rule_semicolon_space_before;
 pub mod stylistic_block_closing_brace_newline_after;
-pub mod stylistic_max_empty_lines;
-pub mod stylistic_media_feature_colon_space_before;
-pub mod stylistic_media_feature_range_operator_space_after;
-pub mod stylistic_media_query_list_comma_newline_after;
-pub mod stylistic_media_query_list_comma_space_after;
-pub mod stylistic_media_query_list_comma_space_before;
-pub mod stylistic_selector_combinator_space_before;
-pub mod stylistic_selector_pseudo_element_case;
-pub mod stylistic_value_list_comma_newline_after;
+pub mod stylistic_block_closing_brace_newline_before;
+pub mod stylistic_block_opening_brace_newline_after;
+pub mod stylistic_block_opening_brace_space_before;
+pub mod stylistic_color_hex_case;
 pub mod stylistic_declaration_bang_space_after;
 pub mod stylistic_declaration_bang_space_before;
+pub mod stylistic_declaration_block_semicolon_newline_after;
+pub mod stylistic_declaration_block_semicolon_newline_before;
+pub mod stylistic_declaration_block_semicolon_space_before;
+pub mod stylistic_declaration_block_trailing_semicolon;
+pub mod stylistic_declaration_colon_newline_after;
 pub mod stylistic_declaration_colon_space_after;
 pub mod stylistic_declaration_colon_space_before;
 pub mod stylistic_function_comma_space_after;
 pub mod stylistic_function_comma_space_before;
+pub mod stylistic_function_max_empty_lines;
 pub mod stylistic_function_parentheses_space_inside;
 pub mod stylistic_function_whitespace_after;
-pub mod stylistic_string_quotes;
-pub mod stylistic_value_list_comma_space_after;
-pub mod stylistic_color_hex_case;
-pub mod stylistic_declaration_block_semicolon_newline_before;
-pub mod stylistic_declaration_block_semicolon_space_before;
-pub mod stylistic_declaration_block_trailing_semicolon;
+pub mod stylistic_indentation;
+pub mod stylistic_max_empty_lines;
+pub mod stylistic_media_feature_colon_space_after;
+pub mod stylistic_media_feature_colon_space_before;
+pub mod stylistic_media_feature_parentheses_space_inside;
+pub mod stylistic_media_feature_range_operator_space_after;
+pub mod stylistic_media_feature_range_operator_space_before;
+pub mod stylistic_media_query_list_comma_newline_after;
+pub mod stylistic_media_query_list_comma_space_after;
+pub mod stylistic_media_query_list_comma_space_before;
+pub mod stylistic_no_eol_whitespace;
+pub mod stylistic_no_extra_semicolons;
 pub mod stylistic_no_missing_end_of_source_newline;
+pub mod stylistic_number_leading_zero;
 pub mod stylistic_number_no_trailing_zeros;
 pub mod stylistic_property_case;
+pub mod stylistic_selector_attribute_brackets_space_inside;
+pub mod stylistic_selector_attribute_operator_space_after;
 pub mod stylistic_selector_attribute_operator_space_before;
+pub mod stylistic_selector_combinator_space_after;
+pub mod stylistic_selector_combinator_space_before;
 pub mod stylistic_selector_list_comma_newline_after;
 pub mod stylistic_selector_list_comma_newline_before;
 pub mod stylistic_selector_list_comma_space_after;
 pub mod stylistic_selector_list_comma_space_before;
 pub mod stylistic_selector_max_empty_lines;
+pub mod stylistic_selector_pseudo_class_case;
 pub mod stylistic_selector_pseudo_class_parentheses_space_inside;
-pub mod stylistic_function_max_empty_lines;
-pub mod stylistic_value_list_comma_newline_before;
-pub mod stylistic_media_feature_range_operator_space_before;
-pub mod stylistic_media_feature_parentheses_space_inside;
-pub mod stylistic_block_closing_brace_newline_before;
+pub mod stylistic_selector_pseudo_element_case;
+pub mod stylistic_string_quotes;
 pub mod stylistic_unicode_bom;
 pub mod stylistic_unit_case;
-pub mod stylistic_indentation;
-pub mod stylistic_no_eol_whitespace;
-pub mod stylistic_no_extra_semicolons;
-pub mod stylistic_number_leading_zero;
-pub mod stylistic_declaration_block_semicolon_newline_after;
-pub mod stylistic_declaration_colon_newline_after;
-pub mod stylistic_selector_combinator_space_after;
-pub mod stylistic_selector_attribute_operator_space_after;
-pub mod stylistic_block_opening_brace_space_before;
-pub mod stylistic_at_rule_name_case;
-pub mod stylistic_at_rule_semicolon_space_before;
-pub mod stylistic_block_opening_brace_newline_after;
-pub mod stylistic_media_feature_colon_space_after;
-pub mod stylistic_selector_attribute_brackets_space_inside;
-pub mod stylistic_selector_pseudo_class_case;
+pub mod stylistic_value_list_comma_newline_after;
+pub mod stylistic_value_list_comma_newline_before;
+pub mod stylistic_value_list_comma_space_after;
 pub mod stylistic_value_list_comma_space_before;
 
 // SCSS-specific rules (scss/ prefix)
 pub mod scss_at_else_closing_brace_newline_after;
-pub mod scss_at_else_empty_line_before;
 pub mod scss_at_else_closing_brace_space_after;
+pub mod scss_at_else_empty_line_before;
+pub mod scss_at_else_if_parentheses_space_before;
 pub mod scss_at_extend_no_missing_placeholder;
+pub mod scss_at_function_parentheses_space_before;
 pub mod scss_at_function_pattern;
 pub mod scss_at_if_closing_brace_newline_after;
 pub mod scss_at_if_closing_brace_space_after;
@@ -219,14 +221,17 @@ pub mod scss_at_if_no_null;
 pub mod scss_at_import_partial_extension;
 pub mod scss_at_import_partial_extension_disallowed_list;
 pub mod scss_at_mixin_argumentless_call_parentheses;
+pub mod scss_at_mixin_parentheses_space_before;
 pub mod scss_at_mixin_pattern;
 pub mod scss_at_rule_conditional_no_parentheses;
 pub mod scss_at_rule_no_unknown;
 pub mod scss_comment_no_empty;
+pub mod scss_comment_no_loud;
 pub mod scss_declaration_nested_properties;
 pub mod scss_declaration_nested_properties_no_divided_groups;
 pub mod scss_dollar_variable_colon_space_after;
 pub mod scss_dollar_variable_colon_space_before;
+pub mod scss_dollar_variable_empty_line_before;
 pub mod scss_dollar_variable_no_missing_interpolation;
 pub mod scss_dollar_variable_pattern;
 pub mod scss_double_slash_comment_empty_line_before;
@@ -246,11 +251,6 @@ pub mod scss_operator_no_newline_before;
 pub mod scss_operator_no_unspaced;
 pub mod scss_partial_no_import;
 pub mod scss_percent_placeholder_pattern;
-pub mod scss_at_else_if_parentheses_space_before;
-pub mod scss_at_function_parentheses_space_before;
-pub mod scss_at_mixin_parentheses_space_before;
-pub mod scss_comment_no_loud;
-pub mod scss_dollar_variable_empty_line_before;
 pub mod scss_selector_no_redundant_nesting_selector;
 
 use crate::registry::RuleRegistry;
@@ -260,18 +260,28 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(alpha_value_notation::AlphaValueNotation));
     registry.register(Box::new(annotation_no_unknown::AnnotationNoUnknown));
     registry.register(Box::new(at_rule_allowed_list::AtRuleAllowedList));
-    registry.register(Box::new(at_rule_descriptor_no_unknown::AtRuleDescriptorNoUnknown));
-    registry.register(Box::new(at_rule_descriptor_value_no_unknown::AtRuleDescriptorValueNoUnknown));
+    registry.register(Box::new(
+        at_rule_descriptor_no_unknown::AtRuleDescriptorNoUnknown,
+    ));
+    registry.register(Box::new(
+        at_rule_descriptor_value_no_unknown::AtRuleDescriptorValueNoUnknown,
+    ));
     registry.register(Box::new(at_rule_disallowed_list::AtRuleDisallowedList));
     registry.register(Box::new(at_rule_empty_line_before::AtRuleEmptyLineBefore));
     registry.register(Box::new(at_rule_no_deprecated::AtRuleNoDeprecated));
     registry.register(Box::new(at_rule_no_unknown::AtRuleNoUnknown));
     registry.register(Box::new(at_rule_no_vendor_prefix::AtRuleNoVendorPrefix));
     registry.register(Box::new(at_rule_prelude_no_invalid::AtRulePreludeNoInvalid));
-    registry.register(Box::new(at_rule_property_required_list::AtRulePropertyRequiredList));
+    registry.register(Box::new(
+        at_rule_property_required_list::AtRulePropertyRequiredList,
+    ));
     registry.register(Box::new(block_no_empty::BlockNoEmpty));
-    registry.register(Box::new(block_no_redundant_nested_style_rules::BlockNoRedundantNestedStyleRules));
-    registry.register(Box::new(color_function_alias_notation::ColorFunctionAliasNotation));
+    registry.register(Box::new(
+        block_no_redundant_nested_style_rules::BlockNoRedundantNestedStyleRules,
+    ));
+    registry.register(Box::new(
+        color_function_alias_notation::ColorFunctionAliasNotation,
+    ));
     registry.register(Box::new(color_function_notation::ColorFunctionNotation));
     registry.register(Box::new(color_hex_alpha::ColorHexAlpha));
     registry.register(Box::new(color_hex_case::ColorHexCase));
@@ -283,10 +293,14 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(comment_no_empty::CommentNoEmpty));
     registry.register(Box::new(comment_pattern::CommentPattern));
     registry.register(Box::new(comment_whitespace_inside::CommentWhitespaceInside));
-    registry.register(Box::new(comment_word_disallowed_list::CommentWordDisallowedList));
+    registry.register(Box::new(
+        comment_word_disallowed_list::CommentWordDisallowedList,
+    ));
     registry.register(Box::new(container_name_pattern::ContainerNamePattern));
     registry.register(Box::new(custom_media_pattern::CustomMediaPattern));
-    registry.register(Box::new(custom_property_empty_line_before::CustomPropertyEmptyLineBefore));
+    registry.register(Box::new(
+        custom_property_empty_line_before::CustomPropertyEmptyLineBefore,
+    ));
     registry.register(Box::new(
         custom_property_no_missing_var_function::CustomPropertyNoMissingVarFunction,
     ));
@@ -304,14 +318,22 @@ pub fn register_all(registry: &mut RuleRegistry) {
         declaration_empty_line_before::DeclarationEmptyLineBefore,
     ));
     registry.register(Box::new(declaration_no_important::DeclarationNoImportant));
-    registry.register(Box::new(declaration_property_unit_allowed_list::DeclarationPropertyUnitAllowedList));
-    registry.register(Box::new(declaration_property_unit_disallowed_list::DeclarationPropertyUnitDisallowedList));
-    registry.register(Box::new(declaration_property_value_allowed_list::DeclarationPropertyValueAllowedList));
+    registry.register(Box::new(
+        declaration_property_unit_allowed_list::DeclarationPropertyUnitAllowedList,
+    ));
+    registry.register(Box::new(
+        declaration_property_unit_disallowed_list::DeclarationPropertyUnitDisallowedList,
+    ));
+    registry.register(Box::new(
+        declaration_property_value_allowed_list::DeclarationPropertyValueAllowedList,
+    ));
     registry.register(Box::new(
         declaration_property_value_disallowed_list::DeclarationPropertyValueDisallowedList,
     ));
     registry.register(Box::new(declaration_property_value_keyword_no_deprecated::DeclarationPropertyValueKeywordNoDeprecated));
-    registry.register(Box::new(declaration_property_value_no_unknown::DeclarationPropertyValueNoUnknown));
+    registry.register(Box::new(
+        declaration_property_value_no_unknown::DeclarationPropertyValueNoUnknown,
+    ));
     registry.register(Box::new(display_notation::DisplayNotation));
     registry.register(Box::new(font_family_name_quotes::FontFamilyNameQuotes));
     registry.register(Box::new(
@@ -333,14 +355,20 @@ pub fn register_all(registry: &mut RuleRegistry) {
         function_url_no_scheme_relative::FunctionUrlNoSchemeRelative,
     ));
     registry.register(Box::new(function_url_quotes::FunctionUrlQuotes));
-    registry.register(Box::new(function_url_scheme_allowed_list::FunctionUrlSchemeAllowedList));
-    registry.register(Box::new(function_url_scheme_disallowed_list::FunctionUrlSchemeDisallowedList));
+    registry.register(Box::new(
+        function_url_scheme_allowed_list::FunctionUrlSchemeAllowedList,
+    ));
+    registry.register(Box::new(
+        function_url_scheme_disallowed_list::FunctionUrlSchemeDisallowedList,
+    ));
     registry.register(Box::new(hue_degree_notation::HueDegreeNotation));
     registry.register(Box::new(import_notation::ImportNotation));
     registry.register(Box::new(
         keyframe_block_no_duplicate_selectors::KeyframeBlockNoDuplicateSelectors,
     ));
-    registry.register(Box::new(keyframe_selector_notation::KeyframeSelectorNotation));
+    registry.register(Box::new(
+        keyframe_selector_notation::KeyframeSelectorNotation,
+    ));
     registry.register(Box::new(keyframes_name_pattern::KeyframesNamePattern));
     registry.register(Box::new(
         keyframe_declaration_no_important::KeyframeDeclarationNoImportant,
@@ -350,24 +378,38 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(lightness_notation::LightnessNotation));
     registry.register(Box::new(max_line_length::MaxLineLength));
     registry.register(Box::new(max_nesting_depth::MaxNestingDepth));
-    registry.register(Box::new(media_feature_name_allowed_list::MediaFeatureNameAllowedList));
-    registry.register(Box::new(media_feature_name_disallowed_list::MediaFeatureNameDisallowedList));
+    registry.register(Box::new(
+        media_feature_name_allowed_list::MediaFeatureNameAllowedList,
+    ));
+    registry.register(Box::new(
+        media_feature_name_disallowed_list::MediaFeatureNameDisallowedList,
+    ));
     registry.register(Box::new(
         media_feature_name_no_unknown::MediaFeatureNameNoUnknown,
     ));
     registry.register(Box::new(
         media_feature_name_no_vendor_prefix::MediaFeatureNameNoVendorPrefix,
     ));
-    registry.register(Box::new(media_feature_name_unit_allowed_list::MediaFeatureNameUnitAllowedList));
-    registry.register(Box::new(media_feature_name_value_allowed_list::MediaFeatureNameValueAllowedList));
-    registry.register(Box::new(media_feature_name_value_no_unknown::MediaFeatureNameValueNoUnknown));
+    registry.register(Box::new(
+        media_feature_name_unit_allowed_list::MediaFeatureNameUnitAllowedList,
+    ));
+    registry.register(Box::new(
+        media_feature_name_value_allowed_list::MediaFeatureNameValueAllowedList,
+    ));
+    registry.register(Box::new(
+        media_feature_name_value_no_unknown::MediaFeatureNameValueNoUnknown,
+    ));
     registry.register(Box::new(
         media_feature_range_notation::MediaFeatureRangeNotation,
     ));
     registry.register(Box::new(media_query_no_invalid::MediaQueryNoInvalid));
     registry.register(Box::new(media_type_no_deprecated::MediaTypeNoDeprecated));
-    registry.register(Box::new(named_grid_areas_no_invalid::NamedGridAreasNoInvalid));
-    registry.register(Box::new(nesting_selector_no_missing_scoping_root::NestingSelectorNoMissingScopingRoot));
+    registry.register(Box::new(
+        named_grid_areas_no_invalid::NamedGridAreasNoInvalid,
+    ));
+    registry.register(Box::new(
+        nesting_selector_no_missing_scoping_root::NestingSelectorNoMissingScopingRoot,
+    ));
     registry.register(Box::new(no_descending_specificity::NoDescendingSpecificity));
     registry.register(Box::new(
         no_duplicate_at_import_rules::NoDuplicateAtImportRules,
@@ -398,16 +440,32 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(property_no_unknown::PropertyNoUnknown));
     registry.register(Box::new(property_no_vendor_prefix::PropertyNoVendorPrefix));
     registry.register(Box::new(rule_empty_line_before::RuleEmptyLineBefore));
-    registry.register(Box::new(rule_nesting_at_rule_required_list::RuleNestingAtRuleRequiredList));
-    registry.register(Box::new(rule_selector_property_disallowed_list::RuleSelectorPropertyDisallowedList));
-    registry.register(Box::new(selector_anb_no_unmatchable::SelectorAnbNoUnmatchable));
-    registry.register(Box::new(selector_attribute_name_disallowed_list::SelectorAttributeNameDisallowedList));
-    registry.register(Box::new(selector_attribute_operator_allowed_list::SelectorAttributeOperatorAllowedList));
-    registry.register(Box::new(selector_attribute_operator_disallowed_list::SelectorAttributeOperatorDisallowedList));
+    registry.register(Box::new(
+        rule_nesting_at_rule_required_list::RuleNestingAtRuleRequiredList,
+    ));
+    registry.register(Box::new(
+        rule_selector_property_disallowed_list::RuleSelectorPropertyDisallowedList,
+    ));
+    registry.register(Box::new(
+        selector_anb_no_unmatchable::SelectorAnbNoUnmatchable,
+    ));
+    registry.register(Box::new(
+        selector_attribute_name_disallowed_list::SelectorAttributeNameDisallowedList,
+    ));
+    registry.register(Box::new(
+        selector_attribute_operator_allowed_list::SelectorAttributeOperatorAllowedList,
+    ));
+    registry.register(Box::new(
+        selector_attribute_operator_disallowed_list::SelectorAttributeOperatorDisallowedList,
+    ));
     registry.register(Box::new(selector_attribute_quotes::SelectorAttributeQuotes));
     registry.register(Box::new(selector_class_pattern::SelectorClassPattern));
-    registry.register(Box::new(selector_combinator_allowed_list::SelectorCombinatorAllowedList));
-    registry.register(Box::new(selector_combinator_disallowed_list::SelectorCombinatorDisallowedList));
+    registry.register(Box::new(
+        selector_combinator_allowed_list::SelectorCombinatorAllowedList,
+    ));
+    registry.register(Box::new(
+        selector_combinator_disallowed_list::SelectorCombinatorDisallowedList,
+    ));
     registry.register(Box::new(selector_disallowed_list::SelectorDisallowedList));
     registry.register(Box::new(selector_id_pattern::SelectorIdPattern));
     registry.register(Box::new(selector_max_attribute::SelectorMaxAttribute));
@@ -428,16 +486,24 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(selector_no_vendor_prefix::SelectorNoVendorPrefix));
     registry.register(Box::new(selector_type_case::SelectorTypeCase));
     registry.register(Box::new(selector_not_notation::SelectorNotNotation));
-    registry.register(Box::new(selector_pseudo_class_allowed_list::SelectorPseudoClassAllowedList));
-    registry.register(Box::new(selector_pseudo_class_disallowed_list::SelectorPseudoClassDisallowedList));
+    registry.register(Box::new(
+        selector_pseudo_class_allowed_list::SelectorPseudoClassAllowedList,
+    ));
+    registry.register(Box::new(
+        selector_pseudo_class_disallowed_list::SelectorPseudoClassDisallowedList,
+    ));
     registry.register(Box::new(
         selector_pseudo_class_no_unknown::SelectorPseudoClassNoUnknown,
     ));
-    registry.register(Box::new(selector_pseudo_element_allowed_list::SelectorPseudoElementAllowedList));
+    registry.register(Box::new(
+        selector_pseudo_element_allowed_list::SelectorPseudoElementAllowedList,
+    ));
     registry.register(Box::new(
         selector_pseudo_element_colon_notation::SelectorPseudoElementColonNotation,
     ));
-    registry.register(Box::new(selector_pseudo_element_disallowed_list::SelectorPseudoElementDisallowedList));
+    registry.register(Box::new(
+        selector_pseudo_element_disallowed_list::SelectorPseudoElementDisallowedList,
+    ));
     registry.register(Box::new(
         selector_pseudo_element_no_unknown::SelectorPseudoElementNoUnknown,
     ));

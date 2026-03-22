@@ -58,10 +58,7 @@ impl Rule for DisplayNotation {
             return vec![];
         };
 
-        let mode = ctx
-            .options
-            .and_then(|v| v.as_str())
-            .unwrap_or("short");
+        let mode = ctx.options.and_then(|v| v.as_str()).unwrap_or("short");
 
         let mut diags = Vec::new();
         for decl in &rule.declarations {
@@ -79,9 +76,7 @@ impl Rule for DisplayNotation {
                             diags.push(
                                 Diagnostic::new(
                                     self.name(),
-                                    format!(
-                                        "Expected \"{short}\" instead of \"{long}\""
-                                    ),
+                                    format!("Expected \"{short}\" instead of \"{long}\""),
                                 )
                                 .severity(self.default_severity())
                                 .span(Span::new(decl.span.offset, decl.span.length)),
@@ -97,9 +92,7 @@ impl Rule for DisplayNotation {
                             diags.push(
                                 Diagnostic::new(
                                     self.name(),
-                                    format!(
-                                        "Expected \"{long}\" instead of \"{short}\""
-                                    ),
+                                    format!("Expected \"{long}\" instead of \"{short}\""),
                                 )
                                 .severity(self.default_severity())
                                 .span(Span::new(decl.span.offset, decl.span.length)),

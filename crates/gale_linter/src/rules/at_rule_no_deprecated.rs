@@ -32,12 +32,14 @@ impl Rule for AtRuleNoDeprecated {
         };
 
         if is_deprecated_at_rule(&at.name) {
-            vec![Diagnostic::new(
-                self.name(),
-                format!("Unexpected deprecated at-rule \"@{}\"", at.name),
-            )
-            .severity(self.default_severity())
-            .span(Span::new(at.span.offset, at.span.length))]
+            vec![
+                Diagnostic::new(
+                    self.name(),
+                    format!("Unexpected deprecated at-rule \"@{}\"", at.name),
+                )
+                .severity(self.default_severity())
+                .span(Span::new(at.span.offset, at.span.length)),
+            ]
         } else {
             vec![]
         }
@@ -88,8 +90,10 @@ mod tests {
 
     #[test]
     fn allows_keyframes() {
-        assert!(AtRuleNoDeprecated
-            .check(&at("keyframes"), &ctx())
-            .is_empty());
+        assert!(
+            AtRuleNoDeprecated
+                .check(&at("keyframes"), &ctx())
+                .is_empty()
+        );
     }
 }

@@ -88,10 +88,7 @@ impl Rule for NamedGridAreasNoInvalid {
                 diagnostics.push(
                     Diagnostic::new(
                         self.name(),
-                        format!(
-                            "Named grid area \"{}\" does not form a rectangle",
-                            name
-                        ),
+                        format!("Named grid area \"{}\" does not form a rectangle", name),
                     )
                     .severity(self.default_severity())
                     .span(Span::new(decl.span.offset, decl.span.length)),

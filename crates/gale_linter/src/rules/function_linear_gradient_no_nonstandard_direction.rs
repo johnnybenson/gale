@@ -34,10 +34,7 @@ const NON_STANDARD_DIRECTIONS: &[&str] = &[
 ];
 
 /// Unprefixed gradient function names that should use the standard syntax.
-const STANDARD_GRADIENT_FUNCTIONS: &[&str] = &[
-    "linear-gradient",
-    "repeating-linear-gradient",
-];
+const STANDARD_GRADIENT_FUNCTIONS: &[&str] = &["linear-gradient", "repeating-linear-gradient"];
 
 impl Rule for FunctionLinearGradientNoNonstandardDirection {
     fn name(&self) -> &'static str {
@@ -130,10 +127,7 @@ fn check_value(
                     diags.push(
                         Diagnostic::new(
                             rule.name(),
-                            format!(
-                                "Unexpected non-standard direction \"{}\"",
-                                first_arg
-                            ),
+                            format!("Unexpected non-standard direction \"{}\"", first_arg),
                         )
                         .severity(rule.default_severity())
                         .span(Span::new(base_offset + start, close + 1 - start)),
@@ -193,7 +187,11 @@ fn looks_like_angle(s: &str) -> bool {
     for unit in &units {
         if let Some(num_part) = s.strip_suffix(unit) {
             let num_part = num_part.trim();
-            if !num_part.is_empty() && num_part.bytes().all(|b| b.is_ascii_digit() || b == b'.' || b == b'-' || b == b'+') {
+            if !num_part.is_empty()
+                && num_part
+                    .bytes()
+                    .all(|b| b.is_ascii_digit() || b == b'.' || b == b'-' || b == b'+')
+            {
                 return true;
             }
         }

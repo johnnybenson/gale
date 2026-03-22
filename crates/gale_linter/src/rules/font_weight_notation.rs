@@ -210,7 +210,8 @@ impl FontWeightNotation {
             let vo = find_value_offset(ctx.source, decl.span.offset, decl.property.len());
             // Find end of value (semicolon or closing brace)
             let rest = &ctx.source[vo..];
-            let end = rest.find(|c: char| c == ';' || c == '}')
+            let end = rest
+                .find(|c: char| c == ';' || c == '}')
                 .map(|i| vo + i)
                 .unwrap_or(vo + rest.len());
             let raw = ctx.source[vo..end].trim().to_string();
@@ -239,7 +240,16 @@ impl FontWeightNotation {
                     if is_relative_weight(token) {
                         continue;
                     }
-                    self.check_weight_token(token, mode, ignore_relative, decl, ctx, diags, &clean_value, value_offset);
+                    self.check_weight_token(
+                        token,
+                        mode,
+                        ignore_relative,
+                        decl,
+                        ctx,
+                        diags,
+                        &clean_value,
+                        value_offset,
+                    );
                 }
             } else {
                 if is_css_wide_keyword(value_trimmed) {
@@ -248,10 +258,28 @@ impl FontWeightNotation {
                 if is_relative_weight(value_trimmed) {
                     return;
                 }
-                self.check_weight_token(value_trimmed, mode, ignore_relative, decl, ctx, diags, &clean_value, value_offset);
+                self.check_weight_token(
+                    value_trimmed,
+                    mode,
+                    ignore_relative,
+                    decl,
+                    ctx,
+                    diags,
+                    &clean_value,
+                    value_offset,
+                );
             }
         } else if prop_lower == "font" {
-            self.check_font_shorthand(value_trimmed, mode, ignore_relative, decl, ctx, diags, &clean_value, value_offset);
+            self.check_font_shorthand(
+                value_trimmed,
+                mode,
+                ignore_relative,
+                decl,
+                ctx,
+                diags,
+                &clean_value,
+                value_offset,
+            );
         }
     }
 
@@ -338,10 +366,20 @@ impl FontWeightNotation {
         let mut size_idx = None;
         for (i, t) in tokens.iter().enumerate() {
             let lower = t.to_ascii_lowercase();
-            if (lower.chars().next().map(|c| c.is_ascii_digit() || c == '.').unwrap_or(false)
-                && (lower.ends_with("px") || lower.ends_with("em") || lower.ends_with("rem")
-                    || lower.ends_with("pt") || lower.ends_with('%') || lower.ends_with("vw")
-                    || lower.ends_with("vh") || lower.ends_with("ex") || lower.ends_with("ch")
+            if (lower
+                .chars()
+                .next()
+                .map(|c| c.is_ascii_digit() || c == '.')
+                .unwrap_or(false)
+                && (lower.ends_with("px")
+                    || lower.ends_with("em")
+                    || lower.ends_with("rem")
+                    || lower.ends_with("pt")
+                    || lower.ends_with('%')
+                    || lower.ends_with("vw")
+                    || lower.ends_with("vh")
+                    || lower.ends_with("ex")
+                    || lower.ends_with("ch")
                     || lower.contains('/')))
             {
                 size_idx = Some(i);
@@ -354,9 +392,9 @@ impl FontWeightNotation {
 
         // In numeric mode, check if there's an explicit numeric weight before the size.
         // If so, "normal" tokens are treated as font-style/variant, not weight.
-        let has_numeric_weight = tokens[..check_up_to].iter().any(|t| {
-            t.parse::<u32>().is_ok()
-        });
+        let has_numeric_weight = tokens[..check_up_to]
+            .iter()
+            .any(|t| t.parse::<u32>().is_ok());
 
         for i in 0..check_up_to {
             let token = tokens[i];
@@ -468,11 +506,10 @@ fn find_token_in_value(value: &str, token: &str) -> Option<usize> {
     let mut start = 0;
     while let Some(pos) = lower_value[start..].find(&lower_token) {
         let abs_pos = start + pos;
-        let before_ok = abs_pos == 0
-            || !value.as_bytes()[abs_pos - 1].is_ascii_alphanumeric();
+        let before_ok = abs_pos == 0 || !value.as_bytes()[abs_pos - 1].is_ascii_alphanumeric();
         let after_pos = abs_pos + lower_token.len();
-        let after_ok = after_pos >= value.len()
-            || !value.as_bytes()[after_pos].is_ascii_alphanumeric();
+        let after_ok =
+            after_pos >= value.len() || !value.as_bytes()[after_pos].is_ascii_alphanumeric();
         if before_ok && after_ok {
             return Some(abs_pos);
         }

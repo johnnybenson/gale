@@ -136,16 +136,20 @@ mod tests {
 
     #[test]
     fn allows_screen() {
-        assert!(MediaTypeNoDeprecated
-            .check(&media("screen and (min-width: 768px)"), &ctx())
-            .is_empty());
+        assert!(
+            MediaTypeNoDeprecated
+                .check(&media("screen and (min-width: 768px)"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn allows_all() {
-        assert!(MediaTypeNoDeprecated
-            .check(&media("all"), &ctx())
-            .is_empty());
+        assert!(
+            MediaTypeNoDeprecated
+                .check(&media("all"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]

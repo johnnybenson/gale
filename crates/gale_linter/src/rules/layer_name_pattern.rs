@@ -177,11 +177,7 @@ mod tests {
         let opts = serde_json::json!("^[A-Z][a-zA-Z0-9]+$");
         let c = ctx_with_options(&opts);
         // PascalCase should pass
-        assert!(
-            LayerNamePattern
-                .check(&layer("MyLayer"), &c)
-                .is_empty()
-        );
+        assert!(LayerNamePattern.check(&layer("MyLayer"), &c).is_empty());
         // kebab-case should fail
         let d = LayerNamePattern.check(&layer("my-layer"), &c);
         assert_eq!(d.len(), 1);

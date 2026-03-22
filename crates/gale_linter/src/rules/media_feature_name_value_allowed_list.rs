@@ -58,9 +58,8 @@ impl Rule for MediaFeatureNameValueAllowedList {
             if let Some(allowed_values) = allowed_map.get(base_feature) {
                 let value_trimmed = value.trim();
                 let is_allowed = allowed_values.iter().any(|pattern| {
-                    if let Some(regex_body) = pattern
-                        .strip_prefix('/')
-                        .and_then(|s| s.strip_suffix('/'))
+                    if let Some(regex_body) =
+                        pattern.strip_prefix('/').and_then(|s| s.strip_suffix('/'))
                     {
                         // Treat as regex pattern.
                         regex::Regex::new(regex_body)
@@ -92,9 +91,7 @@ impl Rule for MediaFeatureNameValueAllowedList {
 }
 
 /// Parse the rule options as `{ "feature-name": ["value1", "/regex/"] }`.
-fn parse_options(
-    options: Option<&serde_json::Value>,
-) -> Option<HashMap<String, Vec<String>>> {
+fn parse_options(options: Option<&serde_json::Value>) -> Option<HashMap<String, Vec<String>>> {
     let obj = options?.as_object()?;
     let mut map = HashMap::new();
     for (key, val) in obj {

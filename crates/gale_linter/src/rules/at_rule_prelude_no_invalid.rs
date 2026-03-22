@@ -39,12 +39,11 @@ impl Rule for AtRulePreludeNoInvalid {
         match name.as_str() {
             "media" => {
                 if params.is_empty() {
-                    return vec![Diagnostic::new(
-                        self.name(),
-                        "Unexpected empty prelude for @media",
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(at.span.offset, at.span.length))];
+                    return vec![
+                        Diagnostic::new(self.name(), "Unexpected empty prelude for @media")
+                            .severity(self.default_severity())
+                            .span(Span::new(at.span.offset, at.span.length)),
+                    ];
                 }
                 // Check for unbalanced parentheses
                 let mut depth: i32 = 0;
@@ -54,69 +53,73 @@ impl Rule for AtRulePreludeNoInvalid {
                         ')' => {
                             depth -= 1;
                             if depth < 0 {
-                                return vec![Diagnostic::new(
-                                    self.name(),
-                                    "Unexpected unbalanced parentheses in @media prelude",
-                                )
-                                .severity(self.default_severity())
-                                .span(Span::new(at.span.offset, at.span.length))];
+                                return vec![
+                                    Diagnostic::new(
+                                        self.name(),
+                                        "Unexpected unbalanced parentheses in @media prelude",
+                                    )
+                                    .severity(self.default_severity())
+                                    .span(Span::new(at.span.offset, at.span.length)),
+                                ];
                             }
                         }
                         _ => {}
                     }
                 }
                 if depth != 0 {
-                    return vec![Diagnostic::new(
-                        self.name(),
-                        "Unexpected unbalanced parentheses in @media prelude",
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(at.span.offset, at.span.length))];
+                    return vec![
+                        Diagnostic::new(
+                            self.name(),
+                            "Unexpected unbalanced parentheses in @media prelude",
+                        )
+                        .severity(self.default_severity())
+                        .span(Span::new(at.span.offset, at.span.length)),
+                    ];
                 }
                 // Check for empty parentheses
                 if params.contains("()") {
-                    return vec![Diagnostic::new(
-                        self.name(),
-                        "Unexpected empty parentheses in @media prelude",
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(at.span.offset, at.span.length))];
+                    return vec![
+                        Diagnostic::new(
+                            self.name(),
+                            "Unexpected empty parentheses in @media prelude",
+                        )
+                        .severity(self.default_severity())
+                        .span(Span::new(at.span.offset, at.span.length)),
+                    ];
                 }
                 vec![]
             }
             "import" => {
                 if params.is_empty() {
-                    return vec![Diagnostic::new(
-                        self.name(),
-                        "Unexpected empty prelude for @import",
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(at.span.offset, at.span.length))];
+                    return vec![
+                        Diagnostic::new(self.name(), "Unexpected empty prelude for @import")
+                            .severity(self.default_severity())
+                            .span(Span::new(at.span.offset, at.span.length)),
+                    ];
                 }
                 // @import prelude must start with a string or url()
                 let starts_valid = params.starts_with('"')
                     || params.starts_with('\'')
-                    || params
-                        .to_ascii_lowercase()
-                        .starts_with("url(");
+                    || params.to_ascii_lowercase().starts_with("url(");
                 if !starts_valid {
-                    return vec![Diagnostic::new(
-                        self.name(),
-                        "Expected @import prelude to start with a string or url()",
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(at.span.offset, at.span.length))];
+                    return vec![
+                        Diagnostic::new(
+                            self.name(),
+                            "Expected @import prelude to start with a string or url()",
+                        )
+                        .severity(self.default_severity())
+                        .span(Span::new(at.span.offset, at.span.length)),
+                    ];
                 }
                 vec![]
             }
             "keyframes" => {
                 if params.is_empty() {
-                    return vec![Diagnostic::new(
-                        self.name(),
-                        "Unexpected empty prelude for @keyframes",
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(at.span.offset, at.span.length))];
+                    return vec![
+                        Diagnostic::new(self.name(), "Unexpected empty prelude for @keyframes")
+                            .severity(self.default_severity())
+                            .span(Span::new(at.span.offset, at.span.length)),
+                    ];
                 }
                 vec![]
             }
@@ -130,12 +133,14 @@ impl Rule for AtRulePreludeNoInvalid {
                     for layer_name in params.split(',') {
                         let layer_name = layer_name.trim();
                         if layer_name.is_empty() {
-                            return vec![Diagnostic::new(
-                                self.name(),
-                                "Unexpected empty layer name in @layer prelude",
-                            )
-                            .severity(self.default_severity())
-                            .span(Span::new(at.span.offset, at.span.length))];
+                            return vec![
+                                Diagnostic::new(
+                                    self.name(),
+                                    "Unexpected empty layer name in @layer prelude",
+                                )
+                                .severity(self.default_severity())
+                                .span(Span::new(at.span.offset, at.span.length)),
+                            ];
                         }
                     }
                 }
@@ -143,12 +148,11 @@ impl Rule for AtRulePreludeNoInvalid {
             }
             "supports" => {
                 if params.is_empty() {
-                    return vec![Diagnostic::new(
-                        self.name(),
-                        "Unexpected empty prelude for @supports",
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(at.span.offset, at.span.length))];
+                    return vec![
+                        Diagnostic::new(self.name(), "Unexpected empty prelude for @supports")
+                            .severity(self.default_severity())
+                            .span(Span::new(at.span.offset, at.span.length)),
+                    ];
                 }
                 vec![]
             }

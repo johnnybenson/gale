@@ -386,8 +386,10 @@ fn strip_preprocessor_constructs(selector: &str, syntax: gale_css_parser::Syntax
 
     while i < len {
         // SCSS: #{...}
-        if matches!(syntax, gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass)
-            && i + 1 < len
+        if matches!(
+            syntax,
+            gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass
+        ) && i + 1 < len
             && chars[i] == '#'
             && chars[i + 1] == '{'
         {

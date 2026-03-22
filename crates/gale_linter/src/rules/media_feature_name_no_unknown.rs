@@ -79,19 +79,12 @@ impl Rule for MediaFeatureNameNoUnknown {
 
             if !is_known_media_feature(&feature.name) {
                 // Find the feature name directly in the source text
-                let span = find_feature_span_in_source(
-                    ctx.source,
-                    at.span.offset,
-                    &feature,
-                );
+                let span = find_feature_span_in_source(ctx.source, at.span.offset, &feature);
 
                 diags.push(
                     Diagnostic::new(
                         self.name(),
-                        format!(
-                            "Unexpected unknown media feature name \"{}\"",
-                            feature.name
-                        ),
+                        format!("Unexpected unknown media feature name \"{}\"", feature.name),
                     )
                     .severity(self.default_severity())
                     .span(span),
@@ -112,11 +105,7 @@ struct MediaFeature {
 
 /// Find the feature name directly in the source text by searching for it
 /// as a whole word.
-fn find_feature_span_in_source(
-    source: &str,
-    at_offset: usize,
-    feature: &MediaFeature,
-) -> Span {
+fn find_feature_span_in_source(source: &str, at_offset: usize, feature: &MediaFeature) -> Span {
     let at_source = &source[at_offset..];
     let feature_lower = feature.name.to_ascii_lowercase();
     let at_lower = at_source.to_ascii_lowercase();
@@ -164,8 +153,7 @@ fn parse_ignore_list(options: Option<&serde_json::Value>) -> Vec<String> {
         serde_json::Value::Array(arr) => {
             for item in arr {
                 if let serde_json::Value::Object(o) = item {
-                    if let Some(serde_json::Value::Array(names)) =
-                        o.get("ignoreMediaFeatureNames")
+                    if let Some(serde_json::Value::Array(names)) = o.get("ignoreMediaFeatureNames")
                     {
                         return names
                             .iter()
@@ -361,8 +349,7 @@ fn extract_media_features(params: &str) -> Vec<MediaFeature> {
                     }
                     while k < len && chars[k] != ')' {
                         if chars[k] == '<' || chars[k] == '>' || chars[k] == '=' {
-                            while k < len
-                                && (chars[k] == '<' || chars[k] == '>' || chars[k] == '=')
+                            while k < len && (chars[k] == '<' || chars[k] == '>' || chars[k] == '=')
                             {
                                 k += 1;
                             }
@@ -375,8 +362,7 @@ fn extract_media_features(params: &str) -> Vec<MediaFeature> {
                                     || (chars[k] == '.'
                                         && k + 1 < len
                                         && chars[k + 1].is_ascii_digit()));
-                            let val_is_variable =
-                                k < len && (chars[k] == '$' || chars[k] == '@');
+                            let val_is_variable = k < len && (chars[k] == '$' || chars[k] == '@');
 
                             if val_is_digit {
                                 while k < len
@@ -408,18 +394,15 @@ fn extract_media_features(params: &str) -> Vec<MediaFeature> {
                                     k += 1;
                                 }
                                 if k > val_start {
-                                    let rhs_name: String =
-                                        chars[val_start..k].iter().collect();
+                                    let rhs_name: String = chars[val_start..k].iter().collect();
                                     if rhs_name.contains(".$") || rhs_name.contains('$') {
                                         // SCSS variable, skip
                                     } else if !matches!(
                                         rhs_name.as_str(),
                                         "not" | "and" | "or" | "only"
                                     ) {
-                                        let byte_offset: usize = chars[..val_start]
-                                            .iter()
-                                            .map(|c| c.len_utf8())
-                                            .sum();
+                                        let byte_offset: usize =
+                                            chars[..val_start].iter().map(|c| c.len_utf8()).sum();
                                         features.push(MediaFeature {
                                             name: rhs_name,
                                             offset_in_params: byte_offset,

@@ -107,8 +107,7 @@ impl Rule for StylisticSelectorPseudoClassParenthesesSpaceInside {
                 let after_open = open_paren + 1;
                 let before_close = close_paren.saturating_sub(1);
 
-                let has_space_after_open =
-                    after_open < len && bytes[after_open] == b' ';
+                let has_space_after_open = after_open < len && bytes[after_open] == b' ';
                 let has_space_before_close =
                     before_close > open_paren && bytes[before_close] == b' ';
 
@@ -116,41 +115,29 @@ impl Rule for StylisticSelectorPseudoClassParenthesesSpaceInside {
 
                 if expect_space && !has_space_after_open {
                     diagnostics.push(
-                        Diagnostic::new(
-                            self.name(),
-                            "Expected a space after \"(\"",
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(open_paren, 1)),
+                        Diagnostic::new(self.name(), "Expected a space after \"(\"")
+                            .severity(self.default_severity())
+                            .span(Span::new(open_paren, 1)),
                     );
                 } else if !expect_space && has_space_after_open {
                     diagnostics.push(
-                        Diagnostic::new(
-                            self.name(),
-                            "Unexpected space after \"(\"",
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(open_paren, 1)),
+                        Diagnostic::new(self.name(), "Unexpected space after \"(\"")
+                            .severity(self.default_severity())
+                            .span(Span::new(open_paren, 1)),
                     );
                 }
 
                 if expect_space && !has_space_before_close {
                     diagnostics.push(
-                        Diagnostic::new(
-                            self.name(),
-                            "Expected a space before \")\"",
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(close_paren, 1)),
+                        Diagnostic::new(self.name(), "Expected a space before \")\"")
+                            .severity(self.default_severity())
+                            .span(Span::new(close_paren, 1)),
                     );
                 } else if !expect_space && has_space_before_close {
                     diagnostics.push(
-                        Diagnostic::new(
-                            self.name(),
-                            "Unexpected space before \")\"",
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(close_paren, 1)),
+                        Diagnostic::new(self.name(), "Unexpected space before \")\"")
+                            .severity(self.default_severity())
+                            .span(Span::new(close_paren, 1)),
                     );
                 }
 

@@ -21,7 +21,9 @@ fn extract_units(value: &str) -> Vec<String> {
     let mut i = 0;
 
     while i < len {
-        if bytes[i].is_ascii_digit() || (bytes[i] == b'.' && i + 1 < len && bytes[i + 1].is_ascii_digit()) {
+        if bytes[i].is_ascii_digit()
+            || (bytes[i] == b'.' && i + 1 < len && bytes[i + 1].is_ascii_digit())
+        {
             while i < len && (bytes[i].is_ascii_digit() || bytes[i] == b'.') {
                 i += 1;
             }
@@ -152,7 +154,8 @@ mod tests {
 
     #[test]
     fn allows_all_when_no_options() {
-        let d = DeclarationPropertyUnitDisallowedList.check(&style_with_decl("font-size", "16px"), &ctx());
+        let d = DeclarationPropertyUnitDisallowedList
+            .check(&style_with_decl("font-size", "16px"), &ctx());
         assert!(d.is_empty());
     }
 
@@ -190,10 +193,8 @@ mod tests {
     #[test]
     fn ignores_unconfigured_properties() {
         let opts = json!({"font-size": ["px"]});
-        let d = DeclarationPropertyUnitDisallowedList.check(
-            &style_with_decl("margin", "10px"),
-            &ctx_with_options(&opts),
-        );
+        let d = DeclarationPropertyUnitDisallowedList
+            .check(&style_with_decl("margin", "10px"), &ctx_with_options(&opts));
         assert!(d.is_empty());
     }
 

@@ -95,8 +95,7 @@ impl Rule for SelectorMaxId {
             if count > max {
                 // Use the offset of this individual selector within the
                 // source for accurate line/column reporting.
-                let offset = selector_source_start
-                    + part_offsets.get(idx).copied().unwrap_or(0);
+                let offset = selector_source_start + part_offsets.get(idx).copied().unwrap_or(0);
                 diags.push(
                     Diagnostic::new(
                         self.name(),
@@ -270,6 +269,9 @@ mod tests {
     fn skips_scss_interpolation() {
         // #{$var} is SCSS interpolation, not an ID selector
         let d = SelectorMaxId.check(&style_with_selector(".#{$prefix}-item"), &ctx());
-        assert!(d.is_empty(), "SCSS interpolation should not count as ID selector");
+        assert!(
+            d.is_empty(),
+            "SCSS interpolation should not count as ID selector"
+        );
     }
 }

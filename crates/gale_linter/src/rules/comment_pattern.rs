@@ -43,9 +43,7 @@ impl Rule for CommentPattern {
             return vec![
                 Diagnostic::new(
                     self.name(),
-                    format!(
-                        "Expected comment to match pattern \"/{pattern_str}/\""
-                    ),
+                    format!("Expected comment to match pattern \"/{pattern_str}/\""),
                 )
                 .severity(self.default_severity())
                 .span(Span::new(comment.span.offset, comment.span.length)),

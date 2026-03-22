@@ -74,7 +74,9 @@ impl Rule for StylisticSelectorPseudoClassCase {
                     i += 2;
                     // Skip past pseudo-element name
                     while i < len
-                        && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
+                        && (bytes[i].is_ascii_alphanumeric()
+                            || bytes[i] == b'-'
+                            || bytes[i] == b'_')
                     {
                         i += 1;
                     }
@@ -114,10 +116,7 @@ impl Rule for StylisticSelectorPseudoClassCase {
                     diagnostics.push(
                         Diagnostic::new(
                             self.name(),
-                            format!(
-                                "Expected pseudo-class \":{}\" to be {}",
-                                name, expected
-                            ),
+                            format!("Expected pseudo-class \":{}\" to be {}", name, expected),
                         )
                         .severity(self.default_severity())
                         .span(Span::new(colon_pos, name_end - colon_pos)),

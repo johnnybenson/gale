@@ -104,7 +104,8 @@ fn check_selector_for_unquoted_attrs(
                 if first_char != b'"' && first_char != b'\'' {
                     // Unquoted attribute value — flag it.
                     // Strip trailing `]`-adjacent flags like `i` or `s` (case sensitivity).
-                    let value_clean = value_part.trim_end_matches(|c: char| c.is_ascii_whitespace());
+                    let value_clean =
+                        value_part.trim_end_matches(|c: char| c.is_ascii_whitespace());
                     diags.push(
                         Diagnostic::new(
                             rule.name(),
@@ -114,7 +115,10 @@ fn check_selector_for_unquoted_attrs(
                             ),
                         )
                         .severity(rule.default_severity())
-                        .span(Span::new(base_offset + bracket_start, end - bracket_start + 1)),
+                        .span(Span::new(
+                            base_offset + bracket_start,
+                            end - bracket_start + 1,
+                        )),
                     );
                 }
                 break;

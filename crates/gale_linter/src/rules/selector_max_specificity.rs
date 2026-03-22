@@ -480,10 +480,7 @@ fn find_of_clause(inner: &str) -> Option<usize> {
 }
 
 /// Strip SCSS/Less interpolation from a selector string.
-fn strip_preprocessor_interpolation(
-    selector: &str,
-    syntax: gale_css_parser::Syntax,
-) -> String {
+fn strip_preprocessor_interpolation(selector: &str, syntax: gale_css_parser::Syntax) -> String {
     let mut result = String::with_capacity(selector.len());
     let chars: Vec<char> = selector.chars().collect();
     let len = chars.len();

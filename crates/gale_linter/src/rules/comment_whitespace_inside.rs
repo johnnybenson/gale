@@ -63,23 +63,17 @@ impl Rule for CommentWhitespaceInside {
 
         if missing_start {
             diags.push(
-                Diagnostic::new(
-                    self.name(),
-                    "Expected whitespace after \"/*\"".to_string(),
-                )
-                .severity(self.default_severity())
-                .span(Span::new(offset, length)),
+                Diagnostic::new(self.name(), "Expected whitespace after \"/*\"".to_string())
+                    .severity(self.default_severity())
+                    .span(Span::new(offset, length)),
             );
         }
 
         if missing_end {
             diags.push(
-                Diagnostic::new(
-                    self.name(),
-                    "Expected whitespace before \"*/\"".to_string(),
-                )
-                .severity(self.default_severity())
-                .span(Span::new(offset, length)),
+                Diagnostic::new(self.name(), "Expected whitespace before \"*/\"".to_string())
+                    .severity(self.default_severity())
+                    .span(Span::new(offset, length)),
             );
         }
 

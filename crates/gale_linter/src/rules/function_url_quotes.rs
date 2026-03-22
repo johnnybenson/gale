@@ -43,23 +43,49 @@ impl Rule for FunctionUrlQuotes {
         match node {
             CssNode::Style(rule) => {
                 for decl in &rule.declarations {
-                    let search_area = get_search_area(decl.span.offset, decl.span.length, ctx.source, &decl.value);
-                    let base_offset = if decl.span.length > 0 && decl.span.offset + decl.span.length <= ctx.source.len() {
+                    let search_area = get_search_area(
+                        decl.span.offset,
+                        decl.span.length,
+                        ctx.source,
+                        &decl.value,
+                    );
+                    let base_offset = if decl.span.length > 0
+                        && decl.span.offset + decl.span.length <= ctx.source.len()
+                    {
                         decl.span.offset
                     } else {
                         0
                     };
-                    check_urls(search_area, base_offset, option, except_empty, ctx, self, &mut diags);
+                    check_urls(
+                        search_area,
+                        base_offset,
+                        option,
+                        except_empty,
+                        ctx,
+                        self,
+                        &mut diags,
+                    );
                 }
             }
             CssNode::Declaration(decl) => {
-                let search_area = get_search_area(decl.span.offset, decl.span.length, ctx.source, &decl.value);
-                let base_offset = if decl.span.length > 0 && decl.span.offset + decl.span.length <= ctx.source.len() {
+                let search_area =
+                    get_search_area(decl.span.offset, decl.span.length, ctx.source, &decl.value);
+                let base_offset = if decl.span.length > 0
+                    && decl.span.offset + decl.span.length <= ctx.source.len()
+                {
                     decl.span.offset
                 } else {
                     0
                 };
-                check_urls(search_area, base_offset, option, except_empty, ctx, self, &mut diags);
+                check_urls(
+                    search_area,
+                    base_offset,
+                    option,
+                    except_empty,
+                    ctx,
+                    self,
+                    &mut diags,
+                );
             }
             CssNode::AtRule(at_rule) => {
                 // Check @import url(...) and other at-rule params
@@ -71,7 +97,8 @@ impl Rule for FunctionUrlQuotes {
                         && at_rule.span.offset + at_rule.span.length <= ctx.source.len()
                     {
                         // Try to find params in source after @name
-                        let at_rule_src = &ctx.source[at_rule.span.offset..at_rule.span.offset + at_rule.span.length];
+                        let at_rule_src = &ctx.source
+                            [at_rule.span.offset..at_rule.span.offset + at_rule.span.length];
                         if let Some(pos) = at_rule_src.find(params.as_str()) {
                             at_rule.span.offset + pos
                         } else {
@@ -80,7 +107,15 @@ impl Rule for FunctionUrlQuotes {
                     } else {
                         at_rule.span.offset
                     };
-                    check_urls(params, params_offset, option, except_empty, ctx, self, &mut diags);
+                    check_urls(
+                        params,
+                        params_offset,
+                        option,
+                        except_empty,
+                        ctx,
+                        self,
+                        &mut diags,
+                    );
                 }
             }
             _ => {}
@@ -90,7 +125,12 @@ impl Rule for FunctionUrlQuotes {
     }
 }
 
-fn get_search_area<'a>(offset: usize, length: usize, source: &'a str, fallback: &'a str) -> &'a str {
+fn get_search_area<'a>(
+    offset: usize,
+    length: usize,
+    source: &'a str,
+    fallback: &'a str,
+) -> &'a str {
     let end = offset + length;
     if length > 0 && end <= source.len() && offset < end {
         &source[offset..end]
@@ -133,10 +173,7 @@ fn check_urls(
                 .span(Span::new(abs_offset, total_len))
                 .fix(Fix::new(
                     "Remove quotes from URL",
-                    vec![Edit::new(
-                        Span::new(abs_offset, total_len),
-                        &url_content,
-                    )],
+                    vec![Edit::new(Span::new(abs_offset, total_len), &url_content)],
                 )),
             );
         }
@@ -173,10 +210,7 @@ fn check_urls(
                 .span(Span::new(abs_offset, url_content.len()))
                 .fix(Fix::new(
                     "Wrap URL in double quotes",
-                    vec![Edit::new(
-                        Span::new(abs_offset, url_content.len()),
-                        &quoted,
-                    )],
+                    vec![Edit::new(Span::new(abs_offset, url_content.len()), &quoted)],
                 )),
             );
         }
@@ -321,7 +355,9 @@ fn find_unquoted_urls(value: &str, syntax: Syntax) -> Vec<(usize, String)> {
                     let mut depth = 1i32;
                     let mut close = None;
                     for (j, &byte) in rest.as_bytes().iter().enumerate() {
-                        if j == 0 { continue; } // skip the implicit open paren context
+                        if j == 0 {
+                            continue;
+                        } // skip the implicit open paren context
                         if byte == b'(' {
                             depth += 1;
                         } else if byte == b')' {
@@ -341,7 +377,9 @@ fn find_unquoted_urls(value: &str, syntax: Syntax) -> Vec<(usize, String)> {
                                 continue;
                             }
                             // Skip SCSS interpolation
-                            if (syntax == Syntax::Scss || syntax == Syntax::Sass) && has_scss_interpolation(content) {
+                            if (syntax == Syntax::Scss || syntax == Syntax::Sass)
+                                && has_scss_interpolation(content)
+                            {
                                 search_from = abs_pos + 4;
                                 continue;
                             }
@@ -351,7 +389,9 @@ fn find_unquoted_urls(value: &str, syntax: Syntax) -> Vec<(usize, String)> {
                                 continue;
                             }
                             // Skip SCSS variables ($var)
-                            if (syntax == Syntax::Scss || syntax == Syntax::Sass) && is_scss_variable(content) {
+                            if (syntax == Syntax::Scss || syntax == Syntax::Sass)
+                                && is_scss_variable(content)
+                            {
                                 search_from = abs_pos + 4;
                                 continue;
                             }
@@ -434,10 +474,7 @@ mod tests {
 
     #[test]
     fn skips_scss_interpolation() {
-        let d = FunctionUrlQuotes.check(
-            &style_with_value("url(#{$var}/foo.png)"),
-            &ctx_scss(),
-        );
+        let d = FunctionUrlQuotes.check(&style_with_value("url(#{$var}/foo.png)"), &ctx_scss());
         assert!(d.is_empty());
     }
 

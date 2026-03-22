@@ -68,12 +68,9 @@ impl Rule for StylisticNoEolWhitespace {
                 }
                 if trail_start < trail_end {
                     diagnostics.push(
-                        Diagnostic::new(
-                            self.name(),
-                            "Unexpected end-of-line whitespace",
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(trail_start, trail_end - trail_start)),
+                        Diagnostic::new(self.name(), "Unexpected end-of-line whitespace")
+                            .severity(self.default_severity())
+                            .span(Span::new(trail_start, trail_end - trail_start)),
                     );
                 }
             }
@@ -91,12 +88,9 @@ impl Rule for StylisticNoEolWhitespace {
             }
             if trail_start < len {
                 diagnostics.push(
-                    Diagnostic::new(
-                        self.name(),
-                        "Unexpected end-of-line whitespace",
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(trail_start, len - trail_start)),
+                    Diagnostic::new(self.name(), "Unexpected end-of-line whitespace")
+                        .severity(self.default_severity())
+                        .span(Span::new(trail_start, len - trail_start)),
                 );
             }
         }

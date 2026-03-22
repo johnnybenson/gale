@@ -669,7 +669,9 @@ fn check_always_where_possible(
                         for inner in &inner_tokens {
                             if let ValueToken::Hash { text, offset: _ } = inner {
                                 if let Some(rgb) = parse_hex_to_rgb(text) {
-                                    if let Some(color_name) = rgb_to_named_color(rgb.0, rgb.1, rgb.2) {
+                                    if let Some(color_name) =
+                                        rgb_to_named_color(rgb.0, rgb.1, rgb.2)
+                                    {
                                         let func_start = value_offset + fn_offset - name.len() - 1;
                                         diags.push(
                                             Diagnostic::new(

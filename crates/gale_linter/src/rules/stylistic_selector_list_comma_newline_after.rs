@@ -69,9 +69,7 @@ impl Rule for StylisticSelectorListCommaNewlineAfter {
 
                 if violation {
                     let msg = match option {
-                        "always" | "always-multi-line" => {
-                            "Expected newline after \",\""
-                        }
+                        "always" | "always-multi-line" => "Expected newline after \",\"",
                         "never" => "Unexpected newline after \",\"",
                         _ => continue,
                     };

@@ -189,7 +189,10 @@ mod tests {
         let src = "// standalone comment\n.foo { color: red; }";
         let d = ScssDoubleSlashCommentInline.check_root(&[], &scss_ctx_with_option(src, &opts));
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("Expected double-slash comment to be inline"));
+        assert!(
+            d[0].message
+                .contains("Expected double-slash comment to be inline")
+        );
     }
 
     #[test]
@@ -207,7 +210,11 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssDoubleSlashCommentInline.check_root(&[], &ctx).is_empty());
+        assert!(
+            ScssDoubleSlashCommentInline
+                .check_root(&[], &ctx)
+                .is_empty()
+        );
     }
 
     #[test]

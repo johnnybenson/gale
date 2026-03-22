@@ -87,10 +87,7 @@ impl Rule for StylisticMaxEmptyLines {
                     diagnostics.push(
                         Diagnostic::new(
                             self.name(),
-                            format!(
-                                "Expected no more than {} empty line(s)",
-                                max
-                            ),
+                            format!("Expected no more than {} empty line(s)", max),
                         )
                         .severity(self.default_severity())
                         .span(Span::new(line_start, i - line_start)),

@@ -84,7 +84,8 @@ impl Rule for StylisticSelectorCombinatorSpaceBefore {
                 let comb_pos = i;
 
                 // Check if preceded by a space
-                let has_space_before = comb_pos > 0 && (bytes[comb_pos - 1] == b' ' || bytes[comb_pos - 1] == b'\t');
+                let has_space_before =
+                    comb_pos > 0 && (bytes[comb_pos - 1] == b' ' || bytes[comb_pos - 1] == b'\t');
 
                 match option {
                     "always" => {
@@ -155,7 +156,8 @@ mod tests {
     fn allows_space_before_combinator() {
         let opt = serde_json::Value::String("always".to_string());
         let source = "a > b { }";
-        let d = StylisticSelectorCombinatorSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticSelectorCombinatorSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
         assert!(d.is_empty());
     }
 
@@ -163,7 +165,8 @@ mod tests {
     fn reports_missing_space_before_combinator() {
         let opt = serde_json::Value::String("always".to_string());
         let source = "a> b { }";
-        let d = StylisticSelectorCombinatorSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticSelectorCombinatorSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("Expected a space"));
     }
@@ -172,7 +175,8 @@ mod tests {
     fn never_reports_space_before_combinator() {
         let opt = serde_json::Value::String("never".to_string());
         let source = "a > b { }";
-        let d = StylisticSelectorCombinatorSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticSelectorCombinatorSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
         assert!(!d.is_empty());
         assert!(d[0].message.contains("Unexpected space"));
     }

@@ -29,9 +29,7 @@ impl Rule for ScssAtElseClosingBraceSpaceAfter {
             return vec![];
         }
 
-        let option = ctx
-            .primary_option_str()
-            .unwrap_or("always-intermediate");
+        let option = ctx.primary_option_str().unwrap_or("always-intermediate");
         let source = ctx.source;
         let bytes = source.as_bytes();
         let len = bytes.len();
@@ -60,8 +58,7 @@ impl Rule for ScssAtElseClosingBraceSpaceAfter {
                             k += 1;
                         }
 
-                        let followed_by_else =
-                            k < len && source[k..].starts_with("@else");
+                        let followed_by_else = k < len && source[k..].starts_with("@else");
 
                         if followed_by_else {
                             match option {
@@ -149,18 +146,14 @@ mod tests {
 
     #[test]
     fn allows_space_between_else_if_and_else() {
-        let ctx = scss_ctx_with_source(
-            "@if $a { a: b; } @else if $b { c: d; } @else { e: f; }",
-        );
+        let ctx = scss_ctx_with_source("@if $a { a: b; } @else if $b { c: d; } @else { e: f; }");
         let d = ScssAtElseClosingBraceSpaceAfter.check_root(&[], &ctx);
         assert!(d.is_empty());
     }
 
     #[test]
     fn reports_no_space_between_else_if_and_else() {
-        let ctx = scss_ctx_with_source(
-            "@if $a { a: b; } @else if $b { c: d; }@else { e: f; }",
-        );
+        let ctx = scss_ctx_with_source("@if $a { a: b; } @else if $b { c: d; }@else { e: f; }");
         let d = ScssAtElseClosingBraceSpaceAfter.check_root(&[], &ctx);
         assert_eq!(d.len(), 1);
     }
@@ -173,6 +166,10 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssAtElseClosingBraceSpaceAfter.check_root(&[], &ctx).is_empty());
+        assert!(
+            ScssAtElseClosingBraceSpaceAfter
+                .check_root(&[], &ctx)
+                .is_empty()
+        );
     }
 }

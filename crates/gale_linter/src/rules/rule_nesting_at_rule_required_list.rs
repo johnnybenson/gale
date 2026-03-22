@@ -69,11 +69,7 @@ fn parse_options(options: Option<&serde_json::Value>) -> Option<Vec<String>> {
         .iter()
         .filter_map(|v| v.as_str().map(|s| s.to_ascii_lowercase()))
         .collect();
-    if names.is_empty() {
-        None
-    } else {
-        Some(names)
-    }
+    if names.is_empty() { None } else { Some(names) }
 }
 
 #[cfg(test)]

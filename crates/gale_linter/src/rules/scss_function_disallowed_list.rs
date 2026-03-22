@@ -158,8 +158,10 @@ mod tests {
     #[test]
     fn reports_disallowed_function() {
         let opts = serde_json::json!(["adjust-color"]);
-        let d =
-            ScssFunctionDisallowedList.check(&decl_node("adjust-color($c, $red: 10)"), &scss_ctx_with_options(&opts));
+        let d = ScssFunctionDisallowedList.check(
+            &decl_node("adjust-color($c, $red: 10)"),
+            &scss_ctx_with_options(&opts),
+        );
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("adjust-color"));
     }
@@ -167,8 +169,10 @@ mod tests {
     #[test]
     fn reports_namespaced_function() {
         let opts = serde_json::json!(["color.adjust"]);
-        let d =
-            ScssFunctionDisallowedList.check(&decl_node("color.adjust($c, $red: 10)"), &scss_ctx_with_options(&opts));
+        let d = ScssFunctionDisallowedList.check(
+            &decl_node("color.adjust($c, $red: 10)"),
+            &scss_ctx_with_options(&opts),
+        );
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("color.adjust"));
     }
@@ -176,8 +180,8 @@ mod tests {
     #[test]
     fn allows_non_disallowed_function() {
         let opts = serde_json::json!(["adjust-color"]);
-        let d =
-            ScssFunctionDisallowedList.check(&decl_node("darken($c, 10%)"), &scss_ctx_with_options(&opts));
+        let d = ScssFunctionDisallowedList
+            .check(&decl_node("darken($c, 10%)"), &scss_ctx_with_options(&opts));
         assert!(d.is_empty());
     }
 
@@ -191,16 +195,20 @@ mod tests {
     #[test]
     fn case_insensitive_match() {
         let opts = serde_json::json!(["Adjust-Color"]);
-        let d =
-            ScssFunctionDisallowedList.check(&decl_node("adjust-color($c, $red: 10)"), &scss_ctx_with_options(&opts));
+        let d = ScssFunctionDisallowedList.check(
+            &decl_node("adjust-color($c, $red: 10)"),
+            &scss_ctx_with_options(&opts),
+        );
         assert_eq!(d.len(), 1);
     }
 
     #[test]
     fn works_in_style_rule() {
         let opts = serde_json::json!(["lighten"]);
-        let d =
-            ScssFunctionDisallowedList.check(&style_with_value("lighten($c, 10%)"), &scss_ctx_with_options(&opts));
+        let d = ScssFunctionDisallowedList.check(
+            &style_with_value("lighten($c, 10%)"),
+            &scss_ctx_with_options(&opts),
+        );
         assert_eq!(d.len(), 1);
     }
 

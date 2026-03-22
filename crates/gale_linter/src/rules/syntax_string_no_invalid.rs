@@ -115,22 +115,16 @@ impl Rule for SyntaxStringNoInvalid {
                 let inner = &value[1..value.len() - 1];
                 if let Some(reason) = validate_syntax_string(inner) {
                     diags.push(
-                        Diagnostic::new(
-                            self.name(),
-                            format!("Invalid syntax string: {reason}"),
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(decl.span.offset, decl.span.length)),
+                        Diagnostic::new(self.name(), format!("Invalid syntax string: {reason}"))
+                            .severity(self.default_severity())
+                            .span(Span::new(decl.span.offset, decl.span.length)),
                     );
                 }
             } else {
                 diags.push(
-                    Diagnostic::new(
-                        self.name(),
-                        "Syntax string must be quoted".to_string(),
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(decl.span.offset, decl.span.length)),
+                    Diagnostic::new(self.name(), "Syntax string must be quoted".to_string())
+                        .severity(self.default_severity())
+                        .span(Span::new(decl.span.offset, decl.span.length)),
                 );
             }
         }

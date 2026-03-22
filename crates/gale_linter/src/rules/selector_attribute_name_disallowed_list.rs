@@ -142,8 +142,8 @@ mod tests {
     #[test]
     fn allows_attribute_not_in_list() {
         let ctx = ctx_with_options(serde_json::json!(["class"]));
-        let d = SelectorAttributeNameDisallowedList
-            .check(&style_with_selector("a[href=\"/\"]"), &ctx);
+        let d =
+            SelectorAttributeNameDisallowedList.check(&style_with_selector("a[href=\"/\"]"), &ctx);
         assert!(d.is_empty());
     }
 

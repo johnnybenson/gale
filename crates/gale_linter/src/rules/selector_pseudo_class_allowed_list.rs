@@ -44,12 +44,9 @@ impl Rule for SelectorPseudoClassAllowedList {
         for name in extract_pseudo_classes(&rule.selector) {
             if !allowed.iter().any(|a| a == &name) {
                 diags.push(
-                    Diagnostic::new(
-                        self.name(),
-                        format!("Unexpected pseudo-class \":{name}\""),
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(rule.span.offset, rule.span.length)),
+                    Diagnostic::new(self.name(), format!("Unexpected pseudo-class \":{name}\""))
+                        .severity(self.default_severity())
+                        .span(Span::new(rule.span.offset, rule.span.length)),
                 );
             }
         }
@@ -169,8 +166,7 @@ mod tests {
     #[test]
     fn reports_pseudo_class_not_in_allowed_list() {
         let ctx = ctx_with_options(serde_json::json!(["hover"]));
-        let d = SelectorPseudoClassAllowedList
-            .check(&style_with_selector("a:focus"), &ctx);
+        let d = SelectorPseudoClassAllowedList.check(&style_with_selector("a:focus"), &ctx);
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains(":focus"));
     }
@@ -178,15 +174,13 @@ mod tests {
     #[test]
     fn allows_pseudo_class_in_list() {
         let ctx = ctx_with_options(serde_json::json!(["hover", "focus"]));
-        let d = SelectorPseudoClassAllowedList
-            .check(&style_with_selector("a:hover"), &ctx);
+        let d = SelectorPseudoClassAllowedList.check(&style_with_selector("a:hover"), &ctx);
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_all_when_no_options() {
-        let d = SelectorPseudoClassAllowedList
-            .check(&style_with_selector("a:hover"), &ctx());
+        let d = SelectorPseudoClassAllowedList.check(&style_with_selector("a:hover"), &ctx());
         assert!(d.is_empty());
     }
 

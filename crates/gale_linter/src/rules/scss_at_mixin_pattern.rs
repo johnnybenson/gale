@@ -96,7 +96,11 @@ mod tests {
 
     #[test]
     fn allows_kebab_case() {
-        assert!(ScssAtMixinPattern.check(&mixin("my-mixin($a)"), &scss_ctx()).is_empty());
+        assert!(
+            ScssAtMixinPattern
+                .check(&mixin("my-mixin($a)"), &scss_ctx())
+                .is_empty()
+        );
     }
 
     #[test]
@@ -125,6 +129,10 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssAtMixinPattern.check(&mixin("MyMixin"), &css_ctx).is_empty());
+        assert!(
+            ScssAtMixinPattern
+                .check(&mixin("MyMixin"), &css_ctx)
+                .is_empty()
+        );
     }
 }

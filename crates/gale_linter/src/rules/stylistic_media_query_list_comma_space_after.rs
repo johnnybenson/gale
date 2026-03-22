@@ -165,7 +165,8 @@ mod tests {
     fn allows_space_after_comma() {
         let opt = serde_json::Value::String("always".to_string());
         let source = "@media screen, print { }";
-        let d = StylisticMediaQueryListCommaSpaceAfter.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticMediaQueryListCommaSpaceAfter.check_root(&[], &ctx_with_option(source, &opt));
         assert!(d.is_empty());
     }
 
@@ -173,7 +174,8 @@ mod tests {
     fn reports_missing_space_after_comma() {
         let opt = serde_json::Value::String("always".to_string());
         let source = "@media screen,print { }";
-        let d = StylisticMediaQueryListCommaSpaceAfter.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticMediaQueryListCommaSpaceAfter.check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("Expected a space"));
     }
@@ -182,7 +184,8 @@ mod tests {
     fn never_reports_space_after_comma() {
         let opt = serde_json::Value::String("never".to_string());
         let source = "@media screen, print { }";
-        let d = StylisticMediaQueryListCommaSpaceAfter.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticMediaQueryListCommaSpaceAfter.check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("Unexpected space"));
     }

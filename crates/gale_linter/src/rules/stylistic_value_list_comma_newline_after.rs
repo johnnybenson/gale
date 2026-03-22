@@ -152,7 +152,8 @@ impl Rule for StylisticValueListCommaNewlineAfter {
                             diagnostics.push(
                                 Diagnostic::new(
                                     self.name(),
-                                    "Expected newline after \",\" in a multi-line value list".to_string(),
+                                    "Expected newline after \",\" in a multi-line value list"
+                                        .to_string(),
                                 )
                                 .severity(self.default_severity())
                                 .span(Span::new(comma_pos, 1)),

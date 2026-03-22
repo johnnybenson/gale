@@ -76,9 +76,7 @@ impl Rule for StylisticBlockOpeningBraceNewlineAfter {
                 let after = brace_pos + 1;
                 let has_newline = after < len
                     && (bytes[after] == b'\n'
-                        || (bytes[after] == b'\r'
-                            && after + 1 < len
-                            && bytes[after + 1] == b'\n'));
+                        || (bytes[after] == b'\r' && after + 1 < len && bytes[after + 1] == b'\n'));
 
                 let should_check = match option {
                     "always" => true,
@@ -152,7 +150,8 @@ mod tests {
     fn reports_missing_newline_after_brace() {
         let opt = serde_json::Value::String("always".to_string());
         let source = "a { color: red;\n}";
-        let d = StylisticBlockOpeningBraceNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticBlockOpeningBraceNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("Expected newline"));
     }
@@ -161,7 +160,8 @@ mod tests {
     fn always_multi_line_allows_single_line_without_newline() {
         let opt = serde_json::Value::String("always-multi-line".to_string());
         let source = "a { color: red; }";
-        let d = StylisticBlockOpeningBraceNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticBlockOpeningBraceNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
         assert!(d.is_empty());
     }
 
@@ -169,7 +169,8 @@ mod tests {
     fn always_multi_line_reports_multi_line_without_newline_after_brace() {
         let opt = serde_json::Value::String("always-multi-line".to_string());
         let source = "a { color: red;\nbackground: blue; }";
-        let d = StylisticBlockOpeningBraceNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticBlockOpeningBraceNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 1);
     }
 

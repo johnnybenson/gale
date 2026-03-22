@@ -128,9 +128,7 @@ impl Rule for NestingSelectorNoMissingScopingRoot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gale_css_parser::{
-        AtRule, CssNode, Declaration, Span as ParserSpan, StyleRule, Syntax,
-    };
+    use gale_css_parser::{AtRule, CssNode, Declaration, Span as ParserSpan, StyleRule, Syntax};
 
     fn ctx() -> RuleContext<'static> {
         RuleContext {

@@ -51,10 +51,7 @@ impl Rule for ScssAtImportPartialExtension {
 
         // Parse the import paths from params. May be comma-separated and quoted.
         for part in at.params.split(',') {
-            let path = part
-                .trim()
-                .trim_matches('"')
-                .trim_matches('\'');
+            let path = part.trim().trim_matches('"').trim_matches('\'');
 
             // Skip URLs and CSS imports
             if path.starts_with("http://")
@@ -73,10 +70,7 @@ impl Rule for ScssAtImportPartialExtension {
                         diags.push(
                             Diagnostic::new(
                                 self.name(),
-                                format!(
-                                    "Unexpected extension in @import \"{}\"",
-                                    path
-                                ),
+                                format!("Unexpected extension in @import \"{}\"", path),
                             )
                             .severity(self.default_severity())
                             .span(Span::new(at.span.offset, at.span.length)),
@@ -88,10 +82,7 @@ impl Rule for ScssAtImportPartialExtension {
                         diags.push(
                             Diagnostic::new(
                                 self.name(),
-                                format!(
-                                    "Expected extension in @import \"{}\"",
-                                    path
-                                ),
+                                format!("Expected extension in @import \"{}\"", path),
                             )
                             .severity(self.default_severity())
                             .span(Span::new(at.span.offset, at.span.length)),

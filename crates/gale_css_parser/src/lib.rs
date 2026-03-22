@@ -674,16 +674,12 @@ fn convert_style_rule(
         let span_text = source
             .get(span.offset..(span.offset + span.length).min(source.len()))
             .unwrap_or("");
-        let is_important_in_source = span_text.contains("!important")
-            || span_text.contains("! important");
+        let is_important_in_source =
+            span_text.contains("!important") || span_text.contains("! important");
 
         // Extract the property name from the span
         let span_lower = span_text.to_ascii_lowercase();
-        let span_prop = span_lower
-            .split(':')
-            .next()
-            .unwrap_or("")
-            .trim();
+        let span_prop = span_lower.split(':').next().unwrap_or("").trim();
 
         // Find the first unmatched proto_decl with matching property AND importance
         let mut found_idx = None;
@@ -746,14 +742,12 @@ fn convert_style_rule(
             LcssRule::NestedDeclarations(nested_decls) => {
                 let mut nested_sf = sf;
                 for decl in &nested_decls.declarations.declarations {
-                    let (d, next) =
-                        convert_property(decl, false, source, nested_sf, search_end);
+                    let (d, next) = convert_property(decl, false, source, nested_sf, search_end);
                     nested_sf = next;
                     declarations.push(d);
                 }
                 for decl in &nested_decls.declarations.important_declarations {
-                    let (d, next) =
-                        convert_property(decl, true, source, nested_sf, search_end);
+                    let (d, next) = convert_property(decl, true, source, nested_sf, search_end);
                     nested_sf = next;
                     declarations.push(d);
                 }
@@ -852,9 +846,7 @@ fn find_declaration_span(source: &str, from: usize, to: usize, property: &str) -
             let decl_end = rest
                 .find(';')
                 .map(|i| after_prop + i + 1)
-                .unwrap_or_else(|| {
-                    rest.find('}').map(|i| after_prop + i).unwrap_or(after_prop)
-                });
+                .unwrap_or_else(|| rest.find('}').map(|i| after_prop + i).unwrap_or(after_prop));
             return Span::new(abs_start, decl_end - abs_start);
         }
 
@@ -1704,9 +1696,21 @@ mod tests {
                     "style rule should have declarations from NestedDeclarations, got {}",
                     style.declarations.len(),
                 );
-                let props: Vec<&str> = style.declarations.iter().map(|d| d.property.as_str()).collect();
-                assert!(props.contains(&"outline-width"), "should contain outline-width, got {:?}", props);
-                assert!(props.contains(&"outline-style"), "should contain outline-style, got {:?}", props);
+                let props: Vec<&str> = style
+                    .declarations
+                    .iter()
+                    .map(|d| d.property.as_str())
+                    .collect();
+                assert!(
+                    props.contains(&"outline-width"),
+                    "should contain outline-width, got {:?}",
+                    props
+                );
+                assert!(
+                    props.contains(&"outline-style"),
+                    "should contain outline-style, got {:?}",
+                    props
+                );
             } else {
                 panic!("expected Style node in layer children");
             }
@@ -1728,7 +1732,8 @@ mod tests {
             assert!(
                 rule.declarations[0].span.offset < rule.declarations[1].span.offset,
                 "padding offset ({}) should precede border offset ({})",
-                rule.declarations[0].span.offset, rule.declarations[1].span.offset
+                rule.declarations[0].span.offset,
+                rule.declarations[1].span.offset
             );
         } else {
             panic!("expected Style node");

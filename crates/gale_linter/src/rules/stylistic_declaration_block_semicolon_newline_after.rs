@@ -105,16 +105,14 @@ impl Rule for StylisticDeclarationBlockSemicolonNewlineAfter {
                     true
                 };
 
-                let should_check = option == "always" || (option == "always-multi-line" && is_multi_line);
+                let should_check =
+                    option == "always" || (option == "always-multi-line" && is_multi_line);
 
                 if should_check && !found_newline {
                     diagnostics.push(
-                        Diagnostic::new(
-                            self.name(),
-                            "Expected newline after \";\"",
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(semi_pos, 1)),
+                        Diagnostic::new(self.name(), "Expected newline after \";\"")
+                            .severity(self.default_severity())
+                            .span(Span::new(semi_pos, 1)),
                     );
                 }
             }
@@ -187,21 +185,21 @@ mod tests {
     fn always_allows_newline_after_semicolon() {
         let opt = serde_json::json!("always");
         let source = "a {\n  color: red;\n  display: block;\n}";
-        let d = StylisticDeclarationBlockSemicolonNewlineAfter.check_root(
-            &[],
-            &ctx_with_option(source, &opt),
+        let d = StylisticDeclarationBlockSemicolonNewlineAfter
+            .check_root(&[], &ctx_with_option(source, &opt));
+        assert!(
+            d.is_empty(),
+            "got: {:?}",
+            d.iter().map(|d| &d.message).collect::<Vec<_>>()
         );
-        assert!(d.is_empty(), "got: {:?}", d.iter().map(|d| &d.message).collect::<Vec<_>>());
     }
 
     #[test]
     fn always_reports_missing_newline() {
         let opt = serde_json::json!("always");
         let source = "a { color: red; display: block; }";
-        let d = StylisticDeclarationBlockSemicolonNewlineAfter.check_root(
-            &[],
-            &ctx_with_option(source, &opt),
-        );
+        let d = StylisticDeclarationBlockSemicolonNewlineAfter
+            .check_root(&[], &ctx_with_option(source, &opt));
         assert!(!d.is_empty());
         assert!(d[0].message.contains("Expected newline"));
     }
@@ -210,10 +208,8 @@ mod tests {
     fn always_multi_line_allows_single_line() {
         let opt = serde_json::json!("always-multi-line");
         let source = "a { color: red; display: block; }";
-        let d = StylisticDeclarationBlockSemicolonNewlineAfter.check_root(
-            &[],
-            &ctx_with_option(source, &opt),
-        );
+        let d = StylisticDeclarationBlockSemicolonNewlineAfter
+            .check_root(&[], &ctx_with_option(source, &opt));
         assert!(d.is_empty());
     }
 
@@ -221,10 +217,8 @@ mod tests {
     fn always_multi_line_reports_in_multiline_block() {
         let opt = serde_json::json!("always-multi-line");
         let source = "a {\n  color: red; display: block;\n}";
-        let d = StylisticDeclarationBlockSemicolonNewlineAfter.check_root(
-            &[],
-            &ctx_with_option(source, &opt),
-        );
+        let d = StylisticDeclarationBlockSemicolonNewlineAfter
+            .check_root(&[], &ctx_with_option(source, &opt));
         assert!(!d.is_empty());
     }
 }

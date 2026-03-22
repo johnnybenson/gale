@@ -115,7 +115,10 @@ impl Rule for NoIrregularWhitespace {
         for (i, ch) in context.source.char_indices() {
             if IRREGULAR_WHITESPACE_CHARS.contains(&ch) {
                 // Skip if inside a comment
-                if comment_ranges.iter().any(|&(start, end)| i >= start && i < end) {
+                if comment_ranges
+                    .iter()
+                    .any(|&(start, end)| i >= start && i < end)
+                {
                     continue;
                 }
                 diagnostics.push(

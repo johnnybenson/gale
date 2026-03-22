@@ -330,7 +330,8 @@ impl Rule for TimeMinMilliseconds {
             let (value_text, value_offset) = if !ctx.source.is_empty() {
                 let vo = find_value_offset(ctx.source, decl.span.offset, decl.property.len());
                 let rest = &ctx.source[vo..];
-                let end = rest.find(|c: char| c == ';' || c == '}')
+                let end = rest
+                    .find(|c: char| c == ';' || c == '}')
                     .map(|i| i)
                     .unwrap_or(rest.len());
                 (ctx.source[vo..vo + end].trim_end().to_string(), vo)
@@ -413,30 +414,26 @@ mod tests {
 
     #[test]
     fn allows_time_above_minimum() {
-        let d =
-            TimeMinMilliseconds.check(&style_with_decl("transition-duration", "200ms"), &ctx());
+        let d = TimeMinMilliseconds.check(&style_with_decl("transition-duration", "200ms"), &ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn converts_seconds_to_ms() {
         // 0.01s = 10ms, should flag with default minimum 100ms
-        let d =
-            TimeMinMilliseconds.check(&style_with_decl("transition-duration", "0.01s"), &ctx());
+        let d = TimeMinMilliseconds.check(&style_with_decl("transition-duration", "0.01s"), &ctx());
         assert_eq!(d.len(), 1);
     }
 
     #[test]
     fn allows_zero() {
-        let d =
-            TimeMinMilliseconds.check(&style_with_decl("animation-delay", "0ms"), &ctx());
+        let d = TimeMinMilliseconds.check(&style_with_decl("animation-delay", "0ms"), &ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_negative_values() {
-        let d =
-            TimeMinMilliseconds.check(&style_with_decl("animation-delay", "-20ms"), &ctx());
+        let d = TimeMinMilliseconds.check(&style_with_decl("animation-delay", "-20ms"), &ctx());
         assert!(d.is_empty());
     }
 
@@ -453,10 +450,8 @@ mod tests {
 
     #[test]
     fn handles_transition_shorthand() {
-        let d = TimeMinMilliseconds.check(
-            &style_with_decl("transition", "foo 0.008s linear"),
-            &ctx(),
-        );
+        let d =
+            TimeMinMilliseconds.check(&style_with_decl("transition", "foo 0.008s linear"), &ctx());
         assert_eq!(d.len(), 1);
     }
 }

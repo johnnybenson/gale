@@ -113,11 +113,15 @@ impl Rule for StylisticBlockClosingBraceNewlineAfter {
                         }
                     }
                     "always-single-line" => {
-                        if is_single_line && found_non_ws && !is_next_closing_brace(bytes, after_pos) {
+                        if is_single_line
+                            && found_non_ws
+                            && !is_next_closing_brace(bytes, after_pos)
+                        {
                             diagnostics.push(
                                 Diagnostic::new(
                                     self.name(),
-                                    "Expected newline after \"}\" of a single-line block".to_string(),
+                                    "Expected newline after \"}\" of a single-line block"
+                                        .to_string(),
                                 )
                                 .severity(self.default_severity())
                                 .span(Span::new(brace_pos, 1)),
@@ -125,11 +129,15 @@ impl Rule for StylisticBlockClosingBraceNewlineAfter {
                         }
                     }
                     "always-multi-line" => {
-                        if !is_single_line && found_non_ws && !is_next_closing_brace(bytes, after_pos) {
+                        if !is_single_line
+                            && found_non_ws
+                            && !is_next_closing_brace(bytes, after_pos)
+                        {
                             diagnostics.push(
                                 Diagnostic::new(
                                     self.name(),
-                                    "Expected newline after \"}\" of a multi-line block".to_string(),
+                                    "Expected newline after \"}\" of a multi-line block"
+                                        .to_string(),
                                 )
                                 .severity(self.default_severity())
                                 .span(Span::new(brace_pos, 1)),
@@ -213,7 +221,8 @@ mod tests {
     fn reports_missing_newline_after_brace() {
         let opt = serde_json::Value::String("always".to_string());
         let source = "a { color: red; } b { color: blue; }";
-        let d = StylisticBlockClosingBraceNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticBlockClosingBraceNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
         assert!(!d.is_empty());
         assert!(d[0].message.contains("Expected newline"));
     }
@@ -222,7 +231,8 @@ mod tests {
     fn never_reports_newline_after_brace() {
         let opt = serde_json::Value::String("never".to_string());
         let source = "a { color: red; }\nb { }";
-        let d = StylisticBlockClosingBraceNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticBlockClosingBraceNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
         assert!(!d.is_empty());
         assert!(d[0].message.contains("Unexpected newline"));
     }

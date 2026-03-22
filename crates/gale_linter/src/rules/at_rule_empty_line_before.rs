@@ -105,10 +105,7 @@ fn check_at_rule_nodes(
                     diags.push(
                         Diagnostic::new(
                             rule_impl.name(),
-                            format!(
-                                "Expected empty line before at-rule \"@{}\"",
-                                at_rule.name
-                            ),
+                            format!("Expected empty line before at-rule \"@{}\"", at_rule.name),
                         )
                         .severity(rule_impl.default_severity())
                         .span(Span::new(at_rule.span.offset, at_rule.span.length)),

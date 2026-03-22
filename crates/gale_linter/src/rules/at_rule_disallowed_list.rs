@@ -39,12 +39,14 @@ impl Rule for AtRuleDisallowedList {
 
         let name_lower = at_rule.name.to_ascii_lowercase();
         if disallowed.contains(&name_lower) {
-            vec![Diagnostic::new(
-                self.name(),
-                format!("Unexpected at-rule \"@{}\"", at_rule.name),
-            )
-            .severity(self.default_severity())
-            .span(Span::new(at_rule.span.offset, at_rule.span.length))]
+            vec![
+                Diagnostic::new(
+                    self.name(),
+                    format!("Unexpected at-rule \"@{}\"", at_rule.name),
+                )
+                .severity(self.default_severity())
+                .span(Span::new(at_rule.span.offset, at_rule.span.length)),
+            ]
         } else {
             vec![]
         }

@@ -37,8 +37,7 @@ impl Rule for ScssDollarVariableEmptyLineBefore {
         // Parse secondary options
         let secondary = ctx.secondary_options();
         let except_after_comment = has_option(secondary, "except", "after-comment");
-        let except_after_dollar_variable =
-            has_option(secondary, "except", "after-dollar-variable");
+        let except_after_dollar_variable = has_option(secondary, "except", "after-dollar-variable");
         let except_first_nested = has_option(secondary, "except", "first-nested");
         let ignore_after_comment = has_option(secondary, "ignore", "after-comment");
         let ignore_inside_single_line_block =
@@ -68,8 +67,7 @@ impl Rule for ScssDollarVariableEmptyLineBefore {
 
             // Determine context of preceding line
             let is_first_line = line_idx == 0;
-            let has_empty_line_before =
-                line_idx > 0 && lines[line_idx - 1].trim().is_empty();
+            let has_empty_line_before = line_idx > 0 && lines[line_idx - 1].trim().is_empty();
 
             // Detect first-nested: first non-empty content line after `{`
             let is_first_nested = if line_idx > 0 {
@@ -107,9 +105,7 @@ impl Rule for ScssDollarVariableEmptyLineBefore {
             };
 
             let is_after_comment = prev_non_empty
-                .map(|p| {
-                    p.starts_with("//") || p.starts_with("/*") || p.ends_with("*/")
-                })
+                .map(|p| p.starts_with("//") || p.starts_with("/*") || p.ends_with("*/"))
                 .unwrap_or(false);
 
             let is_after_dollar_variable = prev_non_empty
@@ -195,7 +191,10 @@ mod tests {
         }
     }
 
-    fn scss_ctx_with_options<'a>(source: &'a str, options: &'a serde_json::Value) -> RuleContext<'a> {
+    fn scss_ctx_with_options<'a>(
+        source: &'a str,
+        options: &'a serde_json::Value,
+    ) -> RuleContext<'a> {
         RuleContext {
             file_path: "t.scss",
             source,
@@ -270,7 +269,11 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssDollarVariableEmptyLineBefore.check_root(&[], &ctx).is_empty());
+        assert!(
+            ScssDollarVariableEmptyLineBefore
+                .check_root(&[], &ctx)
+                .is_empty()
+        );
     }
 
     #[test]

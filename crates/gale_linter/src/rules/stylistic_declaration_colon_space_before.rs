@@ -108,14 +108,12 @@ fn is_declaration_colon(bytes: &[u8], pos: usize) -> bool {
             break;
         }
     }
-    while k > 0 && (bytes[k] == b' ' || bytes[k] == b'\t' || bytes[k] == b'\n' || bytes[k] == b'\r') {
+    while k > 0 && (bytes[k] == b' ' || bytes[k] == b'\t' || bytes[k] == b'\n' || bytes[k] == b'\r')
+    {
         k -= 1;
     }
     matches!(bytes[k], b'{' | b';' | b'}')
-        || (k == 0
-            && (bytes[k].is_ascii_alphanumeric()
-                || bytes[k] == b'-'
-                || bytes[k] == b'_'))
+        || (k == 0 && (bytes[k].is_ascii_alphanumeric() || bytes[k] == b'-' || bytes[k] == b'_'))
 }
 
 #[cfg(test)]

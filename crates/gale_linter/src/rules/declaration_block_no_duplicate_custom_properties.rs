@@ -30,7 +30,9 @@ impl Rule for DeclarationBlockNoDuplicateCustomProperties {
 
         let is_preprocessor = matches!(
             context.syntax,
-            gale_css_parser::Syntax::Scss | gale_css_parser::Syntax::Sass | gale_css_parser::Syntax::Less
+            gale_css_parser::Syntax::Scss
+                | gale_css_parser::Syntax::Sass
+                | gale_css_parser::Syntax::Less
         );
 
         let mut seen = HashSet::new();

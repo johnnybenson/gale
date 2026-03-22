@@ -44,12 +44,9 @@ impl Rule for SelectorAttributeOperatorAllowedList {
         for op in extract_attribute_operators(&rule.selector) {
             if !allowed.iter().any(|a| a == &op) {
                 diags.push(
-                    Diagnostic::new(
-                        self.name(),
-                        format!("Unexpected operator \"{op}\""),
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(rule.span.offset, rule.span.length)),
+                    Diagnostic::new(self.name(), format!("Unexpected operator \"{op}\""))
+                        .severity(self.default_severity())
+                        .span(Span::new(rule.span.offset, rule.span.length)),
                 );
             }
         }

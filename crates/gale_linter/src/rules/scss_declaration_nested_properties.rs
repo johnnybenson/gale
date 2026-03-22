@@ -60,13 +60,11 @@ impl Rule for ScssDeclarationNestedProperties {
                 if before > 0 {
                     before -= 1;
                 }
-                while before > 0
-                    && (bytes[before] == b' ' || bytes[before] == b'\t')
-                {
+                while before > 0 && (bytes[before] == b' ' || bytes[before] == b'\t') {
                     before -= 1;
                 }
-                let is_property_like = before < i
-                    && (bytes[before].is_ascii_alphabetic() || bytes[before] == b'-');
+                let is_property_like =
+                    before < i && (bytes[before].is_ascii_alphabetic() || bytes[before] == b'-');
 
                 // Check what's after the colon (skip whitespace, look for `{`)
                 let mut after = i + 1;
@@ -147,6 +145,10 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssDeclarationNestedProperties.check_root(&[], &ctx).is_empty());
+        assert!(
+            ScssDeclarationNestedProperties
+                .check_root(&[], &ctx)
+                .is_empty()
+        );
     }
 }

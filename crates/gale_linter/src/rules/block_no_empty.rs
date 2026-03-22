@@ -26,13 +26,11 @@ impl Rule for BlockNoEmpty {
         // Options may be stored as:
         //   - {"ignore": ["comments"]} directly (when config is [true, {...}])
         //   - ["never", {"ignore": ["comments"]}] (when config is ["never", {...}])
-        let secondary = context
-            .secondary_options()
-            .or_else(|| {
-                // When config is [true/false, {secondary}], the config loader
-                // stores only the secondary object directly.
-                context.options.filter(|v| v.is_object())
-            });
+        let secondary = context.secondary_options().or_else(|| {
+            // When config is [true/false, {secondary}], the config loader
+            // stores only the secondary object directly.
+            context.options.filter(|v| v.is_object())
+        });
         let ignore_comments = secondary
             .and_then(|obj| obj.get("ignore"))
             .and_then(|v| v.as_array())
@@ -103,9 +101,11 @@ fn check_block_source(
 
     let make_diag = || {
         let brace_offset = span_start + open_brace_rel;
-        vec![Diagnostic::new(rule.name(), "Unexpected empty block")
-            .severity(rule.default_severity())
-            .span(Span::new(brace_offset, span_end - brace_offset))]
+        vec![
+            Diagnostic::new(rule.name(), "Unexpected empty block")
+                .severity(rule.default_severity())
+                .span(Span::new(brace_offset, span_end - brace_offset)),
+        ]
     };
 
     match analyze_block_body(body, context.syntax) {
@@ -248,7 +248,10 @@ fn is_covering_disable(text: &str) -> bool {
             // disable, disable-line, disable-next-line
             if let Some(after) = rest.strip_prefix("disable") {
                 let after = after.strip_prefix("-next-line").or(Some(after));
-                let after = after.unwrap().strip_prefix("-line").unwrap_or(after.unwrap());
+                let after = after
+                    .unwrap()
+                    .strip_prefix("-line")
+                    .unwrap_or(after.unwrap());
                 let rules_text = after.trim();
                 // Empty means all rules disabled
                 if rules_text.is_empty() {

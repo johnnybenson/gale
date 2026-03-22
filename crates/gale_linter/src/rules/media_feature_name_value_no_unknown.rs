@@ -253,6 +253,10 @@ mod tests {
             span: ParserSpan::new(0, 0),
             children: vec![],
         });
-        assert!(MediaFeatureNameValueNoUnknown.check(&node, &ctx()).is_empty());
+        assert!(
+            MediaFeatureNameValueNoUnknown
+                .check(&node, &ctx())
+                .is_empty()
+        );
     }
 }

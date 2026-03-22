@@ -55,7 +55,12 @@ impl Rule for StylisticFunctionCommaSpaceBefore {
             }
 
             // Detect function call
-            if bytes[i] == b'(' && i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'-' || bytes[i - 1] == b'_') {
+            if bytes[i] == b'('
+                && i > 0
+                && (bytes[i - 1].is_ascii_alphanumeric()
+                    || bytes[i - 1] == b'-'
+                    || bytes[i - 1] == b'_')
+            {
                 let paren_start = i;
                 let mut depth = 1;
                 let mut j = i + 1;

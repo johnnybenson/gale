@@ -138,17 +138,21 @@ mod tests {
     #[test]
     fn allows_overflow_auto() {
         let node = style_node("a", &[("overflow", "auto")]);
-        assert!(DeclarationPropertyValueKeywordNoDeprecated
-            .check(&node, &ctx())
-            .is_empty());
+        assert!(
+            DeclarationPropertyValueKeywordNoDeprecated
+                .check(&node, &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn allows_normal_word_break() {
         let node = style_node("a", &[("word-break", "normal")]);
-        assert!(DeclarationPropertyValueKeywordNoDeprecated
-            .check(&node, &ctx())
-            .is_empty());
+        assert!(
+            DeclarationPropertyValueKeywordNoDeprecated
+                .check(&node, &ctx())
+                .is_empty()
+        );
     }
 
     #[test]

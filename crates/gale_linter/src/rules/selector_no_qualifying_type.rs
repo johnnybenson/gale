@@ -67,10 +67,8 @@ fn walk_nodes(
     for node in nodes {
         match node {
             CssNode::Style(style) => {
-                let self_has_interpolation =
-                    is_scss && style.selector.contains("#{");
-                let any_interpolation =
-                    ancestor_has_interpolation || self_has_interpolation;
+                let self_has_interpolation = is_scss && style.selector.contains("#{");
+                let any_interpolation = ancestor_has_interpolation || self_has_interpolation;
 
                 // Only check this selector if neither it nor any ancestor
                 // contains SCSS interpolation (matching Stylelint's
@@ -226,10 +224,7 @@ fn check_selector_list(
                     format!("Unexpected qualifying type selector in \"{trimmed}\""),
                 )
                 .severity(rule_impl.default_severity())
-                .span(Span::new(
-                    violation_offset,
-                    trimmed.len() - compound_offset,
-                )),
+                .span(Span::new(violation_offset, trimmed.len() - compound_offset)),
             );
         }
     }
@@ -288,11 +283,7 @@ fn find_qualifying_type_offset(
 
     while i < len {
         // Skip whitespace and combinators
-        if chars[i].is_ascii_whitespace()
-            || chars[i] == '>'
-            || chars[i] == '+'
-            || chars[i] == '~'
-        {
+        if chars[i].is_ascii_whitespace() || chars[i] == '>' || chars[i] == '+' || chars[i] == '~' {
             i += 1;
             continue;
         }
@@ -401,8 +392,7 @@ fn find_qualifying_type_offset(
                 while i < len && is_ident_char(chars[i]) {
                     i += 1;
                 }
-                let pseudo_name: String =
-                    chars[pseudo_start..i].iter().collect();
+                let pseudo_name: String = chars[pseudo_start..i].iter().collect();
                 let pseudo_lower = pseudo_name.to_ascii_lowercase();
 
                 if i < len && chars[i] == '(' {
@@ -428,31 +418,24 @@ fn find_qualifying_type_offset(
                             i += 1;
                         }
                         let args_end = if i > 0 { i - 1 } else { i };
-                        let inner: String =
-                            chars[args_start..args_end].iter().collect();
+                        let inner: String = chars[args_start..args_end].iter().collect();
 
                         // 1) Check inner selector list for standalone qualifying types
-                        for (inner_pos, inner_part) in split_selector_list(&inner)
-                        {
+                        for (inner_pos, inner_part) in split_selector_list(&inner) {
                             let inner_trimmed = inner_part.trim();
                             if inner_trimmed.is_empty() {
                                 continue;
                             }
-                            if let Some(inner_off) =
-                                find_qualifying_type_offset(
-                                    inner_trimmed,
-                                    false,
-                                    ignore_class,
-                                    ignore_attribute,
-                                    ignore_id,
-                                )
-                            {
-                                let leading = inner_part.len()
-                                    - inner_part.trim_start().len();
-                                let byte_off = char_offset_to_byte_offset(
-                                    selector,
-                                    paren_idx + 1,
-                                ) + inner_pos
+                            if let Some(inner_off) = find_qualifying_type_offset(
+                                inner_trimmed,
+                                false,
+                                ignore_class,
+                                ignore_attribute,
+                                ignore_id,
+                            ) {
+                                let leading = inner_part.len() - inner_part.trim_start().len();
+                                let byte_off = char_offset_to_byte_offset(selector, paren_idx + 1)
+                                    + inner_pos
                                     + leading
                                     + inner_off;
                                 return Some(byte_off);
@@ -466,21 +449,16 @@ fn find_qualifying_type_offset(
                             || (has_id && !ignore_id)
                             || (has_attribute && !ignore_attribute);
                         if has_qualifier {
-                            for (inner_pos, inner_part) in
-                                split_selector_list(&inner)
-                            {
+                            for (inner_pos, inner_part) in split_selector_list(&inner) {
                                 let inner_trimmed = inner_part.trim();
                                 if inner_trimmed.is_empty() {
                                     continue;
                                 }
                                 if is_bare_type_selector(inner_trimmed) {
-                                    let leading = inner_part.len()
-                                        - inner_part.trim_start().len();
+                                    let leading = inner_part.len() - inner_part.trim_start().len();
                                     let byte_off =
-                                        char_offset_to_byte_offset(
-                                            selector,
-                                            paren_idx + 1,
-                                        ) + inner_pos
+                                        char_offset_to_byte_offset(selector, paren_idx + 1)
+                                            + inner_pos
                                             + leading;
                                     return Some(byte_off);
                                 }
@@ -735,7 +713,11 @@ mod tests {
             span: ParserSpan::new(0, 20),
         });
         let d = SelectorNoQualifyingType.check_root(&[parent], &ctx());
-        assert_eq!(d.len(), 1, "should report &.class when parent is type selector");
+        assert_eq!(
+            d.len(),
+            1,
+            "should report &.class when parent is type selector"
+        );
     }
 
     #[test]

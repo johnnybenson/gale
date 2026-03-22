@@ -154,20 +154,15 @@ mod tests {
     #[test]
     fn allows_listed_feature() {
         let opts = json!(["min-width", "max-width"]);
-        let d = MediaFeatureNameAllowedList.check(
-            &media_rule("(min-width: 768px)"),
-            &ctx_with_options(&opts),
-        );
+        let d = MediaFeatureNameAllowedList
+            .check(&media_rule("(min-width: 768px)"), &ctx_with_options(&opts));
         assert!(d.is_empty());
     }
 
     #[test]
     fn rejects_unlisted_feature() {
         let opts = json!(["min-width"]);
-        let d = MediaFeatureNameAllowedList.check(
-            &media_rule("(color)"),
-            &ctx_with_options(&opts),
-        );
+        let d = MediaFeatureNameAllowedList.check(&media_rule("(color)"), &ctx_with_options(&opts));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("color"));
     }
@@ -175,10 +170,8 @@ mod tests {
     #[test]
     fn case_insensitive_feature_match() {
         let opts = json!(["MIN-WIDTH"]);
-        let d = MediaFeatureNameAllowedList.check(
-            &media_rule("(min-width: 768px)"),
-            &ctx_with_options(&opts),
-        );
+        let d = MediaFeatureNameAllowedList
+            .check(&media_rule("(min-width: 768px)"), &ctx_with_options(&opts));
         assert!(d.is_empty());
     }
 

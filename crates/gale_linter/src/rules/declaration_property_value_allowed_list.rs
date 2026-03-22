@@ -64,7 +64,9 @@ impl Rule for DeclarationPropertyValueAllowedList {
             let prop_lower = decl.property.to_ascii_lowercase();
             if let Some(allowed_values) = allowed_map.get(&prop_lower) {
                 let val_lower = decl.value.to_ascii_lowercase();
-                let is_allowed = allowed_values.iter().any(|pattern| val_lower.contains(pattern.as_str()));
+                let is_allowed = allowed_values
+                    .iter()
+                    .any(|pattern| val_lower.contains(pattern.as_str()));
                 if !is_allowed {
                     diags.push(
                         Diagnostic::new(
@@ -124,7 +126,8 @@ mod tests {
 
     #[test]
     fn allows_all_when_no_options() {
-        let d = DeclarationPropertyValueAllowedList.check(&style_with_decl("display", "none"), &ctx());
+        let d =
+            DeclarationPropertyValueAllowedList.check(&style_with_decl("display", "none"), &ctx());
         assert!(d.is_empty());
     }
 
@@ -162,10 +165,8 @@ mod tests {
     #[test]
     fn ignores_unconfigured_properties() {
         let opts = json!({"display": ["block"]});
-        let d = DeclarationPropertyValueAllowedList.check(
-            &style_with_decl("color", "red"),
-            &ctx_with_options(&opts),
-        );
+        let d = DeclarationPropertyValueAllowedList
+            .check(&style_with_decl("color", "red"), &ctx_with_options(&opts));
         assert!(d.is_empty());
     }
 

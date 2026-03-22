@@ -125,11 +125,7 @@ fn strip_vendor_prefix(name: &str) -> &str {
     name
 }
 
-fn is_function_allowed(
-    fname: &str,
-    plain_names: &[String],
-    regex_patterns: &[Regex],
-) -> bool {
+fn is_function_allowed(fname: &str, plain_names: &[String], regex_patterns: &[Regex]) -> bool {
     let lower = fname.to_ascii_lowercase();
     let unprefixed = strip_vendor_prefix(&lower);
 

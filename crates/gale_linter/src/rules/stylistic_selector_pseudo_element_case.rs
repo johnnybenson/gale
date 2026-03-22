@@ -87,10 +87,7 @@ impl Rule for StylisticSelectorPseudoElementCase {
                     diagnostics.push(
                         Diagnostic::new(
                             self.name(),
-                            format!(
-                                "Expected \"::{}\" to be \"::{}\"",
-                                name, expected
-                            ),
+                            format!("Expected \"::{}\" to be \"::{}\"", name, expected),
                         )
                         .severity(self.default_severity())
                         .span(Span::new(pseudo_start, name_end - pseudo_start)),

@@ -151,6 +151,10 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssAtElseClosingBraceNewlineAfter.check_root(&[], &ctx).is_empty());
+        assert!(
+            ScssAtElseClosingBraceNewlineAfter
+                .check_root(&[], &ctx)
+                .is_empty()
+        );
     }
 }

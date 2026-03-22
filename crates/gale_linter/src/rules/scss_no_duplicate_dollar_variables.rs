@@ -49,10 +49,7 @@ fn collect_dollar_vars(
                     diagnostics.push(
                         Diagnostic::new(
                             rule.name(),
-                            format!(
-                                "Unexpected duplicate dollar variable \"{}\"",
-                                var_name
-                            ),
+                            format!("Unexpected duplicate dollar variable \"{}\"", var_name),
                         )
                         .severity(rule.default_severity())
                         .span(Span::new(decl.span.offset, decl.span.length)),
@@ -117,7 +114,11 @@ mod tests {
 
     #[test]
     fn reports_duplicate_dollar_variable() {
-        let nodes = vec![dollar_var("$color"), dollar_var("$size"), dollar_var("$color")];
+        let nodes = vec![
+            dollar_var("$color"),
+            dollar_var("$size"),
+            dollar_var("$color"),
+        ];
         let d = ScssNoDuplicateDollarVariables.check_root(&nodes, &scss_ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("$color"));
@@ -125,7 +126,11 @@ mod tests {
 
     #[test]
     fn allows_unique_dollar_variables() {
-        let nodes = vec![dollar_var("$color"), dollar_var("$size"), dollar_var("$weight")];
+        let nodes = vec![
+            dollar_var("$color"),
+            dollar_var("$size"),
+            dollar_var("$weight"),
+        ];
         let d = ScssNoDuplicateDollarVariables.check_root(&nodes, &scss_ctx());
         assert!(d.is_empty());
     }

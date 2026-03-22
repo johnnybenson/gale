@@ -128,6 +128,10 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssPartialNoImport.check(&import("\"foo\""), &css_ctx).is_empty());
+        assert!(
+            ScssPartialNoImport
+                .check(&import("\"foo\""), &css_ctx)
+                .is_empty()
+        );
     }
 }

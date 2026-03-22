@@ -107,10 +107,7 @@ impl Rule for OrderPropertiesOrder {
         // Check if there are skipped declarations (custom props / SCSS vars)
         // before the first relevant declaration. This affects emptyLineBefore
         // for the first real property.
-        let has_skipped_before_first = decls
-            .first()
-            .map(|&(di, _, _, _)| di > 0)
-            .unwrap_or(false);
+        let has_skipped_before_first = decls.first().map(|&(di, _, _, _)| di > 0).unwrap_or(false);
 
         // Determine if threshold is met: used for "threshold" emptyLineBefore.
         let threshold_met = config
@@ -151,14 +148,11 @@ impl Rule for OrderPropertiesOrder {
                 // counterpart. In stylelint-order, vendor-prefixed properties
                 // must come BEFORE the unprefixed version.
                 if is_vendor_prefixed && seen_unprefixed.contains(lookup) {
-                    let prev_name =
-                        last_property_name.as_deref().unwrap_or("unknown");
+                    let prev_name = last_property_name.as_deref().unwrap_or("unknown");
                     diagnostics.push(
                         Diagnostic::new(
                             self.name(),
-                            format!(
-                                "Expected \"{prop}\" to come before \"{prev_name}\""
-                            ),
+                            format!("Expected \"{prop}\" to come before \"{prev_name}\""),
                         )
                         .severity(self.default_severity())
                         .span(Span::new(offset, length)),
@@ -200,15 +194,12 @@ impl Rule for OrderPropertiesOrder {
                     if info.group_index == prev_group && last_was_specified == Some(true) {
                         if let Some(group_info) = config.groups.get(info.group_index) {
                             if group_info.no_empty_line_between {
-                                let has_empty =
-                                    has_empty_line_before(ctx.source, offset);
+                                let has_empty = has_empty_line_before(ctx.source, offset);
                                 if has_empty {
                                     diagnostics.push(
                                         Diagnostic::new(
                                             self.name(),
-                                            format!(
-                                                "Unexpected empty line before \"{prop}\""
-                                            ),
+                                            format!("Unexpected empty line before \"{prop}\""),
                                         )
                                         .severity(self.default_severity())
                                         .span(Span::new(offset, length)),
@@ -229,7 +220,10 @@ impl Rule for OrderPropertiesOrder {
                     is_first_prop = false;
                     seen_unprefixed.insert(lookup.to_string());
                 } else {
-                    if last_order_index.map(|li| info.order_index >= li).unwrap_or(true) {
+                    if last_order_index
+                        .map(|li| info.order_index >= li)
+                        .unwrap_or(true)
+                    {
                         last_order_index = Some(info.order_index);
                         last_group_index = Some(info.group_index);
                     }
@@ -251,9 +245,7 @@ impl Rule for OrderPropertiesOrder {
                             diagnostics.push(
                                 Diagnostic::new(
                                     self.name(),
-                                    format!(
-                                        "Unexpected empty line before \"{prop}\""
-                                    ),
+                                    format!("Unexpected empty line before \"{prop}\""),
                                 )
                                 .severity(self.default_severity())
                                 .span(Span::new(offset, length)),
@@ -269,9 +261,7 @@ impl Rule for OrderPropertiesOrder {
                                     diagnostics.push(
                                         Diagnostic::new(
                                             self.name(),
-                                            format!(
-                                                "Expected an empty line before \"{prop}\""
-                                            ),
+                                            format!("Expected an empty line before \"{prop}\""),
                                         )
                                         .severity(self.default_severity())
                                         .span(Span::new(offset, length)),
@@ -283,9 +273,7 @@ impl Rule for OrderPropertiesOrder {
                                     diagnostics.push(
                                         Diagnostic::new(
                                             self.name(),
-                                            format!(
-                                                "Unexpected empty line before \"{prop}\""
-                                            ),
+                                            format!("Unexpected empty line before \"{prop}\""),
                                         )
                                         .severity(self.default_severity())
                                         .span(Span::new(offset, length)),
@@ -302,14 +290,11 @@ impl Rule for OrderPropertiesOrder {
                     Unspecified::Ignore => {}
                     Unspecified::Top => {
                         if prev_was_specified == Some(true) {
-                            let prev_name =
-                                last_property_name.as_deref().unwrap_or("unknown");
+                            let prev_name = last_property_name.as_deref().unwrap_or("unknown");
                             diagnostics.push(
                                 Diagnostic::new(
                                     self.name(),
-                                    format!(
-                                        "Expected \"{prop}\" to come before \"{prev_name}\""
-                                    ),
+                                    format!("Expected \"{prop}\" to come before \"{prev_name}\""),
                                 )
                                 .severity(self.default_severity())
                                 .span(Span::new(offset, length)),
@@ -650,10 +635,7 @@ fn insert_property_or_regex(
     if s.starts_with('/') && s.ends_with('/') && s.len() > 2 {
         let pattern_str = &s[1..s.len() - 1];
         if let Ok(re) = regex::Regex::new(pattern_str) {
-            regex_patterns.push(RegexEntry {
-                pattern: re,
-                info,
-            });
+            regex_patterns.push(RegexEntry { pattern: re, info });
             return;
         }
         // If regex compilation fails, fall through and treat as a literal name.
@@ -1004,8 +986,7 @@ mod tests {
     #[test]
     fn vendor_prefix_maps_to_unprefixed() {
         let rule = OrderPropertiesOrder;
-        let options =
-            serde_json::json!([["transform", "font-smoothing", "top", "color"]]);
+        let options = serde_json::json!([["transform", "font-smoothing", "top", "color"]]);
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![
@@ -1022,8 +1003,7 @@ mod tests {
     #[test]
     fn unspecified_bottom() {
         let rule = OrderPropertiesOrder;
-        let options =
-            serde_json::json!([["height", "color"], {"unspecified": "bottom"}]);
+        let options = serde_json::json!([["height", "color"], {"unspecified": "bottom"}]);
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![
@@ -1075,12 +1055,7 @@ mod tests {
         // Config with a regex pattern `/^animation/` that should match
         // any property starting with "animation".
         let rule = OrderPropertiesOrder;
-        let options = serde_json::json!([
-            [
-                "display",
-                "/^animation/"
-            ]
-        ]);
+        let options = serde_json::json!([["display", "/^animation/"]]);
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![
@@ -1098,12 +1073,7 @@ mod tests {
     #[test]
     fn regex_pattern_wrong_order() {
         let rule = OrderPropertiesOrder;
-        let options = serde_json::json!([
-            [
-                "/^animation/",
-                "display"
-            ]
-        ]);
+        let options = serde_json::json!([["/^animation/", "display"]]);
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![

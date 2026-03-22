@@ -76,8 +76,7 @@ impl Rule for StylisticMediaQueryListCommaSpaceBefore {
                     } else if bytes[i] == b',' && paren_depth == 0 {
                         let comma_pos = i;
                         let has_space_before = comma_pos > 0
-                            && (bytes[comma_pos - 1] == b' '
-                                || bytes[comma_pos - 1] == b'\t');
+                            && (bytes[comma_pos - 1] == b' ' || bytes[comma_pos - 1] == b'\t');
 
                         match option {
                             "always" => {
@@ -137,7 +136,8 @@ mod tests {
     fn allows_no_space_before_comma() {
         let opt = serde_json::Value::String("never".to_string());
         let source = "@media screen, print { }";
-        let d = StylisticMediaQueryListCommaSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticMediaQueryListCommaSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
         assert!(d.is_empty());
     }
 
@@ -145,7 +145,8 @@ mod tests {
     fn reports_space_before_comma() {
         let opt = serde_json::Value::String("never".to_string());
         let source = "@media screen , print { }";
-        let d = StylisticMediaQueryListCommaSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticMediaQueryListCommaSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("Unexpected space"));
     }
@@ -154,7 +155,8 @@ mod tests {
     fn always_requires_space_before_comma() {
         let opt = serde_json::Value::String("always".to_string());
         let source = "@media screen, print { }";
-        let d = StylisticMediaQueryListCommaSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticMediaQueryListCommaSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("Expected a space"));
     }

@@ -578,9 +578,14 @@ fn is_value_continuation(line: &str) -> bool {
     //   box-shadow: 0 0 1px red,
     //     0 0 2px blue,
     //     0 0 3px green;   <-- this line
-    if !line.contains(':') && !line.starts_with('@')
-        && !line.starts_with("--") && !line.ends_with('{') && !line.ends_with('}')
-        && !line.starts_with('.')  && !line.starts_with('#') && !line.starts_with('&')
+    if !line.contains(':')
+        && !line.starts_with('@')
+        && !line.starts_with("--")
+        && !line.ends_with('{')
+        && !line.ends_with('}')
+        && !line.starts_with('.')
+        && !line.starts_with('#')
+        && !line.starts_with('&')
     {
         return true;
     }
@@ -632,7 +637,10 @@ mod tests {
         }
     }
 
-    fn make_ctx_with_options<'a>(source: &'a str, options: &'a serde_json::Value) -> RuleContext<'a> {
+    fn make_ctx_with_options<'a>(
+        source: &'a str,
+        options: &'a serde_json::Value,
+    ) -> RuleContext<'a> {
         RuleContext {
             file_path: "t.css",
             source,
@@ -724,7 +732,11 @@ mod tests {
         let d = DeclarationEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
         // First decl: except first-nested flips "always" to "never", so no empty line needed — OK
         // Second decl: ignore after-declaration skips it entirely — OK
-        assert!(d.is_empty(), "Expected no diagnostics with Carbon-like config, got {:?}", d.iter().map(|d| &d.message).collect::<Vec<_>>());
+        assert!(
+            d.is_empty(),
+            "Expected no diagnostics with Carbon-like config, got {:?}",
+            d.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -781,7 +793,11 @@ mod tests {
         let d = DeclarationEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
         // First decl: except first-nested flips "always" -> "never", no empty line, OK
         // Second decl: "always" mode, has empty line before, OK
-        assert!(d.is_empty(), "Expected no diagnostics, got {:?}", d.iter().map(|d| &d.message).collect::<Vec<_>>());
+        assert!(
+            d.is_empty(),
+            "Expected no diagnostics, got {:?}",
+            d.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
     }
 
     #[test]

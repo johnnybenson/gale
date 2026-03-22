@@ -109,8 +109,7 @@ impl Rule for StylisticMediaFeatureColonSpaceAfter {
                     // Check colons inside parens (media feature colons)
                     if bytes[i] == b':' && paren_depth > 0 {
                         let colon_pos = i;
-                        let has_space_after =
-                            colon_pos + 1 < len && bytes[colon_pos + 1] == b' ';
+                        let has_space_after = colon_pos + 1 < len && bytes[colon_pos + 1] == b' ';
 
                         match option {
                             "always" => {
@@ -189,7 +188,8 @@ mod tests {
     fn reports_missing_space_after_colon() {
         let opt = serde_json::Value::String("always".to_string());
         let source = "@media (min-width:768px) { }";
-        let d = StylisticMediaFeatureColonSpaceAfter.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticMediaFeatureColonSpaceAfter.check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("Expected a space"));
     }
@@ -198,7 +198,8 @@ mod tests {
     fn never_allows_no_space_after_colon() {
         let opt = serde_json::Value::String("never".to_string());
         let source = "@media (min-width:768px) { }";
-        let d = StylisticMediaFeatureColonSpaceAfter.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticMediaFeatureColonSpaceAfter.check_root(&[], &ctx_with_option(source, &opt));
         assert!(d.is_empty());
     }
 
@@ -206,7 +207,8 @@ mod tests {
     fn never_reports_space_after_colon() {
         let opt = serde_json::Value::String("never".to_string());
         let source = "@media (min-width: 768px) { }";
-        let d = StylisticMediaFeatureColonSpaceAfter.check_root(&[], &ctx_with_option(source, &opt));
+        let d =
+            StylisticMediaFeatureColonSpaceAfter.check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("Unexpected space"));
     }

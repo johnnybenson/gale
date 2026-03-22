@@ -100,9 +100,7 @@ impl Rule for StylisticSelectorListCommaSpaceAfter {
 
                 if violation {
                     let msg = match option {
-                        "always" | "always-single-line" => {
-                            "Expected a space after \",\""
-                        }
+                        "always" | "always-single-line" => "Expected a space after \",\"",
                         "never" => "Unexpected space after \",\"",
                         _ => continue,
                     };

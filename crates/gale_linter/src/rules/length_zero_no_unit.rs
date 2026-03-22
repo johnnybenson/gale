@@ -47,18 +47,35 @@ const ZERO_UNIT_EXEMPT_PROPERTIES: &[&str] = &[
 
 fn is_exempt_property(prop: &str) -> bool {
     let lower = prop.to_ascii_lowercase();
-    ZERO_UNIT_EXEMPT_PROPERTIES
-        .iter()
-        .any(|&p| lower == p)
+    ZERO_UNIT_EXEMPT_PROPERTIES.iter().any(|&p| lower == p)
 }
 
 /// Math functions where `0<unit>` must keep its unit because the function
 /// requires typed values for dimensional analysis.
 const MATH_FUNCTIONS: &[&str] = &[
-    "calc", "min", "max", "clamp", "abs", "sign", "round", "mod", "rem",
-    "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
-    "pow", "sqrt", "hypot", "log", "exp",
-    "-webkit-calc", "-moz-calc",
+    "calc",
+    "min",
+    "max",
+    "clamp",
+    "abs",
+    "sign",
+    "round",
+    "mod",
+    "rem",
+    "sin",
+    "cos",
+    "tan",
+    "asin",
+    "acos",
+    "atan",
+    "atan2",
+    "pow",
+    "sqrt",
+    "hypot",
+    "log",
+    "exp",
+    "-webkit-calc",
+    "-moz-calc",
 ];
 
 fn is_math_function(name: &str) -> bool {
@@ -136,9 +153,7 @@ fn matches_pattern_ci(value: &str, pattern: &str) -> bool {
 }
 
 fn function_is_ignored(func_name: &str, patterns: &[String]) -> bool {
-    patterns
-        .iter()
-        .any(|p| matches_pattern_ci(func_name, p))
+    patterns.iter().any(|p| matches_pattern_ci(func_name, p))
 }
 
 impl Rule for LengthZeroNoUnit {
@@ -267,9 +282,7 @@ fn has_scss_module_function(value: &str) -> bool {
             && (bytes[i - 1].is_ascii_alphanumeric()
                 || bytes[i - 1] == b'-'
                 || bytes[i - 1] == b'_')
-            && (bytes[i + 1].is_ascii_alphabetic()
-                || bytes[i + 1] == b'-'
-                || bytes[i + 1] == b'_')
+            && (bytes[i + 1].is_ascii_alphabetic() || bytes[i + 1] == b'-' || bytes[i + 1] == b'_')
         {
             return true;
         }
@@ -402,8 +415,7 @@ fn find_zero_units_contextual(
         // --- Check for zero followed by a length unit ---
         if chars[i] == '0' {
             // Ensure it's not preceded by a digit or dot (part of a larger number)
-            let is_start = i == 0
-                || (!chars[i - 1].is_ascii_digit() && chars[i - 1] != '.');
+            let is_start = i == 0 || (!chars[i - 1].is_ascii_digit() && chars[i - 1] != '.');
 
             if is_start {
                 // Skip decimals: `0.5px` is not zero
@@ -460,9 +472,7 @@ fn find_zero_units_contextual(
                         continue;
                     }
 
-                    let unit: String = chars[unit_start..unit_end]
-                        .iter()
-                        .collect::<String>();
+                    let unit: String = chars[unit_start..unit_end].iter().collect::<String>();
                     let unit_lower = unit.to_ascii_lowercase();
 
                     // Only report length units (not %, s, ms, deg, etc.)
@@ -475,9 +485,9 @@ fn find_zero_units_contextual(
                         }
 
                         // Check ignoreFunctions
-                        let in_ignored_func = func_stack.iter().any(|f| {
-                            function_is_ignored(f, &opts.ignore_functions)
-                        });
+                        let in_ignored_func = func_stack
+                            .iter()
+                            .any(|f| function_is_ignored(f, &opts.ignore_functions));
                         if in_ignored_func {
                             i = unit_end;
                             continue;
@@ -509,10 +519,7 @@ fn find_zero_units_contextual(
                                 .span(Span::new(unit_abs_offset, unit_byte_len))
                                 .fix(Fix::new(
                                     "Remove unit",
-                                    vec![Edit::new(
-                                        Span::new(abs_offset, zero_unit_byte_len),
-                                        "0",
-                                    )],
+                                    vec![Edit::new(Span::new(abs_offset, zero_unit_byte_len), "0")],
                                 )),
                         );
                         i = unit_end;
@@ -525,10 +532,7 @@ fn find_zero_units_contextual(
         }
 
         // --- Handle `.0rem` pattern (starts with dot) ---
-        if chars[i] == '.'
-            && i + 1 < len
-            && chars[i + 1] == '0'
-        {
+        if chars[i] == '.' && i + 1 < len && chars[i + 1] == '0' {
             // Check it's not preceded by a digit (would be part of 1.0)
             let is_start = i == 0 || !chars[i - 1].is_ascii_digit();
             if is_start {
@@ -565,9 +569,9 @@ fn find_zero_units_contextual(
                             i = unit_end;
                             continue;
                         }
-                        let in_ignored_func = func_stack.iter().any(|f| {
-                            function_is_ignored(f, &opts.ignore_functions)
-                        });
+                        let in_ignored_func = func_stack
+                            .iter()
+                            .any(|f| function_is_ignored(f, &opts.ignore_functions));
                         if in_ignored_func {
                             i = unit_end;
                             continue;
@@ -597,10 +601,7 @@ fn find_zero_units_contextual(
                                 .span(Span::new(unit_abs_offset, unit_byte_len))
                                 .fix(Fix::new(
                                     "Remove unit",
-                                    vec![Edit::new(
-                                        Span::new(abs_offset, zero_unit_byte_len),
-                                        "0",
-                                    )],
+                                    vec![Edit::new(Span::new(abs_offset, zero_unit_byte_len), "0")],
                                 )),
                         );
                         i = unit_end;
@@ -651,16 +652,20 @@ mod tests {
 
     #[test]
     fn allows_zero_without_unit() {
-        assert!(LengthZeroNoUnit
-            .check(&style_decl("margin", "0"), &ctx())
-            .is_empty());
+        assert!(
+            LengthZeroNoUnit
+                .check(&style_decl("margin", "0"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
     fn allows_non_zero_with_unit() {
-        assert!(LengthZeroNoUnit
-            .check(&style_decl("margin", "10px"), &ctx())
-            .is_empty());
+        assert!(
+            LengthZeroNoUnit
+                .check(&style_decl("margin", "10px"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]
@@ -673,7 +678,11 @@ mod tests {
     #[test]
     fn allows_zero_in_calc() {
         let d = LengthZeroNoUnit.check(&style_decl("padding", "calc(0px + 10px)"), &ctx());
-        assert!(d.is_empty(), "Expected no diagnostics inside calc(), got: {:?}", d);
+        assert!(
+            d.is_empty(),
+            "Expected no diagnostics inside calc(), got: {:?}",
+            d
+        );
     }
 
     #[test]

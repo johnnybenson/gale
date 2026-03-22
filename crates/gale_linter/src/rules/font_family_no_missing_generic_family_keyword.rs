@@ -78,7 +78,10 @@ impl Rule for FontFamilyNoMissingGenericFamilyKeyword {
                 // If the value looks like a single function call, skip it.
                 if let Some(paren_pos) = value.find('(') {
                     let func_name = &value[..paren_pos];
-                    if func_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
+                    if func_name
+                        .chars()
+                        .all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.')
+                    {
                         continue;
                     }
                 }

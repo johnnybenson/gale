@@ -148,20 +148,16 @@ mod tests {
     #[test]
     fn allows_non_disallowed_feature() {
         let opts = json!(["max-width"]);
-        let d = MediaFeatureNameDisallowedList.check(
-            &media_rule("(min-width: 768px)"),
-            &ctx_with_options(&opts),
-        );
+        let d = MediaFeatureNameDisallowedList
+            .check(&media_rule("(min-width: 768px)"), &ctx_with_options(&opts));
         assert!(d.is_empty());
     }
 
     #[test]
     fn rejects_disallowed_feature() {
         let opts = json!(["min-width"]);
-        let d = MediaFeatureNameDisallowedList.check(
-            &media_rule("(min-width: 768px)"),
-            &ctx_with_options(&opts),
-        );
+        let d = MediaFeatureNameDisallowedList
+            .check(&media_rule("(min-width: 768px)"), &ctx_with_options(&opts));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("min-width"));
     }
@@ -169,10 +165,8 @@ mod tests {
     #[test]
     fn case_insensitive_match() {
         let opts = json!(["MIN-WIDTH"]);
-        let d = MediaFeatureNameDisallowedList.check(
-            &media_rule("(min-width: 768px)"),
-            &ctx_with_options(&opts),
-        );
+        let d = MediaFeatureNameDisallowedList
+            .check(&media_rule("(min-width: 768px)"), &ctx_with_options(&opts));
         assert_eq!(d.len(), 1);
     }
 

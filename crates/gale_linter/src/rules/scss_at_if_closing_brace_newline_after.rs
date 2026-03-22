@@ -44,8 +44,7 @@ impl Rule for ScssAtIfClosingBraceNewlineAfter {
             if bytes[i] == b'@' && i + 2 < len {
                 let rest = &source[i..];
                 let is_if = rest.starts_with("@if ") || rest.starts_with("@if(");
-                let is_else_if =
-                    rest.starts_with("@else if ") || rest.starts_with("@else if(");
+                let is_else_if = rest.starts_with("@else if ") || rest.starts_with("@else if(");
 
                 if is_if || is_else_if {
                     // Find the matching closing `}`
@@ -58,8 +57,7 @@ impl Rule for ScssAtIfClosingBraceNewlineAfter {
                         }
 
                         // Check what follows
-                        let followed_by_else =
-                            j < len && source[j..].starts_with("@else");
+                        let followed_by_else = j < len && source[j..].starts_with("@else");
 
                         match option {
                             "always-last-in-chain" => {
@@ -238,6 +236,10 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssAtIfClosingBraceNewlineAfter.check_root(&[], &ctx).is_empty());
+        assert!(
+            ScssAtIfClosingBraceNewlineAfter
+                .check_root(&[], &ctx)
+                .is_empty()
+        );
     }
 }

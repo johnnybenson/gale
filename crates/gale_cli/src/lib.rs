@@ -173,9 +173,7 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
             // Stylelint ignoreFiles patterns are relative to config location (usually
             // project root). Strip leading "./" for matching and treat as globs.
             let clean = pat.strip_prefix("./").unwrap_or(pat);
-            globset::Glob::new(clean)
-                .ok()
-                .map(|g| g.compile_matcher())
+            globset::Glob::new(clean).ok().map(|g| g.compile_matcher())
         })
         .collect();
 
@@ -211,9 +209,7 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
                     .find(|c: char| c == '*' || c == '?' || c == '{' || c == '[')
                     .unwrap_or(pattern.len());
                 let prefix = &pattern[..first_meta];
-                let root = Path::new(prefix)
-                    .parent()
-                    .unwrap_or_else(|| Path::new("."));
+                let root = Path::new(prefix).parent().unwrap_or_else(|| Path::new("."));
                 if root.as_os_str().is_empty() {
                     PathBuf::from(".")
                 } else {
@@ -245,8 +241,7 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
                 }
 
                 if !opts.ignore_patterns.is_empty() {
-                    let mut overrides =
-                        ignore::overrides::OverrideBuilder::new(&walk_root);
+                    let mut overrides = ignore::overrides::OverrideBuilder::new(&walk_root);
                     for pat in opts.ignore_patterns {
                         if let Err(err) = overrides.add(&format!("!{pat}")) {
                             eprintln!("Warning: invalid ignore pattern '{pat}': {err}");
@@ -270,10 +265,7 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
                         Ok(e) => e,
                         Err(_) => return ignore::WalkState::Continue,
                     };
-                    let is_file = entry
-                        .file_type()
-                        .map(|ft| ft.is_file())
-                        .unwrap_or(false);
+                    let is_file = entry.file_type().map(|ft| ft.is_file()).unwrap_or(false);
                     if !is_file {
                         return ignore::WalkState::Continue;
                     }
@@ -283,9 +275,7 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
                     }
                     // Check the glob pattern against the path.
                     if !glob_ref.is_match(entry_path) {
-                        let rel = entry_path
-                            .strip_prefix(cwd_ref)
-                            .unwrap_or(entry_path);
+                        let rel = entry_path.strip_prefix(cwd_ref).unwrap_or(entry_path);
                         if !glob_ref.is_match(rel) {
                             return ignore::WalkState::Continue;
                         }
@@ -410,10 +400,7 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
                     Ok(e) => e,
                     Err(_) => return ignore::WalkState::Continue,
                 };
-                let is_file = entry
-                    .file_type()
-                    .map(|ft| ft.is_file())
-                    .unwrap_or(false);
+                let is_file = entry.file_type().map(|ft| ft.is_file()).unwrap_or(false);
                 if is_file && is_css_file(entry.path()) {
                     dir_matched
                         .lock()
@@ -565,11 +552,9 @@ pub fn run() -> Result<()> {
         // Use per-file config resolution when --config is not specified.
         let file_config;
         let effective_config = if use_per_file_config {
-            let abs_path = std::env::current_dir()
-                .unwrap_or_default()
-                .join(file);
-            file_config = gale_config::resolve_config_for_file(&abs_path)
-                .unwrap_or_else(|| config.clone());
+            let abs_path = std::env::current_dir().unwrap_or_default().join(file);
+            file_config =
+                gale_config::resolve_config_for_file(&abs_path).unwrap_or_else(|| config.clone());
             &file_config
         } else {
             &config
@@ -661,10 +646,7 @@ pub fn run() -> Result<()> {
     /// Build `ResolvedLintParams` from a `GaleConfig`, pre-computing enabled
     /// rules, options, and severities so the parallel loop avoids per-file
     /// allocation.
-    fn build_lint_params(
-        config: Arc<GaleConfig>,
-        runner: &LintRunner,
-    ) -> Arc<ResolvedLintParams> {
+    fn build_lint_params(config: Arc<GaleConfig>, runner: &LintRunner) -> Arc<ResolvedLintParams> {
         let has_overrides = config.has_overrides();
         let enabled_rules: Vec<String> = config
             .rules
@@ -687,22 +669,21 @@ pub fn run() -> Result<()> {
                     .map(|opts| (name.clone(), opts.clone()))
             })
             .collect();
-        let rule_severities: std::collections::HashMap<String, gale_diagnostics::Severity> =
-            config
-                .rules
-                .iter()
-                .filter_map(|(name, cfg)| {
-                    cfg.severity.as_ref().and_then(|s| match s {
-                        gale_config::Severity::Error => {
-                            Some((name.clone(), gale_diagnostics::Severity::Error))
-                        }
-                        gale_config::Severity::Warning => {
-                            Some((name.clone(), gale_diagnostics::Severity::Warning))
-                        }
-                        gale_config::Severity::Off => None,
-                    })
+        let rule_severities: std::collections::HashMap<String, gale_diagnostics::Severity> = config
+            .rules
+            .iter()
+            .filter_map(|(name, cfg)| {
+                cfg.severity.as_ref().and_then(|s| match s {
+                    gale_config::Severity::Error => {
+                        Some((name.clone(), gale_diagnostics::Severity::Error))
+                    }
+                    gale_config::Severity::Warning => {
+                        Some((name.clone(), gale_diagnostics::Severity::Warning))
+                    }
+                    gale_config::Severity::Off => None,
                 })
-                .collect();
+            })
+            .collect();
         Arc::new(ResolvedLintParams {
             config,
             enabled_rules,
@@ -744,23 +725,21 @@ pub fn run() -> Result<()> {
                         .map(|opts| (name.clone(), opts.clone()))
                 })
                 .collect();
-        let override_severities: std::collections::HashMap<
-            String,
-            gale_diagnostics::Severity,
-        > = effective_rules
-            .iter()
-            .filter_map(|(name, cfg)| {
-                cfg.severity.as_ref().and_then(|s| match s {
-                    gale_config::Severity::Error => {
-                        Some((name.clone(), gale_diagnostics::Severity::Error))
-                    }
-                    gale_config::Severity::Warning => {
-                        Some((name.clone(), gale_diagnostics::Severity::Warning))
-                    }
-                    gale_config::Severity::Off => None,
+        let override_severities: std::collections::HashMap<String, gale_diagnostics::Severity> =
+            effective_rules
+                .iter()
+                .filter_map(|(name, cfg)| {
+                    cfg.severity.as_ref().and_then(|s| match s {
+                        gale_config::Severity::Error => {
+                            Some((name.clone(), gale_diagnostics::Severity::Error))
+                        }
+                        gale_config::Severity::Warning => {
+                            Some((name.clone(), gale_diagnostics::Severity::Warning))
+                        }
+                        gale_config::Severity::Off => None,
+                    })
                 })
-            })
-            .collect();
+                .collect();
         runner.lint_source_with_rules(
             source,
             file_path,
@@ -860,13 +839,10 @@ pub fn run() -> Result<()> {
                         }
                     })
                     .collect();
-                let dir_to_config =
-                    resolver.resolve_all_for_files(&abs_files, &config);
+                let dir_to_config = resolver.resolve_all_for_files(&abs_files, &config);
                 // Build ResolvedLintParams per config (dedup by Arc pointer).
-                let mut params_by_ptr: std::collections::HashMap<
-                    usize,
-                    Arc<ResolvedLintParams>,
-                > = std::collections::HashMap::new();
+                let mut params_by_ptr: std::collections::HashMap<usize, Arc<ResolvedLintParams>> =
+                    std::collections::HashMap::new();
                 let dir_params: std::collections::HashMap<PathBuf, Arc<ResolvedLintParams>> =
                     dir_to_config
                         .into_iter()
@@ -956,7 +932,12 @@ pub fn run() -> Result<()> {
                             ))
                         } else {
                             Some(lint_file(
-                                &runner, &source, &file_path, syntax, &config, has_overrides,
+                                &runner,
+                                &source,
+                                &file_path,
+                                syntax,
+                                &config,
+                                has_overrides,
                             ))
                         }
                     } else {

@@ -61,12 +61,9 @@ impl Rule for StylisticStringQuotes {
                 }
                 let span_len = i - start;
                 diagnostics.push(
-                    Diagnostic::new(
-                        self.name(),
-                        format!("Expected {good_name} quotes"),
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(start, span_len)),
+                    Diagnostic::new(self.name(), format!("Expected {good_name} quotes"))
+                        .severity(self.default_severity())
+                        .span(Span::new(start, span_len)),
                 );
                 continue;
             } else if bytes[i] == b'\'' || bytes[i] == b'"' {

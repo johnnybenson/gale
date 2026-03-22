@@ -166,8 +166,7 @@ mod tests {
     #[test]
     fn reports_disallowed_child_combinator() {
         let ctx = ctx_with_options(serde_json::json!([">"]));
-        let d = SelectorCombinatorDisallowedList
-            .check(&style_with_selector("a > .foo"), &ctx);
+        let d = SelectorCombinatorDisallowedList.check(&style_with_selector("a > .foo"), &ctx);
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains(">"));
     }
@@ -175,23 +174,20 @@ mod tests {
     #[test]
     fn reports_disallowed_descendant_combinator() {
         let ctx = ctx_with_options(serde_json::json!([" "]));
-        let d = SelectorCombinatorDisallowedList
-            .check(&style_with_selector("a .foo"), &ctx);
+        let d = SelectorCombinatorDisallowedList.check(&style_with_selector("a .foo"), &ctx);
         assert_eq!(d.len(), 1);
     }
 
     #[test]
     fn allows_combinator_not_in_list() {
         let ctx = ctx_with_options(serde_json::json!([">"]));
-        let d = SelectorCombinatorDisallowedList
-            .check(&style_with_selector("a + .foo"), &ctx);
+        let d = SelectorCombinatorDisallowedList.check(&style_with_selector("a + .foo"), &ctx);
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_all_when_no_options() {
-        let d = SelectorCombinatorDisallowedList
-            .check(&style_with_selector("a > .foo"), &ctx());
+        let d = SelectorCombinatorDisallowedList.check(&style_with_selector("a > .foo"), &ctx());
         assert!(d.is_empty());
     }
 

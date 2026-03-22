@@ -155,12 +155,9 @@ impl Rule for SelectorCombinatorAllowedList {
                     format!("\"{combinator}\"")
                 };
                 diags.push(
-                    Diagnostic::new(
-                        self.name(),
-                        format!("Unexpected combinator {display}"),
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(rule.span.offset, rule.span.length)),
+                    Diagnostic::new(self.name(), format!("Unexpected combinator {display}"))
+                        .severity(self.default_severity())
+                        .span(Span::new(rule.span.offset, rule.span.length)),
                 );
             }
         }
@@ -210,20 +207,16 @@ mod tests {
     #[test]
     fn allows_listed_combinator() {
         let opts = json!([">"]);
-        let d = SelectorCombinatorAllowedList.check(
-            &style_with_selector("a > b"),
-            &ctx_with_options(&opts),
-        );
+        let d = SelectorCombinatorAllowedList
+            .check(&style_with_selector("a > b"), &ctx_with_options(&opts));
         assert!(d.is_empty());
     }
 
     #[test]
     fn rejects_unlisted_combinator() {
         let opts = json!([">"]);
-        let d = SelectorCombinatorAllowedList.check(
-            &style_with_selector("a + b"),
-            &ctx_with_options(&opts),
-        );
+        let d = SelectorCombinatorAllowedList
+            .check(&style_with_selector("a + b"), &ctx_with_options(&opts));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("+"));
     }
@@ -231,10 +224,8 @@ mod tests {
     #[test]
     fn detects_descendant_combinator() {
         let opts = json!([">"]);
-        let d = SelectorCombinatorAllowedList.check(
-            &style_with_selector("a b"),
-            &ctx_with_options(&opts),
-        );
+        let d = SelectorCombinatorAllowedList
+            .check(&style_with_selector("a b"), &ctx_with_options(&opts));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("descendant"));
     }
@@ -242,20 +233,16 @@ mod tests {
     #[test]
     fn allows_descendant_when_listed() {
         let opts = json!([" "]);
-        let d = SelectorCombinatorAllowedList.check(
-            &style_with_selector("a b"),
-            &ctx_with_options(&opts),
-        );
+        let d = SelectorCombinatorAllowedList
+            .check(&style_with_selector("a b"), &ctx_with_options(&opts));
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_multiple_combinators() {
         let opts = json!([">", "+"]);
-        let d = SelectorCombinatorAllowedList.check(
-            &style_with_selector("a > b + c"),
-            &ctx_with_options(&opts),
-        );
+        let d = SelectorCombinatorAllowedList
+            .check(&style_with_selector("a > b + c"), &ctx_with_options(&opts));
         assert!(d.is_empty());
     }
 

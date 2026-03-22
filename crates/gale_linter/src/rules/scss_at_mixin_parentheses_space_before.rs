@@ -203,7 +203,11 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssAtMixinParenthesesSpaceBefore.check_root(&[], &ctx).is_empty());
+        assert!(
+            ScssAtMixinParenthesesSpaceBefore
+                .check_root(&[], &ctx)
+                .is_empty()
+        );
     }
 
     #[test]

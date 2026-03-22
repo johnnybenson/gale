@@ -86,24 +86,18 @@ impl Rule for ScssAtElseEmptyLineBefore {
                     "never" => {
                         if has_empty_line {
                             diagnostics.push(
-                                Diagnostic::new(
-                                    self.name(),
-                                    "Unexpected empty line before @else",
-                                )
-                                .severity(self.default_severity())
-                                .span(Span::new(at_else_offset, 5)),
+                                Diagnostic::new(self.name(), "Unexpected empty line before @else")
+                                    .severity(self.default_severity())
+                                    .span(Span::new(at_else_offset, 5)),
                             );
                         }
                     }
                     "always" => {
                         if !has_empty_line {
                             diagnostics.push(
-                                Diagnostic::new(
-                                    self.name(),
-                                    "Expected empty line before @else",
-                                )
-                                .severity(self.default_severity())
-                                .span(Span::new(at_else_offset, 5)),
+                                Diagnostic::new(self.name(), "Expected empty line before @else")
+                                    .severity(self.default_severity())
+                                    .span(Span::new(at_else_offset, 5)),
                             );
                         }
                     }

@@ -80,9 +80,7 @@ impl Rule for StylisticBlockClosingBraceNewlineBefore {
 
                 if violation {
                     let msg = match option {
-                        "always" | "always-multi-line" => {
-                            "Expected newline before \"}\""
-                        }
+                        "always" | "always-multi-line" => "Expected newline before \"}\"",
                         "never" => "Unexpected newline before \"}\"",
                         _ => {
                             i += 1;

@@ -34,9 +34,7 @@ impl Rule for SelectorClassPattern {
 
         // Read the user-supplied regex pattern from options, or use the default kebab-case pattern.
         // Options may be a plain string "^pattern$" or an array ["^pattern$", { secondary }].
-        let pattern_str = ctx
-            .primary_option_str()
-            .unwrap_or(DEFAULT_PATTERN);
+        let pattern_str = ctx.primary_option_str().unwrap_or(DEFAULT_PATTERN);
 
         let re = match Regex::new(pattern_str) {
             Ok(r) => r,
@@ -88,9 +86,7 @@ impl Rule for SelectorClassPattern {
                     diags.push(
                         Diagnostic::new(
                             self.name(),
-                            format!(
-                                "Expected \".{class}\" to match pattern \"{pattern_str}\""
-                            ),
+                            format!("Expected \".{class}\" to match pattern \"{pattern_str}\""),
                         )
                         .severity(self.default_severity())
                         .span(Span::new(offset, class.len() + 1)), // +1 for the dot
@@ -146,7 +142,12 @@ fn extract_class_names_with_offsets(selector: &str) -> Vec<(String, usize)> {
             // a class selector.
             if i < len && chars[i].is_ascii_digit() {
                 // Skip past the numeric value
-                while i < len && (chars[i].is_ascii_alphanumeric() || chars[i] == '.' || chars[i] == '-' || chars[i] == '_') {
+                while i < len
+                    && (chars[i].is_ascii_alphanumeric()
+                        || chars[i] == '.'
+                        || chars[i] == '-'
+                        || chars[i] == '_')
+                {
                     byte_pos += chars[i].len_utf8();
                     i += 1;
                 }
@@ -207,7 +208,12 @@ fn extract_class_names(selector: &str) -> Vec<String> {
             // digit, this is a numeric value (e.g. `.5` in `opacity: .5`), not
             // a class selector.
             if i < len && chars[i].is_ascii_digit() {
-                while i < len && (chars[i].is_ascii_alphanumeric() || chars[i] == '.' || chars[i] == '-' || chars[i] == '_') {
+                while i < len
+                    && (chars[i].is_ascii_alphanumeric()
+                        || chars[i] == '.'
+                        || chars[i] == '-'
+                        || chars[i] == '_')
+                {
                     i += 1;
                 }
                 continue;

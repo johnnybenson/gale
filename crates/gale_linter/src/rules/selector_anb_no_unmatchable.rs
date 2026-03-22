@@ -155,10 +155,7 @@ impl Rule for SelectorAnbNoUnmatchable {
                 diags.push(
                     Diagnostic::new(
                         self.name(),
-                        format!(
-                            "Unexpected unmatchable An+B selector \"{}\"",
-                            expr.trim()
-                        ),
+                        format!("Unexpected unmatchable An+B selector \"{}\"", expr.trim()),
                     )
                     .severity(self.default_severity())
                     .span(Span::new(rule.span.offset, rule.span.length)),
@@ -206,15 +203,13 @@ mod tests {
 
     #[test]
     fn reports_0n_plus_0() {
-        let d =
-            SelectorAnbNoUnmatchable.check(&style_with_selector("li:nth-child(0n+0)"), &ctx());
+        let d = SelectorAnbNoUnmatchable.check(&style_with_selector("li:nth-child(0n+0)"), &ctx());
         assert_eq!(d.len(), 1);
     }
 
     #[test]
     fn reports_negative_n_plus_0() {
-        let d =
-            SelectorAnbNoUnmatchable.check(&style_with_selector("li:nth-child(-n+0)"), &ctx());
+        let d = SelectorAnbNoUnmatchable.check(&style_with_selector("li:nth-child(-n+0)"), &ctx());
         assert_eq!(d.len(), 1);
     }
 
@@ -275,8 +270,7 @@ mod tests {
 
     #[test]
     fn works_with_nth_of_type() {
-        let d =
-            SelectorAnbNoUnmatchable.check(&style_with_selector("li:nth-of-type(0)"), &ctx());
+        let d = SelectorAnbNoUnmatchable.check(&style_with_selector("li:nth-of-type(0)"), &ctx());
         assert_eq!(d.len(), 1);
     }
 

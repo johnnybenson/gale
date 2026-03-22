@@ -39,10 +39,7 @@ const GENERIC_FAMILIES: &[&str] = &[
 ];
 
 /// System font keywords and vendor-prefixed identifiers that should not be quoted.
-const SYSTEM_FONT_KEYWORDS: &[&str] = &[
-    "-apple-system",
-    "blinkmacsystemfont",
-];
+const SYSTEM_FONT_KEYWORDS: &[&str] = &["-apple-system", "blinkmacsystemfont"];
 
 fn is_generic_family(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
@@ -143,7 +140,11 @@ struct FontFamilyToken {
 
 /// Parse font family names directly from the source text starting at `start_offset`.
 /// This avoids issues with lightningcss normalizing/stripping quotes.
-fn parse_font_families_from_source(source: &str, start_offset: usize, end_offset: usize) -> Vec<FontFamilyToken> {
+fn parse_font_families_from_source(
+    source: &str,
+    start_offset: usize,
+    end_offset: usize,
+) -> Vec<FontFamilyToken> {
     let mut families = Vec::new();
     let region = &source[start_offset..end_offset.min(source.len())];
     let bytes = region.as_bytes();
@@ -205,7 +206,9 @@ fn parse_font_families_from_source(source: &str, start_offset: usize, end_offset
             let raw = region[start..i].trim();
             if !raw.is_empty() {
                 // Compute offset to the trimmed content
-                let trim_start = region[start..i].find(|c: char| !c.is_ascii_whitespace()).unwrap_or(0);
+                let trim_start = region[start..i]
+                    .find(|c: char| !c.is_ascii_whitespace())
+                    .unwrap_or(0);
                 families.push(FontFamilyToken {
                     name: raw.to_string(),
                     quoted: false,
@@ -273,7 +276,11 @@ fn find_value_end(source: &str, value_start: usize) -> usize {
 /// For a `font` shorthand, find where the font-family portion starts.
 /// The font shorthand is: [style] [variant] [weight] [stretch] size[/line-height] family
 /// The family starts after the size (which contains a CSS length value).
-fn find_font_family_start_in_source(source: &str, value_start: usize, value_end: usize) -> Option<usize> {
+fn find_font_family_start_in_source(
+    source: &str,
+    value_start: usize,
+    value_end: usize,
+) -> Option<usize> {
     let region = &source[value_start..value_end];
     let bytes = region.as_bytes();
     let len = bytes.len();
@@ -294,8 +301,14 @@ fn find_font_family_start_in_source(source: &str, value_start: usize, value_end:
             let quote = bytes[i];
             i += 1;
             while i < len {
-                if bytes[i] == b'\\' { i += 2; continue; }
-                if bytes[i] == quote { i += 1; break; }
+                if bytes[i] == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                if bytes[i] == quote {
+                    i += 1;
+                    break;
+                }
                 i += 1;
             }
             continue;
@@ -319,10 +332,20 @@ fn find_font_family_start_in_source(source: &str, value_start: usize, value_end:
         let lower = token.to_ascii_lowercase();
 
         // Check if this looks like a font-size (number + unit or slash)
-        let looks_like_size = lower.chars().next().map(|c| c.is_ascii_digit() || c == '.').unwrap_or(false)
-            && (lower.contains("px") || lower.contains("em") || lower.contains("rem")
-                || lower.contains("pt") || lower.contains('%') || lower.contains("vh")
-                || lower.contains("vw") || lower.contains("ex") || lower.contains("ch")
+        let looks_like_size = lower
+            .chars()
+            .next()
+            .map(|c| c.is_ascii_digit() || c == '.')
+            .unwrap_or(false)
+            && (lower.contains("px")
+                || lower.contains("em")
+                || lower.contains("rem")
+                || lower.contains("pt")
+                || lower.contains('%')
+                || lower.contains("vh")
+                || lower.contains("vw")
+                || lower.contains("ex")
+                || lower.contains("ch")
                 || lower.contains('/'));
 
         if looks_like_size {
@@ -356,7 +379,9 @@ impl Rule for FontFamilyNameQuotes {
             _ => return vec![],
         };
 
-        let mode = ctx.primary_option_str().unwrap_or("always-where-recommended");
+        let mode = ctx
+            .primary_option_str()
+            .unwrap_or("always-where-recommended");
         let source = ctx.source;
         let mut diagnostics = Vec::new();
 
@@ -382,7 +407,12 @@ impl Rule for FontFamilyNameQuotes {
 }
 
 impl FontFamilyNameQuotes {
-    fn check_family(&self, family: &FontFamilyToken, mode: &str, diagnostics: &mut Vec<Diagnostic>) {
+    fn check_family(
+        &self,
+        family: &FontFamilyToken,
+        mode: &str,
+        diagnostics: &mut Vec<Diagnostic>,
+    ) {
         let is_kw = is_keyword_font(&family.name);
 
         match mode {
@@ -390,13 +420,19 @@ impl FontFamilyNameQuotes {
                 if is_kw {
                     if family.quoted {
                         diagnostics.push(self.make_diag(
-                            format!("Unexpected quotes around generic font family \"{}\"", family.name),
+                            format!(
+                                "Unexpected quotes around generic font family \"{}\"",
+                                family.name
+                            ),
                             family,
                         ));
                     }
                 } else if !family.quoted {
                     diagnostics.push(self.make_diag(
-                        format!("Expected quotes around font family name \"{}\"", family.name),
+                        format!(
+                            "Expected quotes around font family name \"{}\"",
+                            family.name
+                        ),
                         family,
                     ));
                 }
@@ -405,18 +441,27 @@ impl FontFamilyNameQuotes {
                 if is_kw {
                     if family.quoted {
                         diagnostics.push(self.make_diag(
-                            format!("Unexpected quotes around generic font family \"{}\"", family.name),
+                            format!(
+                                "Unexpected quotes around generic font family \"{}\"",
+                                family.name
+                            ),
                             family,
                         ));
                     }
                 } else if !family.quoted && strictly_requires_quoting(&family.name) {
                     diagnostics.push(self.make_diag(
-                        format!("Expected quotes around font family name \"{}\"", family.name),
+                        format!(
+                            "Expected quotes around font family name \"{}\"",
+                            family.name
+                        ),
                         family,
                     ));
                 } else if family.quoted && !strictly_requires_quoting(&family.name) {
                     diagnostics.push(self.make_diag(
-                        format!("Unexpected quotes around font family name \"{}\"", family.name),
+                        format!(
+                            "Unexpected quotes around font family name \"{}\"",
+                            family.name
+                        ),
                         family,
                     ));
                 }
@@ -426,19 +471,28 @@ impl FontFamilyNameQuotes {
                 if is_kw {
                     if family.quoted {
                         diagnostics.push(self.make_diag(
-                            format!("Unexpected quotes around generic font family \"{}\"", family.name),
+                            format!(
+                                "Unexpected quotes around generic font family \"{}\"",
+                                family.name
+                            ),
                             family,
                         ));
                     }
                 } else if !family.quoted && needs_quoting_recommended(&family.name) {
                     diagnostics.push(self.make_diag(
-                        format!("Expected quotes around font family name \"{}\"", family.name),
+                        format!(
+                            "Expected quotes around font family name \"{}\"",
+                            family.name
+                        ),
                         family,
                     ));
                 } else if family.quoted && !needs_quoting_recommended(&family.name) {
                     // Unnecessarily quoted single-word name like "Arial"
                     diagnostics.push(self.make_diag(
-                        format!("Unexpected quotes around font family name \"{}\"", family.name),
+                        format!(
+                            "Unexpected quotes around font family name \"{}\"",
+                            family.name
+                        ),
                         family,
                     ));
                 }
@@ -482,22 +536,35 @@ fn parse_font_families_from_value(value: &str) -> Vec<(String, bool)> {
     let len = bytes.len();
     let mut i = 0;
     while i < len {
-        while i < len && (bytes[i].is_ascii_whitespace() || bytes[i] == b',') { i += 1; }
-        if i >= len { break; }
+        while i < len && (bytes[i].is_ascii_whitespace() || bytes[i] == b',') {
+            i += 1;
+        }
+        if i >= len {
+            break;
+        }
         if bytes[i] == b'"' || bytes[i] == b'\'' {
             let quote = bytes[i];
             i += 1;
             let start = i;
             while i < len {
-                if bytes[i] == b'\\' { i += 2; continue; }
-                if bytes[i] == quote { break; }
+                if bytes[i] == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                if bytes[i] == quote {
+                    break;
+                }
                 i += 1;
             }
             families.push((value[start..i].to_string(), true));
-            if i < len { i += 1; }
+            if i < len {
+                i += 1;
+            }
         } else {
             let start = i;
-            while i < len && bytes[i] != b',' { i += 1; }
+            while i < len && bytes[i] != b',' {
+                i += 1;
+            }
             let raw = value[start..i].trim();
             if !raw.is_empty() {
                 families.push((raw.to_string(), false));

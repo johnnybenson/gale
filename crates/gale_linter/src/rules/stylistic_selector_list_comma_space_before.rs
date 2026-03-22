@@ -70,31 +70,24 @@ impl Rule for StylisticSelectorListCommaSpaceBefore {
 
             // Only check commas in selectors (outside braces)
             if bytes[i] == b',' && brace_depth == 0 {
-                let has_space_before =
-                    i > 0 && (bytes[i - 1] == b' ' || bytes[i - 1] == b'\t');
+                let has_space_before = i > 0 && (bytes[i - 1] == b' ' || bytes[i - 1] == b'\t');
 
                 match option {
                     "always" => {
                         if !has_space_before {
                             diagnostics.push(
-                                Diagnostic::new(
-                                    self.name(),
-                                    "Expected a space before \",\"",
-                                )
-                                .severity(self.default_severity())
-                                .span(Span::new(i, 1)),
+                                Diagnostic::new(self.name(), "Expected a space before \",\"")
+                                    .severity(self.default_severity())
+                                    .span(Span::new(i, 1)),
                             );
                         }
                     }
                     "never" => {
                         if has_space_before {
                             diagnostics.push(
-                                Diagnostic::new(
-                                    self.name(),
-                                    "Unexpected space before \",\"",
-                                )
-                                .severity(self.default_severity())
-                                .span(Span::new(i, 1)),
+                                Diagnostic::new(self.name(), "Unexpected space before \",\"")
+                                    .severity(self.default_severity())
+                                    .span(Span::new(i, 1)),
                             );
                         }
                     }

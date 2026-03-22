@@ -123,8 +123,7 @@ mod tests {
     #[test]
     fn reports_disallowed_pseudo_element() {
         let ctx = ctx_with_options(serde_json::json!(["before"]));
-        let d = SelectorPseudoElementDisallowedList
-            .check(&style_with_selector("a::before"), &ctx);
+        let d = SelectorPseudoElementDisallowedList.check(&style_with_selector("a::before"), &ctx);
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("::before"));
     }
@@ -132,15 +131,14 @@ mod tests {
     #[test]
     fn allows_pseudo_element_not_in_list() {
         let ctx = ctx_with_options(serde_json::json!(["before"]));
-        let d = SelectorPseudoElementDisallowedList
-            .check(&style_with_selector("a::after"), &ctx);
+        let d = SelectorPseudoElementDisallowedList.check(&style_with_selector("a::after"), &ctx);
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_all_when_no_options() {
-        let d = SelectorPseudoElementDisallowedList
-            .check(&style_with_selector("a::before"), &ctx());
+        let d =
+            SelectorPseudoElementDisallowedList.check(&style_with_selector("a::before"), &ctx());
         assert!(d.is_empty());
     }
 

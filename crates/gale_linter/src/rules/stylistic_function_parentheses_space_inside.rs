@@ -55,7 +55,12 @@ impl Rule for StylisticFunctionParenthesesSpaceInside {
             }
 
             // Detect function call
-            if bytes[i] == b'(' && i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'-' || bytes[i - 1] == b'_') {
+            if bytes[i] == b'('
+                && i > 0
+                && (bytes[i - 1].is_ascii_alphanumeric()
+                    || bytes[i - 1] == b'-'
+                    || bytes[i - 1] == b'_')
+            {
                 let open_paren = i;
                 let mut depth = 1;
                 let mut j = i + 1;
@@ -93,7 +98,8 @@ impl Rule for StylisticFunctionParenthesesSpaceInside {
                 let before_close = close_paren.saturating_sub(1);
 
                 let has_space_after_open = after_open < len && bytes[after_open] == b' ';
-                let has_space_before_close = before_close > open_paren && bytes[before_close] == b' ';
+                let has_space_before_close =
+                    before_close > open_paren && bytes[before_close] == b' ';
 
                 let should_check = match option {
                     "always" => true,

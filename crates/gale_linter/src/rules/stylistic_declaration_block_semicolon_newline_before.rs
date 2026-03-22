@@ -50,8 +50,7 @@ impl Rule for StylisticDeclarationBlockSemicolonNewlineBefore {
             }
 
             let char_before = source.as_bytes()[semi_offset - 1];
-            let has_newline_before =
-                char_before == b'\n' || (char_before == b'\r');
+            let has_newline_before = char_before == b'\n' || (char_before == b'\r');
 
             let violation = match option {
                 "always" => !has_newline_before,

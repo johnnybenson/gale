@@ -237,7 +237,10 @@ mod tests {
 
     #[test]
     fn skips_vendor_prefixed_descriptors() {
-        let node = font_face_node(&[("font-family", "MyFont"), ("-webkit-font-smoothing", "auto")]);
+        let node = font_face_node(&[
+            ("font-family", "MyFont"),
+            ("-webkit-font-smoothing", "auto"),
+        ]);
         assert!(AtRuleDescriptorNoUnknown.check(&node, &ctx()).is_empty());
     }
 }

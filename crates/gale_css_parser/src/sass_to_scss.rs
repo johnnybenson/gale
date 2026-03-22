@@ -267,7 +267,10 @@ mod tests {
 ";
         let scss = convert_sass_to_scss(sass);
         assert!(scss.contains(".container {"), "should open block: {scss}");
-        assert!(scss.contains("display: flex;"), "should add semicolon: {scss}");
+        assert!(
+            scss.contains("display: flex;"),
+            "should add semicolon: {scss}"
+        );
         assert!(scss.contains("color: red;"), "should add semicolon: {scss}");
         assert!(scss.contains('}'), "should close block: {scss}");
     }
@@ -316,7 +319,10 @@ mod tests {
   color: red
 ";
         let scss = convert_sass_to_scss(sass);
-        assert!(scss.contains("// line comment"), "line comment kept: {scss}");
+        assert!(
+            scss.contains("// line comment"),
+            "line comment kept: {scss}"
+        );
         assert!(
             scss.contains("/* block comment */"),
             "block comment kept: {scss}"

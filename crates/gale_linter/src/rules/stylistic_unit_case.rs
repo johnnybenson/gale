@@ -77,7 +77,9 @@ fn find_units(value: &str) -> Vec<(usize, String)> {
 
     while i < len {
         // Skip past a number (digits, dots)
-        if bytes[i].is_ascii_digit() || (bytes[i] == b'.' && i + 1 < len && bytes[i + 1].is_ascii_digit()) {
+        if bytes[i].is_ascii_digit()
+            || (bytes[i] == b'.' && i + 1 < len && bytes[i + 1].is_ascii_digit())
+        {
             while i < len && (bytes[i].is_ascii_digit() || bytes[i] == b'.') {
                 i += 1;
             }

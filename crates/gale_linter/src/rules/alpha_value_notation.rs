@@ -137,10 +137,7 @@ fn is_alpha_property(prop: &str) -> bool {
 /// We must use the source text (search_area) because lightningcss normalizes
 /// opacity percentages to numbers (e.g. `opacity: 10%` becomes value `.1`).
 /// Returns Some(offset_within_search_area) if there's an issue.
-fn check_property_alpha(
-    search_area: &str,
-    expected: PrimaryOption,
-) -> Option<usize> {
+fn check_property_alpha(search_area: &str, expected: PrimaryOption) -> Option<usize> {
     // Extract the value part after the colon from the source text.
     // If there's no colon, the search_area is just the value (fallback path).
     let (after_colon, value_base_offset) = if let Some(colon_pos) = search_area.find(':') {
@@ -217,10 +214,7 @@ fn strip_comments(s: &str) -> &str {
 
 /// Check if a value contains CSS variables, SCSS variables, or Less variables.
 fn contains_variable(s: &str) -> bool {
-    s.contains("var(")
-        || s.contains("env(")
-        || s.contains('$')
-        || s.contains('@')
+    s.contains("var(") || s.contains("env(") || s.contains('$') || s.contains('@')
 }
 
 // ---------------------------------------------------------------------------
@@ -425,9 +419,8 @@ impl Options {
                     opts.primary = parse_primary(primary_str);
                 }
                 if let Some(secondary) = arr.get(1) {
-                    if let Some(props) = secondary
-                        .get("exceptProperties")
-                        .and_then(|v| v.as_array())
+                    if let Some(props) =
+                        secondary.get("exceptProperties").and_then(|v| v.as_array())
                     {
                         for item in props {
                             if let Some(s) = item.as_str() {
@@ -531,30 +524,24 @@ mod tests {
     #[test]
     fn number_mode_reports_percentage_opacity() {
         let opts = serde_json::json!(["number"]);
-        let d = AlphaValueNotation.check(
-            &style_with_decl("opacity", "50%"),
-            &ctx_with_options(&opts),
-        );
+        let d =
+            AlphaValueNotation.check(&style_with_decl("opacity", "50%"), &ctx_with_options(&opts));
         assert_eq!(d.len(), 1);
     }
 
     #[test]
     fn number_mode_allows_decimal_opacity() {
         let opts = serde_json::json!(["number"]);
-        let d = AlphaValueNotation.check(
-            &style_with_decl("opacity", "0.5"),
-            &ctx_with_options(&opts),
-        );
+        let d =
+            AlphaValueNotation.check(&style_with_decl("opacity", "0.5"), &ctx_with_options(&opts));
         assert!(d.is_empty());
     }
 
     #[test]
     fn percentage_mode_reports_decimal_opacity() {
         let opts = serde_json::json!(["percentage"]);
-        let d = AlphaValueNotation.check(
-            &style_with_decl("opacity", "0.5"),
-            &ctx_with_options(&opts),
-        );
+        let d =
+            AlphaValueNotation.check(&style_with_decl("opacity", "0.5"), &ctx_with_options(&opts));
         assert_eq!(d.len(), 1);
     }
 
@@ -563,10 +550,8 @@ mod tests {
         let opts = serde_json::json!(["percentage", {"exceptProperties": ["opacity"]}]);
         // With percentage mode + exceptProperties: ["opacity"],
         // opacity should expect number notation instead.
-        let d = AlphaValueNotation.check(
-            &style_with_decl("opacity", "0.5"),
-            &ctx_with_options(&opts),
-        );
+        let d =
+            AlphaValueNotation.check(&style_with_decl("opacity", "0.5"), &ctx_with_options(&opts));
         assert!(d.is_empty()); // 0.5 is number notation, which is expected for excepted property
     }
 

@@ -203,9 +203,7 @@ fn extract_units_with_context(value: &str) -> Vec<UnitOccurrence> {
                         || chars[i].is_ascii_alphanumeric())
                 {
                     while i < len
-                        && (chars[i].is_ascii_alphanumeric()
-                            || chars[i] == '-'
-                            || chars[i] == '_')
+                        && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
                     {
                         i += 1;
                     }
@@ -505,9 +503,12 @@ fn check_value(
 
         let abs_offset = value_base_offset + occ.number_byte_offset;
         diags.push(
-            Diagnostic::new(rule_name, format!("Unexpected unknown unit \"{}\"", occ.unit))
-                .severity(severity)
-                .span(Span::new(abs_offset, occ.unit_byte_len)),
+            Diagnostic::new(
+                rule_name,
+                format!("Unexpected unknown unit \"{}\"", occ.unit),
+            )
+            .severity(severity)
+            .span(Span::new(abs_offset, occ.unit_byte_len)),
         );
     }
 }
@@ -527,11 +528,27 @@ fn check_at_rule_params(
             || feature_name == "min-resolution"
             || feature_name == "max-resolution";
         let base = params_base_offset + value_byte_offset;
-        check_value(feature_value, opts, is_resolution, base, rule_name, severity, diags);
+        check_value(
+            feature_value,
+            opts,
+            is_resolution,
+            base,
+            rule_name,
+            severity,
+            diags,
+        );
     }
 
     if features.is_empty() {
-        check_value(params, opts, false, params_base_offset, rule_name, severity, diags);
+        check_value(
+            params,
+            opts,
+            false,
+            params_base_offset,
+            rule_name,
+            severity,
+            diags,
+        );
     }
 }
 
@@ -592,8 +609,7 @@ fn extract_media_features(params: &str) -> Vec<(String, String, usize)> {
                     i += 1;
                 }
             }
-            if i < len
-                && (chars[i] == ':' || chars[i] == '<' || chars[i] == '>' || chars[i] == '=')
+            if i < len && (chars[i] == ':' || chars[i] == '<' || chars[i] == '>' || chars[i] == '=')
             {
                 i += 1;
                 if i < len && chars[i] == '=' {
@@ -664,15 +680,21 @@ mod tests {
 
     #[test]
     fn allows_known_units() {
-        assert!(UnitNoUnknown
-            .check(&style_with_value("10px"), &ctx())
-            .is_empty());
-        assert!(UnitNoUnknown
-            .check(&style_with_value("2rem"), &ctx())
-            .is_empty());
-        assert!(UnitNoUnknown
-            .check(&style_with_value("50%"), &ctx())
-            .is_empty());
+        assert!(
+            UnitNoUnknown
+                .check(&style_with_value("10px"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            UnitNoUnknown
+                .check(&style_with_value("2rem"), &ctx())
+                .is_empty()
+        );
+        assert!(
+            UnitNoUnknown
+                .check(&style_with_value("50%"), &ctx())
+                .is_empty()
+        );
     }
 
     #[test]

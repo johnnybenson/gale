@@ -302,7 +302,8 @@ fn tokenize_value(value: &str) -> Vec<ValueToken> {
         }
 
         // Punctuation that isn't meaningful
-        if b == b',' || b == b'/' && !(i + 1 < len && (bytes[i + 1] == b'*' || bytes[i + 1] == b'/'))
+        if b == b','
+            || b == b'/' && !(i + 1 < len && (bytes[i + 1] == b'*' || bytes[i + 1] == b'/'))
             || b == b'+'
             || b == b'*'
             || b == b'='
@@ -545,7 +546,12 @@ fn tokenize_value(value: &str) -> Vec<ValueToken> {
 // Property-context filtering
 // ---------------------------------------------------------------------------
 
-fn should_check_keyword(token_text: &str, property: &str, _tokens: &[ValueToken], _idx: usize) -> bool {
+fn should_check_keyword(
+    token_text: &str,
+    property: &str,
+    _tokens: &[ValueToken],
+    _idx: usize,
+) -> bool {
     let prop_lower = property.to_ascii_lowercase();
     let prop_stripped = strip_vendor_prefix(&prop_lower);
 
@@ -600,18 +606,50 @@ fn should_check_in_mixed_property(token_text: &str, prop: &str) -> bool {
         "font-family" => is_generic_font_family(token_text),
         "font" => {
             let font_kws = [
-                "normal", "italic", "oblique", "small-caps", "bold", "bolder", "lighter",
-                "ultra-condensed", "extra-condensed", "condensed", "semi-condensed",
-                "semi-expanded", "expanded", "extra-expanded", "ultra-expanded",
-                "caption", "icon", "menu", "message-box", "small-caption", "status-bar",
+                "normal",
+                "italic",
+                "oblique",
+                "small-caps",
+                "bold",
+                "bolder",
+                "lighter",
+                "ultra-condensed",
+                "extra-condensed",
+                "condensed",
+                "semi-condensed",
+                "semi-expanded",
+                "expanded",
+                "extra-expanded",
+                "ultra-expanded",
+                "caption",
+                "icon",
+                "menu",
+                "message-box",
+                "small-caption",
+                "status-bar",
             ];
             font_kws.iter().any(|k| *k == lower) || is_generic_font_family(token_text)
         }
         "animation" => {
             let anim_kws = [
-                "none", "ease", "ease-in", "ease-out", "ease-in-out", "linear",
-                "step-start", "step-end", "infinite", "normal", "reverse", "alternate",
-                "alternate-reverse", "forwards", "backwards", "both", "running", "paused",
+                "none",
+                "ease",
+                "ease-in",
+                "ease-out",
+                "ease-in-out",
+                "linear",
+                "step-start",
+                "step-end",
+                "infinite",
+                "normal",
+                "reverse",
+                "alternate",
+                "alternate-reverse",
+                "forwards",
+                "backwards",
+                "both",
+                "running",
+                "paused",
             ];
             anim_kws.iter().any(|k| *k == lower)
         }
@@ -718,19 +756,31 @@ impl Rule for ValueKeywordCase {
         let ignore_keywords: Vec<String> = secondary
             .and_then(|v| v.get("ignoreKeywords"))
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|i| i.as_str().map(String::from)).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|i| i.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
 
         let ignore_properties: Vec<String> = secondary
             .and_then(|v| v.get("ignoreProperties"))
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|i| i.as_str().map(String::from)).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|i| i.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
 
         let ignore_functions: Vec<String> = secondary
             .and_then(|v| v.get("ignoreFunctions"))
             .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|i| i.as_str().map(String::from)).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|i| i.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
 
         let camel_case_svg = secondary
@@ -834,10 +884,7 @@ impl Rule for ValueKeywordCase {
                                 .span(Span::new(abs_offset, text.len()))
                                 .fix(Fix::new(
                                     format!("Convert to \"{}\"", canonical),
-                                    vec![Edit::new(
-                                        Span::new(abs_offset, text.len()),
-                                        *canonical,
-                                    )],
+                                    vec![Edit::new(Span::new(abs_offset, text.len()), *canonical)],
                                 )),
                             );
                         }
@@ -847,17 +894,14 @@ impl Rule for ValueKeywordCase {
                 }
 
                 // Property-context filtering
-                if token.kind == TokenKind::Ident
-                    && !should_check_keyword(text, prop, &tokens, idx)
+                if token.kind == TokenKind::Ident && !should_check_keyword(text, prop, &tokens, idx)
                 {
                     continue;
                 }
 
                 // ignoreKeywords
                 if !ignore_keywords.is_empty()
-                    && ignore_keywords
-                        .iter()
-                        .any(|pat| matches_pattern(text, pat))
+                    && ignore_keywords.iter().any(|pat| matches_pattern(text, pat))
                 {
                     continue;
                 }
@@ -970,10 +1014,8 @@ mod tests {
 
     #[test]
     fn skips_animation_name() {
-        let d = ValueKeywordCase.check(
-            &style_with_decl("animation-name", "ANIMATION-NAME"),
-            &ctx(),
-        );
+        let d =
+            ValueKeywordCase.check(&style_with_decl("animation-name", "ANIMATION-NAME"), &ctx());
         assert!(d.is_empty());
     }
 

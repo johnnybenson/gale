@@ -91,8 +91,8 @@ impl Rule for StylisticMediaFeatureRangeOperatorSpaceAfter {
                             let op_len = op_end - op_start;
 
                             // Check for space after the operator
-                            let has_space_after = op_end < len
-                                && (bytes[op_end] == b' ' || bytes[op_end] == b'\t');
+                            let has_space_after =
+                                op_end < len && (bytes[op_end] == b' ' || bytes[op_end] == b'\t');
 
                             match option {
                                 "always" => {
@@ -162,7 +162,8 @@ mod tests {
     fn allows_space_after_range_operator() {
         let opt = serde_json::Value::String("always".to_string());
         let source = "@media (width >= 600px) { }";
-        let d = StylisticMediaFeatureRangeOperatorSpaceAfter.check_root(&[], &ctx_with_option(source, &opt));
+        let d = StylisticMediaFeatureRangeOperatorSpaceAfter
+            .check_root(&[], &ctx_with_option(source, &opt));
         assert!(d.is_empty());
     }
 
@@ -170,7 +171,8 @@ mod tests {
     fn reports_missing_space_after_range_operator() {
         let opt = serde_json::Value::String("always".to_string());
         let source = "@media (width >=600px) { }";
-        let d = StylisticMediaFeatureRangeOperatorSpaceAfter.check_root(&[], &ctx_with_option(source, &opt));
+        let d = StylisticMediaFeatureRangeOperatorSpaceAfter
+            .check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("Expected a space"));
     }
@@ -179,7 +181,8 @@ mod tests {
     fn never_reports_space_after_range_operator() {
         let opt = serde_json::Value::String("never".to_string());
         let source = "@media (width >= 600px) { }";
-        let d = StylisticMediaFeatureRangeOperatorSpaceAfter.check_root(&[], &ctx_with_option(source, &opt));
+        let d = StylisticMediaFeatureRangeOperatorSpaceAfter
+            .check_root(&[], &ctx_with_option(source, &opt));
         assert!(!d.is_empty());
         assert!(d[0].message.contains("Unexpected space"));
     }

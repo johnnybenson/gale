@@ -22,10 +22,10 @@ const DEFAULT_MAX: usize = 1;
 /// Configuration parsed from rule options.
 struct Config {
     max: usize,
-    ignore_after_child: bool,      // ">"
+    ignore_after_child: bool,        // ">"
     ignore_after_next_sibling: bool, // "+"
-    ignore_after_sibling: bool,    // "~"
-    ignore_after_descendant: bool, // " "
+    ignore_after_sibling: bool,      // "~"
+    ignore_after_descendant: bool,   // " "
 }
 
 impl Config {

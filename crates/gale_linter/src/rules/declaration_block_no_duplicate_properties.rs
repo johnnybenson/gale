@@ -195,9 +195,8 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                 let duplicates_are_consecutive = dup_index == current_index - 1;
 
                 // Unprefixed values are equal?
-                let unprefixed_dup_equal =
-                    strip_vendor_prefix_from_value(current_value)
-                        == strip_vendor_prefix_from_value(dup_value);
+                let unprefixed_dup_equal = strip_vendor_prefix_from_value(current_value)
+                    == strip_vendor_prefix_from_value(dup_value);
 
                 // Handle the ignore options (matching Stylelint's logic)
                 if ignore_diff_values || ignore_diff_syntaxes || ignore_prefixless_same {
@@ -410,7 +409,12 @@ fn strip_vendor_prefix_from_value(value: &str) -> String {
     }
     // Also handle case-insensitive
     let lower = trimmed.to_ascii_lowercase();
-    if let Some(pos) = lower.find("-webkit-").or_else(|| lower.find("-moz-")).or_else(|| lower.find("-ms-")).or_else(|| lower.find("-o-")) {
+    if let Some(pos) = lower
+        .find("-webkit-")
+        .or_else(|| lower.find("-moz-"))
+        .or_else(|| lower.find("-ms-"))
+        .or_else(|| lower.find("-o-"))
+    {
         if pos == 0 {
             let prefix_end = lower[pos..].find('-').unwrap() + 1;
             let prefix_end2 = lower[pos + prefix_end..].find('-').unwrap() + prefix_end + 1;
@@ -464,7 +468,10 @@ enum ValueToken {
     /// A plain number
     Number,
     /// A function call with name and nested tokens (e.g., "calc(...)")
-    Function { name: String, children: Vec<ValueToken> },
+    Function {
+        name: String,
+        children: Vec<ValueToken>,
+    },
     /// An identifier/keyword (e.g., "red", "fit-content")
     Ident(String),
     /// A string literal
@@ -662,11 +669,7 @@ fn tokenize_value(value: &str) -> Vec<ValueToken> {
 
 /// Check if two sets of value tokens represent "equal" syntaxes.
 /// This is the core of Stylelint's `isEqualValueNodes`.
-fn is_equal_value_tokens(
-    tokens1: &[ValueToken],
-    tokens2: &[ValueToken],
-    property: &str,
-) -> bool {
+fn is_equal_value_tokens(tokens1: &[ValueToken], tokens2: &[ValueToken], property: &str) -> bool {
     // Different lengths indicate different syntaxes
     if tokens1.len() != tokens2.len() {
         return false;
@@ -700,10 +703,7 @@ fn is_equal_value_tokens(
             }
             (ValueToken::Ident(name1), ValueToken::Ident(name2)) => {
                 // Named colors have the same syntax for color properties
-                if is_color_property(property)
-                    && is_named_color(name1)
-                    && is_named_color(name2)
-                {
+                if is_color_property(property) && is_named_color(name1) && is_named_color(name2) {
                     continue;
                 }
                 if name1 != name2 {
@@ -1072,7 +1072,11 @@ mod tests {
             span: ParserSpan::new(0, 30),
         });
         let diags = rule.check(&node, &make_context());
-        assert_eq!(diags.len(), 1, "consecutive duplicates with different values should be flagged by default");
+        assert_eq!(
+            diags.len(),
+            1,
+            "consecutive duplicates with different values should be flagged by default"
+        );
     }
 
     #[test]
@@ -1127,7 +1131,11 @@ mod tests {
 
     #[test]
     fn test_equal_value_syntaxes_different_functions() {
-        assert!(!is_equal_value_syntaxes("min(10px, 11px)", "max(10px, 11px)", "width"));
+        assert!(!is_equal_value_syntaxes(
+            "min(10px, 11px)",
+            "max(10px, 11px)",
+            "width"
+        ));
         assert!(!is_equal_value_syntaxes("100%", "fit-content", "width"));
     }
 

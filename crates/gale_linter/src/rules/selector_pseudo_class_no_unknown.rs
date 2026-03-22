@@ -7,9 +7,7 @@ use crate::rule::{Rule, RuleContext};
 
 /// Known pseudo-classes that are only valid in a `@page` context.
 /// These should NOT be recognized as valid pseudo-classes in regular selectors.
-const PAGE_PSEUDO_CLASSES: &[&str] = &[
-    "blank", "first", "left", "nth", "right", "recto", "verso",
-];
+const PAGE_PSEUDO_CLASSES: &[&str] = &["blank", "first", "left", "nth", "right", "recto", "verso"];
 
 /// Pseudo-classes that are only valid after vendor-prefixed pseudo-elements
 /// (e.g., `::-webkit-scrollbar-thumb:window-inactive`).
@@ -139,8 +137,7 @@ impl Rule for SelectorPseudoClassNoUnknown {
                         continue;
                     }
                     if !is_known_pseudo_class(&entry.name) {
-                        let span =
-                            find_page_pseudo_span(ctx.source, at.span.offset, entry);
+                        let span = find_page_pseudo_span(ctx.source, at.span.offset, entry);
                         diags.push(
                             Diagnostic::new(
                                 self.name(),
@@ -181,9 +178,7 @@ impl Rule for SelectorPseudoClassNoUnknown {
             if is_ignored(&entry.name, &ignore_list) {
                 continue;
             }
-            if !is_known_pseudo_class(&entry.name)
-                && !is_page_pseudo_class(&entry.name)
-            {
+            if !is_known_pseudo_class(&entry.name) && !is_page_pseudo_class(&entry.name) {
                 diags.push(
                     Diagnostic::new(
                         self.name(),
@@ -219,10 +214,7 @@ fn find_pseudo_class_span(source: &str, rule_offset: usize, entry: &PseudoClassE
     let mut search_start = 0;
     while search_start < selector_source.len() {
         let remaining = &selector_source[search_start..];
-        if let Some(pos) = remaining
-            .to_ascii_lowercase()
-            .find(&search_pattern_lower)
-        {
+        if let Some(pos) = remaining.to_ascii_lowercase().find(&search_pattern_lower) {
             let abs_pos = rule_offset + search_start + pos;
             // Make sure it's not a `::` pseudo-element
             if pos > 0 && remaining.as_bytes().get(pos.wrapping_sub(1)) == Some(&b':') {
@@ -239,11 +231,7 @@ fn find_pseudo_class_span(source: &str, rule_offset: usize, entry: &PseudoClassE
 }
 
 /// Compute span for a pseudo-class in an @page params.
-fn find_page_pseudo_span(
-    source: &str,
-    at_offset: usize,
-    entry: &PseudoClassEntry,
-) -> Span {
+fn find_page_pseudo_span(source: &str, at_offset: usize, entry: &PseudoClassEntry) -> Span {
     let search_pattern = format!(":{}", entry.name);
     let search_pattern_lower = search_pattern.to_ascii_lowercase();
 
@@ -485,8 +473,8 @@ fn scan_source_for_unparsed_pseudo_classes(
                 b'\n'
             };
 
-            let is_selector_start = before == b'}' || before == b';' || before == b'\n'
-                || before == b'\r' || i == 0;
+            let is_selector_start =
+                before == b'}' || before == b';' || before == b'\n' || before == b'\r' || i == 0;
 
             if is_selector_start && !is_in_covered_range(i, &covered_ranges) {
                 let selector_start = i;

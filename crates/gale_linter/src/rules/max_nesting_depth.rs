@@ -64,9 +64,7 @@ impl Config {
             })
             .unwrap_or_default();
 
-        let ignore_blockless_at_rules = ignore_list
-            .iter()
-            .any(|s| s == "blockless-at-rules");
+        let ignore_blockless_at_rules = ignore_list.iter().any(|s| s == "blockless-at-rules");
         let ignore_pseudo_classes = ignore_list.iter().any(|s| s == "pseudo-classes");
 
         let is_scss = matches!(
@@ -161,11 +159,7 @@ fn check_nodes_depth(
 
                 // Recurse into nested style rule children.
                 // If pseudo-class is ignored, don't increment depth.
-                let child_depth = if is_ignored_pseudo {
-                    depth
-                } else {
-                    depth + 1
-                };
+                let child_depth = if is_ignored_pseudo { depth } else { depth + 1 };
                 check_style_depth(rule_impl, style, child_depth, config, diags);
             }
             CssNode::AtRule(at_rule) => {
@@ -183,8 +177,7 @@ fn check_nodes_depth(
                 }
 
                 // Check if this is a "blockless at-rule" that should be ignored.
-                let is_blockless_ignored =
-                    config.ignore_blockless_at_rules && depth > 0;
+                let is_blockless_ignored = config.ignore_blockless_at_rules && depth > 0;
 
                 let child_depth = if is_blockless_ignored || depth == 0 {
                     // Ignored blockless at-rules and top-level at-rules don't
@@ -209,13 +202,7 @@ fn check_nodes_depth(
                     );
                 }
 
-                check_nodes_depth(
-                    rule_impl,
-                    &at_rule.children,
-                    child_depth,
-                    config,
-                    diags,
-                );
+                check_nodes_depth(rule_impl, &at_rule.children, child_depth, config, diags);
             }
             _ => {}
         }
@@ -265,7 +252,9 @@ fn check_style_depth(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gale_css_parser::{AtRule as CssAtRule, Declaration, Span as ParserSpan, StyleRule, Syntax};
+    use gale_css_parser::{
+        AtRule as CssAtRule, Declaration, Span as ParserSpan, StyleRule, Syntax,
+    };
 
     fn ctx() -> RuleContext<'static> {
         RuleContext {
@@ -322,8 +311,7 @@ mod tests {
     fn ignore_at_rules_skips_all_content() {
         // When ignoreAtRules includes "mixin", ALL content inside @mixin
         // should be exempt from depth checking, even deeply nested rules.
-        let options: serde_json::Value =
-            serde_json::json!([0, { "ignoreAtRules": ["mixin"] }]);
+        let options: serde_json::Value = serde_json::json!([0, { "ignoreAtRules": ["mixin"] }]);
         let ctx_with_opts = RuleContext {
             file_path: "t.scss",
             source: "",
@@ -379,8 +367,7 @@ mod tests {
     #[test]
     fn ignore_at_rules_still_flags_outside() {
         // Content OUTSIDE ignored at-rules should still be checked.
-        let options: serde_json::Value =
-            serde_json::json!([0, { "ignoreAtRules": ["mixin"] }]);
+        let options: serde_json::Value = serde_json::json!([0, { "ignoreAtRules": ["mixin"] }]);
         let ctx_with_opts = RuleContext {
             file_path: "t.scss",
             source: "",
@@ -468,8 +455,7 @@ mod tests {
     #[test]
     fn ignore_pseudo_classes() {
         // With ignore: ["pseudo-classes"], &:hover shouldn't count.
-        let options: serde_json::Value =
-            serde_json::json!([1, { "ignore": ["pseudo-classes"] }]);
+        let options: serde_json::Value = serde_json::json!([1, { "ignore": ["pseudo-classes"] }]);
         let ctx_with_opts = RuleContext {
             file_path: "t.css",
             source: "",

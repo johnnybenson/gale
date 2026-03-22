@@ -63,10 +63,7 @@ impl Rule for ColorHexLength {
                                 .span(Span::new(abs_offset, hex.len()))
                                 .fix(Fix::new(
                                     format!("Expand to \"{expanded}\""),
-                                    vec![Edit::new(
-                                        Span::new(abs_offset, hex.len()),
-                                        &expanded,
-                                    )],
+                                    vec![Edit::new(Span::new(abs_offset, hex.len()), &expanded)],
                                 )),
                             );
                         }
@@ -84,10 +81,7 @@ impl Rule for ColorHexLength {
                                 .span(Span::new(abs_offset, hex.len()))
                                 .fix(Fix::new(
                                     format!("Shorten to \"{shortened}\""),
-                                    vec![Edit::new(
-                                        Span::new(abs_offset, hex.len()),
-                                        &shortened,
-                                    )],
+                                    vec![Edit::new(Span::new(abs_offset, hex.len()), &shortened)],
                                 )),
                             );
                         }

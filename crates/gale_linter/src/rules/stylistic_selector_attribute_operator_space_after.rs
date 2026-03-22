@@ -124,8 +124,8 @@ impl StylisticSelectorAttributeOperatorSpaceAfter {
 
             if let Some(op) = matched_op {
                 let op_end = j + op.len();
-                let has_space_after = op_end < clen
-                    && (content[op_end] == b' ' || content[op_end] == b'\t');
+                let has_space_after =
+                    op_end < clen && (content[op_end] == b' ' || content[op_end] == b'\t');
 
                 match option {
                     "always" => {
@@ -182,10 +182,8 @@ mod tests {
     fn always_allows_space_after_operator() {
         let opt = serde_json::json!("always");
         let source = "[attr= value] { }";
-        let d = StylisticSelectorAttributeOperatorSpaceAfter.check_root(
-            &[],
-            &ctx_with_option(source, &opt),
-        );
+        let d = StylisticSelectorAttributeOperatorSpaceAfter
+            .check_root(&[], &ctx_with_option(source, &opt));
         assert!(d.is_empty());
     }
 
@@ -193,10 +191,8 @@ mod tests {
     fn always_reports_no_space_after_operator() {
         let opt = serde_json::json!("always");
         let source = "[attr=value] { }";
-        let d = StylisticSelectorAttributeOperatorSpaceAfter.check_root(
-            &[],
-            &ctx_with_option(source, &opt),
-        );
+        let d = StylisticSelectorAttributeOperatorSpaceAfter
+            .check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("Expected a space after"));
     }
@@ -205,10 +201,8 @@ mod tests {
     fn never_allows_no_space_after() {
         let opt = serde_json::json!("never");
         let source = "[attr=value] { }";
-        let d = StylisticSelectorAttributeOperatorSpaceAfter.check_root(
-            &[],
-            &ctx_with_option(source, &opt),
-        );
+        let d = StylisticSelectorAttributeOperatorSpaceAfter
+            .check_root(&[], &ctx_with_option(source, &opt));
         assert!(d.is_empty());
     }
 
@@ -216,10 +210,8 @@ mod tests {
     fn never_reports_space_after() {
         let opt = serde_json::json!("never");
         let source = "[attr= value] { }";
-        let d = StylisticSelectorAttributeOperatorSpaceAfter.check_root(
-            &[],
-            &ctx_with_option(source, &opt),
-        );
+        let d = StylisticSelectorAttributeOperatorSpaceAfter
+            .check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("Unexpected space after"));
     }
@@ -228,10 +220,8 @@ mod tests {
     fn handles_complex_operators() {
         let opt = serde_json::json!("always");
         let source = "[class^=foo] { }";
-        let d = StylisticSelectorAttributeOperatorSpaceAfter.check_root(
-            &[],
-            &ctx_with_option(source, &opt),
-        );
+        let d = StylisticSelectorAttributeOperatorSpaceAfter
+            .check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("^="));
     }

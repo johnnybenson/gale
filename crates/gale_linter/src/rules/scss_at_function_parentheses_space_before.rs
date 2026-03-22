@@ -191,7 +191,11 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssAtFunctionParenthesesSpaceBefore.check_root(&[], &ctx).is_empty());
+        assert!(
+            ScssAtFunctionParenthesesSpaceBefore
+                .check_root(&[], &ctx)
+                .is_empty()
+        );
     }
 
     #[test]

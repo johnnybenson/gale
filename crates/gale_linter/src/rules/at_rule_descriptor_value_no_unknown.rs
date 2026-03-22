@@ -60,11 +60,7 @@ fn is_angle(value: &str) -> bool {
 /// Validate a descriptor value within a specific at-rule.
 ///
 /// Returns `Some(message)` if the value is invalid, `None` if valid or not checked.
-fn validate_descriptor_value(
-    at_rule_name: &str,
-    descriptor: &str,
-    value: &str,
-) -> Option<String> {
+fn validate_descriptor_value(at_rule_name: &str, descriptor: &str, value: &str) -> Option<String> {
     let at_lower = at_rule_name.to_ascii_lowercase();
     let desc_lower = descriptor.to_ascii_lowercase();
     let val_trimmed = value.trim();
@@ -111,9 +107,9 @@ fn validate_descriptor_value(
                     ));
                 }
                 // All parts must be either keywords or percentages
-                let all_valid = parts.iter().all(|p| {
-                    lookup(FONT_STRETCH_KEYWORDS, p) || is_percentage(p)
-                });
+                let all_valid = parts
+                    .iter()
+                    .all(|p| lookup(FONT_STRETCH_KEYWORDS, p) || is_percentage(p));
                 if !all_valid {
                     return Some(format!(
                         "Unexpected value \"{val_trimmed}\" for descriptor \"font-stretch\" in @font-face"
@@ -164,8 +160,7 @@ impl Rule for AtRuleDescriptorValueNoUnknown {
         let mut diags = Vec::new();
         for child in &at.children {
             if let CssNode::Declaration(decl) = child {
-                if let Some(msg) =
-                    validate_descriptor_value(&at.name, &decl.property, &decl.value)
+                if let Some(msg) = validate_descriptor_value(&at.name, &decl.property, &decl.value)
                 {
                     diags.push(
                         Diagnostic::new(self.name(), msg)

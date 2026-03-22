@@ -261,8 +261,7 @@ mod tests {
     #[test]
     fn dollar_variables_before_declarations() {
         let rule = OrderOrder;
-        let options =
-            serde_json::json!(["dollar-variables", "custom-properties", "declarations"]);
+        let options = serde_json::json!(["dollar-variables", "custom-properties", "declarations"]);
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![
@@ -280,8 +279,7 @@ mod tests {
     #[test]
     fn dollar_variables_out_of_order() {
         let rule = OrderOrder;
-        let options =
-            serde_json::json!(["dollar-variables", "custom-properties", "declarations"]);
+        let options = serde_json::json!(["dollar-variables", "custom-properties", "declarations"]);
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![

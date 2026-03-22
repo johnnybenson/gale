@@ -100,12 +100,10 @@ impl Rule for StylisticSelectorAttributeBracketsSpaceInside {
 
                 let close_pos = j;
                 // Check space after opening bracket
-                let has_space_after_open =
-                    open_pos + 1 < len && bytes[open_pos + 1] == b' ';
+                let has_space_after_open = open_pos + 1 < len && bytes[open_pos + 1] == b' ';
 
                 // Check space before closing bracket
-                let has_space_before_close =
-                    close_pos > 0 && bytes[close_pos - 1] == b' ';
+                let has_space_before_close = close_pos > 0 && bytes[close_pos - 1] == b' ';
 
                 match option {
                     "always" => {
@@ -207,10 +205,8 @@ mod tests {
     fn always_allows_space_inside_brackets() {
         let opt = serde_json::Value::String("always".to_string());
         let source = "a[ href ] { }";
-        let d = StylisticSelectorAttributeBracketsSpaceInside.check_root(
-            &[],
-            &ctx_with_option(source, &opt),
-        );
+        let d = StylisticSelectorAttributeBracketsSpaceInside
+            .check_root(&[], &ctx_with_option(source, &opt));
         assert!(d.is_empty());
     }
 
@@ -218,10 +214,8 @@ mod tests {
     fn always_reports_missing_space_inside_brackets() {
         let opt = serde_json::Value::String("always".to_string());
         let source = "a[href] { }";
-        let d = StylisticSelectorAttributeBracketsSpaceInside.check_root(
-            &[],
-            &ctx_with_option(source, &opt),
-        );
+        let d = StylisticSelectorAttributeBracketsSpaceInside
+            .check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 2);
     }
 

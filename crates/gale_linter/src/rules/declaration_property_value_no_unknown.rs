@@ -16,13 +16,7 @@ use crate::rule::{Rule, RuleContext};
 pub struct DeclarationPropertyValueNoUnknown;
 
 /// CSS-wide keywords valid for any property.
-const CSS_WIDE_KEYWORDS: &[&str] = &[
-    "inherit",
-    "initial",
-    "revert",
-    "revert-layer",
-    "unset",
-];
+const CSS_WIDE_KEYWORDS: &[&str] = &["inherit", "initial", "revert", "revert-layer", "unset"];
 
 /// Valid keywords for the `display` property.
 const DISPLAY_KEYWORDS: &[&str] = &[
@@ -56,22 +50,10 @@ const DISPLAY_KEYWORDS: &[&str] = &[
 ];
 
 /// Valid keywords for the `position` property.
-const POSITION_KEYWORDS: &[&str] = &[
-    "absolute",
-    "fixed",
-    "relative",
-    "static",
-    "sticky",
-];
+const POSITION_KEYWORDS: &[&str] = &["absolute", "fixed", "relative", "static", "sticky"];
 
 /// Valid keywords for the `float` property.
-const FLOAT_KEYWORDS: &[&str] = &[
-    "inline-end",
-    "inline-start",
-    "left",
-    "none",
-    "right",
-];
+const FLOAT_KEYWORDS: &[&str] = &["inline-end", "inline-start", "left", "none", "right"];
 
 impl Rule for DeclarationPropertyValueNoUnknown {
     fn name(&self) -> &'static str {
@@ -145,28 +127,32 @@ impl Rule for DeclarationPropertyValueNoUnknown {
         // For properties that only accept single keywords
         if property == "position" || property == "float" {
             if tokens.len() != 1 {
-                return vec![Diagnostic::new(
-                    self.name(),
-                    format!(
-                        "Unexpected value \"{}\" for property \"{}\"",
-                        decl.value.trim(),
-                        decl.property
-                    ),
-                )
-                .severity(self.default_severity())
-                .span(Span::new(decl.span.offset, decl.span.length))];
+                return vec![
+                    Diagnostic::new(
+                        self.name(),
+                        format!(
+                            "Unexpected value \"{}\" for property \"{}\"",
+                            decl.value.trim(),
+                            decl.property
+                        ),
+                    )
+                    .severity(self.default_severity())
+                    .span(Span::new(decl.span.offset, decl.span.length)),
+                ];
             }
             if !keywords.contains(&tokens[0]) {
-                return vec![Diagnostic::new(
-                    self.name(),
-                    format!(
-                        "Unexpected value \"{}\" for property \"{}\"",
-                        decl.value.trim(),
-                        decl.property
-                    ),
-                )
-                .severity(self.default_severity())
-                .span(Span::new(decl.span.offset, decl.span.length))];
+                return vec![
+                    Diagnostic::new(
+                        self.name(),
+                        format!(
+                            "Unexpected value \"{}\" for property \"{}\"",
+                            decl.value.trim(),
+                            decl.property
+                        ),
+                    )
+                    .severity(self.default_severity())
+                    .span(Span::new(decl.span.offset, decl.span.length)),
+                ];
             }
             return vec![];
         }
@@ -175,16 +161,18 @@ impl Rule for DeclarationPropertyValueNoUnknown {
         // Multi-token display values (CSS Display Level 3) like "inline flex" are
         // harder to validate, so we skip them for now.
         if tokens.len() == 1 && !keywords.contains(&tokens[0]) {
-            return vec![Diagnostic::new(
-                self.name(),
-                format!(
-                    "Unexpected value \"{}\" for property \"{}\"",
-                    decl.value.trim(),
-                    decl.property
-                ),
-            )
-            .severity(self.default_severity())
-            .span(Span::new(decl.span.offset, decl.span.length))];
+            return vec![
+                Diagnostic::new(
+                    self.name(),
+                    format!(
+                        "Unexpected value \"{}\" for property \"{}\"",
+                        decl.value.trim(),
+                        decl.property
+                    ),
+                )
+                .severity(self.default_severity())
+                .span(Span::new(decl.span.offset, decl.span.length)),
+            ];
         }
 
         vec![]
@@ -240,9 +228,18 @@ mod tests {
     #[test]
     fn allows_valid_display_values() {
         for kw in &[
-            "block", "inline", "flex", "grid", "none", "contents",
-            "inline-block", "inline-flex", "inline-grid", "table",
-            "flow-root", "list-item",
+            "block",
+            "inline",
+            "flex",
+            "grid",
+            "none",
+            "contents",
+            "inline-block",
+            "inline-flex",
+            "inline-grid",
+            "table",
+            "flow-root",
+            "list-item",
         ] {
             let d = DeclarationPropertyValueNoUnknown.check(&decl("display", kw), &ctx());
             assert!(d.is_empty(), "Expected '{}' to be valid for display", kw);
@@ -267,10 +264,8 @@ mod tests {
 
     #[test]
     fn skips_display_with_var() {
-        let d = DeclarationPropertyValueNoUnknown.check(
-            &decl("display", "var(--my-display)"),
-            &ctx(),
-        );
+        let d =
+            DeclarationPropertyValueNoUnknown.check(&decl("display", "var(--my-display)"), &ctx());
         assert!(d.is_empty());
     }
 
@@ -327,10 +322,8 @@ mod tests {
 
     #[test]
     fn skips_values_with_env() {
-        let d = DeclarationPropertyValueNoUnknown.check(
-            &decl("display", "env(safe-area-inset-top)"),
-            &ctx(),
-        );
+        let d = DeclarationPropertyValueNoUnknown
+            .check(&decl("display", "env(safe-area-inset-top)"), &ctx());
         assert!(d.is_empty());
     }
 

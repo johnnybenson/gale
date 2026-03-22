@@ -135,15 +135,14 @@ mod tests {
 
     #[test]
     fn allows_parens_always() {
-        let d =
-            ScssAtMixinArgumentlessCallParentheses.check(&include("mixin-name()"), &scss_ctx());
+        let d = ScssAtMixinArgumentlessCallParentheses.check(&include("mixin-name()"), &scss_ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn skips_include_with_args() {
-        let d = ScssAtMixinArgumentlessCallParentheses
-            .check(&include("mixin-name($arg)"), &scss_ctx());
+        let d =
+            ScssAtMixinArgumentlessCallParentheses.check(&include("mixin-name($arg)"), &scss_ctx());
         assert!(d.is_empty());
     }
 

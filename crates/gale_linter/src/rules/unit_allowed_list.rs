@@ -201,9 +201,7 @@ fn extract_units_with_context(value: &str) -> Vec<UnitOccurrence> {
                         || chars[i].is_ascii_alphanumeric())
                 {
                     while i < len
-                        && (chars[i].is_ascii_alphanumeric()
-                            || chars[i] == '-'
-                            || chars[i] == '_')
+                        && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
                     {
                         i += 1;
                     }
@@ -535,20 +533,14 @@ mod tests {
     #[test]
     fn allows_listed_unit() {
         let opts = json!(["px", "rem"]);
-        let d = UnitAllowedList.check(
-            &style_with_decl("margin", "10px"),
-            &ctx_with_options(&opts),
-        );
+        let d = UnitAllowedList.check(&style_with_decl("margin", "10px"), &ctx_with_options(&opts));
         assert!(d.is_empty());
     }
 
     #[test]
     fn rejects_unlisted_unit() {
         let opts = json!(["rem"]);
-        let d = UnitAllowedList.check(
-            &style_with_decl("margin", "10px"),
-            &ctx_with_options(&opts),
-        );
+        let d = UnitAllowedList.check(&style_with_decl("margin", "10px"), &ctx_with_options(&opts));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("px"));
     }
@@ -556,20 +548,14 @@ mod tests {
     #[test]
     fn case_insensitive_unit_match() {
         let opts = json!(["PX"]);
-        let d = UnitAllowedList.check(
-            &style_with_decl("margin", "10px"),
-            &ctx_with_options(&opts),
-        );
+        let d = UnitAllowedList.check(&style_with_decl("margin", "10px"), &ctx_with_options(&opts));
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_percentage() {
         let opts = json!(["%"]);
-        let d = UnitAllowedList.check(
-            &style_with_decl("width", "100%"),
-            &ctx_with_options(&opts),
-        );
+        let d = UnitAllowedList.check(&style_with_decl("width", "100%"), &ctx_with_options(&opts));
         assert!(d.is_empty());
     }
 

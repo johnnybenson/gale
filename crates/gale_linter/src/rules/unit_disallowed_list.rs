@@ -220,9 +220,7 @@ fn extract_units_with_context(value: &str) -> Vec<UnitOccurrence> {
                         || chars[i].is_ascii_alphanumeric())
                 {
                     while i < len
-                        && (chars[i].is_ascii_alphanumeric()
-                            || chars[i] == '-'
-                            || chars[i] == '_')
+                        && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
                     {
                         i += 1;
                     }
@@ -411,8 +409,7 @@ fn extract_media_features(params: &str) -> Vec<MediaFeature> {
             while i < len && chars[i].is_ascii_whitespace() {
                 i += 1;
             }
-            if i < len
-                && (chars[i] == ':' || chars[i] == '<' || chars[i] == '>' || chars[i] == '=')
+            if i < len && (chars[i] == ':' || chars[i] == '<' || chars[i] == '>' || chars[i] == '=')
             {
                 i += 1;
                 if i < len && chars[i] == '=' {
@@ -482,7 +479,8 @@ impl Rule for UnitDisallowedList {
                         continue;
                     }
                     // Find where the value starts in the source
-                    let value_offset = find_value_offset(ctx.source, decl.span.offset, decl.span.length);
+                    let value_offset =
+                        find_value_offset(ctx.source, decl.span.offset, decl.span.length);
                     check_value(
                         &decl.value,
                         &opts,
@@ -499,7 +497,8 @@ impl Rule for UnitDisallowedList {
                     let at_name = at_rule.name.to_ascii_lowercase();
                     if at_name != "font-face" {
                         // For @media, use the params offset
-                        let params_offset = find_params_offset(ctx.source, at_rule.span.offset, &at_rule.name);
+                        let params_offset =
+                            find_params_offset(ctx.source, at_rule.span.offset, &at_rule.name);
                         check_at_rule_params(
                             &at_rule.params,
                             &opts,
@@ -515,7 +514,8 @@ impl Rule for UnitDisallowedList {
                 if decl.property.eq_ignore_ascii_case("unicode-range") {
                     return vec![];
                 }
-                let value_offset = find_value_offset(ctx.source, decl.span.offset, decl.span.length);
+                let value_offset =
+                    find_value_offset(ctx.source, decl.span.offset, decl.span.length);
                 check_value(
                     &decl.value,
                     &opts,
@@ -728,20 +728,16 @@ mod tests {
     #[test]
     fn allows_non_disallowed_unit() {
         let opts = json!(["pt"]);
-        let d = UnitDisallowedList.check(
-            &style_with_decl("margin", "10px"),
-            &ctx_with_options(&opts),
-        );
+        let d =
+            UnitDisallowedList.check(&style_with_decl("margin", "10px"), &ctx_with_options(&opts));
         assert!(d.is_empty());
     }
 
     #[test]
     fn rejects_disallowed_unit() {
         let opts = json!(["px"]);
-        let d = UnitDisallowedList.check(
-            &style_with_decl("margin", "10px"),
-            &ctx_with_options(&opts),
-        );
+        let d =
+            UnitDisallowedList.check(&style_with_decl("margin", "10px"), &ctx_with_options(&opts));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("px"));
     }
@@ -759,10 +755,8 @@ mod tests {
     #[test]
     fn case_insensitive_unit_match() {
         let opts = json!(["PX"]);
-        let d = UnitDisallowedList.check(
-            &style_with_decl("margin", "10px"),
-            &ctx_with_options(&opts),
-        );
+        let d =
+            UnitDisallowedList.check(&style_with_decl("margin", "10px"), &ctx_with_options(&opts));
         assert_eq!(d.len(), 1);
     }
 

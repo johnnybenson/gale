@@ -71,7 +71,12 @@ impl Rule for StylisticNoExtraSemicolons {
 
                 // Check for ; followed by only whitespace then }
                 let mut j = i + 1;
-                while j < len && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\n' || bytes[j] == b'\r') {
+                while j < len
+                    && (bytes[j] == b' '
+                        || bytes[j] == b'\t'
+                        || bytes[j] == b'\n'
+                        || bytes[j] == b'\r')
+                {
                     j += 1;
                 }
                 if j < len && bytes[j] == b'}' {

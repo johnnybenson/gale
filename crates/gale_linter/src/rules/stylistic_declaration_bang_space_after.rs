@@ -55,7 +55,10 @@ impl Rule for StylisticDeclarationBangSpaceAfter {
             }
 
             // Look for `!` followed by an alphabetic character (like `!important`)
-            if bytes[i] == b'!' && i + 1 < len && (bytes[i + 1].is_ascii_alphabetic() || bytes[i + 1] == b' ') {
+            if bytes[i] == b'!'
+                && i + 1 < len
+                && (bytes[i + 1].is_ascii_alphabetic() || bytes[i + 1] == b' ')
+            {
                 let bang_pos = i;
                 let after = bang_pos + 1;
                 let has_space_after = after < len && bytes[after] == b' ';

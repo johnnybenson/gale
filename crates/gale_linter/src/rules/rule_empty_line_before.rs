@@ -563,7 +563,10 @@ mod tests {
         }
     }
 
-    fn make_ctx_with_options<'a>(source: &'a str, options: &'a serde_json::Value) -> RuleContext<'a> {
+    fn make_ctx_with_options<'a>(
+        source: &'a str,
+        options: &'a serde_json::Value,
+    ) -> RuleContext<'a> {
         RuleContext {
             file_path: "t.css",
             source,
@@ -662,7 +665,10 @@ mod tests {
             span: ParserSpan::new(0, src.len()),
         })];
         let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx_with_options(src, &opts));
-        assert!(d.is_empty(), "first-nested exception should suppress diagnostic");
+        assert!(
+            d.is_empty(),
+            "first-nested exception should suppress diagnostic"
+        );
     }
 
     #[test]
@@ -699,7 +705,10 @@ mod tests {
             options: Some(&opts),
         };
         let d = RuleEmptyLineBefore.check_root(&nodes, &ctx);
-        assert!(d.is_empty(), "after-single-line-comment exception should suppress diagnostic");
+        assert!(
+            d.is_empty(),
+            "after-single-line-comment exception should suppress diagnostic"
+        );
     }
 
     #[test]

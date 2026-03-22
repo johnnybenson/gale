@@ -99,12 +99,9 @@ impl Rule for ScssDoubleSlashCommentWhitespaceInside {
             "always" => {
                 if !starts_with_space {
                     vec![
-                        Diagnostic::new(
-                            self.name(),
-                            "Expected whitespace after //".to_string(),
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(comment.span.offset, comment.span.length)),
+                        Diagnostic::new(self.name(), "Expected whitespace after //".to_string())
+                            .severity(self.default_severity())
+                            .span(Span::new(comment.span.offset, comment.span.length)),
                     ]
                 } else {
                     vec![]
@@ -113,12 +110,9 @@ impl Rule for ScssDoubleSlashCommentWhitespaceInside {
             "never" => {
                 if starts_with_space {
                     vec![
-                        Diagnostic::new(
-                            self.name(),
-                            "Unexpected whitespace after //".to_string(),
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(comment.span.offset, comment.span.length)),
+                        Diagnostic::new(self.name(), "Unexpected whitespace after //".to_string())
+                            .severity(self.default_severity())
+                            .span(Span::new(comment.span.offset, comment.span.length)),
                     ]
                 } else {
                     vec![]
@@ -202,36 +196,34 @@ mod tests {
 
     #[test]
     fn allows_bang_comment() {
-        let d =
-            ScssDoubleSlashCommentWhitespaceInside.check(&line_comment("//! important"), &scss_ctx());
+        let d = ScssDoubleSlashCommentWhitespaceInside
+            .check(&line_comment("//! important"), &scss_ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_separator_equals() {
-        let d = ScssDoubleSlashCommentWhitespaceInside
-            .check(&line_comment("//========"), &scss_ctx());
+        let d =
+            ScssDoubleSlashCommentWhitespaceInside.check(&line_comment("//========"), &scss_ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_separator_dashes() {
-        let d = ScssDoubleSlashCommentWhitespaceInside
-            .check(&line_comment("//--------"), &scss_ctx());
+        let d =
+            ScssDoubleSlashCommentWhitespaceInside.check(&line_comment("//--------"), &scss_ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_separator_stars() {
-        let d = ScssDoubleSlashCommentWhitespaceInside
-            .check(&line_comment("//****"), &scss_ctx());
+        let d = ScssDoubleSlashCommentWhitespaceInside.check(&line_comment("//****"), &scss_ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_separator_hashes() {
-        let d = ScssDoubleSlashCommentWhitespaceInside
-            .check(&line_comment("//####"), &scss_ctx());
+        let d = ScssDoubleSlashCommentWhitespaceInside.check(&line_comment("//####"), &scss_ctx());
         assert!(d.is_empty());
     }
 

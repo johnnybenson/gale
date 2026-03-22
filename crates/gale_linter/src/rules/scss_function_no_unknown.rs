@@ -352,10 +352,7 @@ mod tests {
 
     #[test]
     fn allows_known_css_functions() {
-        let node = style_node(&[
-            ("width", "calc(100% - 20px)"),
-            ("color", "rgb(255, 0, 0)"),
-        ]);
+        let node = style_node(&[("width", "calc(100% - 20px)"), ("color", "rgb(255, 0, 0)")]);
         assert!(ScssFunctionNoUnknown.check(&node, &scss_ctx()).is_empty());
     }
 

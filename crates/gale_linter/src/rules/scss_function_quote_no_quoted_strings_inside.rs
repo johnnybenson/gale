@@ -49,12 +49,9 @@ impl Rule for ScssFunctionQuoteNoQuotedStringsInside {
                     let trimmed = after.trim_start();
                     if trimmed.starts_with('"') || trimmed.starts_with('\'') {
                         return vec![
-                            Diagnostic::new(
-                                self.name(),
-                                "Unexpected quoted string inside quote()",
-                            )
-                            .severity(self.default_severity())
-                            .span(Span::new(decl.span.offset, decl.span.length)),
+                            Diagnostic::new(self.name(), "Unexpected quoted string inside quote()")
+                                .severity(self.default_severity())
+                                .span(Span::new(decl.span.offset, decl.span.length)),
                         ];
                     }
                 }
@@ -108,8 +105,8 @@ mod tests {
     #[test]
     fn allows_unquote_with_quoted_string() {
         // `unquote("hello")` should NOT be flagged — it's unquote, not quote
-        let d = ScssFunctionQuoteNoQuotedStringsInside
-            .check(&decl("unquote(\"hello\")"), &scss_ctx());
+        let d =
+            ScssFunctionQuoteNoQuotedStringsInside.check(&decl("unquote(\"hello\")"), &scss_ctx());
         assert!(d.is_empty());
     }
 
@@ -124,8 +121,8 @@ mod tests {
     #[test]
     fn reports_standalone_quote_with_quoted() {
         // Standalone `quote("hello")` should still be flagged
-        let d = ScssFunctionQuoteNoQuotedStringsInside
-            .check(&decl("quote(\"hello\")"), &scss_ctx());
+        let d =
+            ScssFunctionQuoteNoQuotedStringsInside.check(&decl("quote(\"hello\")"), &scss_ctx());
         assert_eq!(d.len(), 1);
     }
 

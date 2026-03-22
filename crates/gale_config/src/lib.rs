@@ -122,13 +122,12 @@ impl GaleConfig {
 
         // Compute the file path relative to the config directory for glob
         // matching.  Fall back to the original path when no config_dir is set.
-        let relative_path: std::borrow::Cow<'_, str> = if let Some(ref config_dir) = self.config_dir {
+        let relative_path: std::borrow::Cow<'_, str> = if let Some(ref config_dir) = self.config_dir
+        {
             let abs_file = if Path::new(file_path).is_absolute() {
                 PathBuf::from(file_path)
             } else {
-                std::env::current_dir()
-                    .unwrap_or_default()
-                    .join(file_path)
+                std::env::current_dir().unwrap_or_default().join(file_path)
             };
             match abs_file.strip_prefix(config_dir) {
                 Ok(rel) => rel.to_string_lossy().into_owned().into(),
@@ -1859,8 +1858,22 @@ fn replace_regexp_literals(s: &str) -> String {
                 None => true, // start of input
                 Some(ch) => matches!(
                     ch,
-                    ':' | '[' | ',' | '(' | '=' | '!' | '|' | '&' | '?'
-                        | ';' | '{' | '+' | '-' | '~' | '^' | '%' | '<'
+                    ':' | '['
+                        | ','
+                        | '('
+                        | '='
+                        | '!'
+                        | '|'
+                        | '&'
+                        | '?'
+                        | ';'
+                        | '{'
+                        | '+'
+                        | '-'
+                        | '~'
+                        | '^'
+                        | '%'
+                        | '<'
                         | '>'
                 ),
             };
@@ -2726,13 +2739,14 @@ fn replace_bare_identifier_values(s: &str) -> String {
 
         // Check for a bare identifier in a value position.
         // Value positions come after `:`, after `[`, or after `,`.
-        if (c.is_alphabetic() || c == '_' || c == '$')
-            && !is_preceded_by_quote(&result)
-        {
+        if (c.is_alphabetic() || c == '_' || c == '$') && !is_preceded_by_quote(&result) {
             // Read the full identifier.
             let start = i;
             while i < len
-                && (chars[i].is_alphanumeric() || chars[i] == '_' || chars[i] == '$' || chars[i] == '.')
+                && (chars[i].is_alphanumeric()
+                    || chars[i] == '_'
+                    || chars[i] == '$'
+                    || chars[i] == '.')
             {
                 i += 1;
             }
@@ -3100,12 +3114,7 @@ const KNOWN_PLUGINS: &[&str] = &[
 /// Rule prefixes associated with known plugins.  Used to determine whether an
 /// unrecognised rule belongs to a known plugin (and thus should produce a
 /// "not yet supported" warning rather than being silently dropped).
-const KNOWN_PLUGIN_RULE_PREFIXES: &[&str] = &[
-    "scss/",
-    "order/",
-    "@stylistic/",
-    "stylistic/",
-];
+const KNOWN_PLUGIN_RULE_PREFIXES: &[&str] = &["scss/", "order/", "@stylistic/", "stylistic/"];
 
 /// Standalone rule names from known plugins (no prefix).
 const KNOWN_PLUGIN_STANDALONE_RULES: &[&str] = &[
@@ -3147,8 +3156,12 @@ pub fn is_known_plugin(plugin: &str) -> bool {
 
 /// Check whether a rule name looks like it belongs to a known plugin.
 pub fn is_known_plugin_rule(rule_name: &str) -> bool {
-    KNOWN_PLUGIN_RULE_PREFIXES.iter().any(|prefix| rule_name.starts_with(prefix))
-        || KNOWN_PLUGIN_STANDALONE_RULES.iter().any(|r| *r == rule_name)
+    KNOWN_PLUGIN_RULE_PREFIXES
+        .iter()
+        .any(|prefix| rule_name.starts_with(prefix))
+        || KNOWN_PLUGIN_STANDALONE_RULES
+            .iter()
+            .any(|r| *r == rule_name)
 }
 
 /// Convert a raw [`ConfigFile`] into the resolved [`GaleConfig`].
@@ -3570,7 +3583,9 @@ formatter: text
     #[test]
     fn standard_preset_includes_length_zero_no_unit_ignore_custom_properties() {
         let preset = resolve_preset("stylelint-config-standard").unwrap();
-        let rule = preset.get("length-zero-no-unit").expect("length-zero-no-unit should be in standard preset");
+        let rule = preset
+            .get("length-zero-no-unit")
+            .expect("length-zero-no-unit should be in standard preset");
         let opts = rule.options.as_ref().expect("should have options");
         let ignore = opts.get("ignore").expect("should have ignore key");
         let arr = ignore.as_array().expect("ignore should be an array");
@@ -3584,7 +3599,9 @@ formatter: text
     #[test]
     fn standard_scss_preset_includes_length_zero_no_unit_ignore_custom_properties() {
         let preset = resolve_preset("stylelint-config-standard-scss").unwrap();
-        let rule = preset.get("length-zero-no-unit").expect("length-zero-no-unit should be in standard-scss preset");
+        let rule = preset
+            .get("length-zero-no-unit")
+            .expect("length-zero-no-unit should be in standard-scss preset");
         let opts = rule.options.as_ref().expect("should have options");
         let ignore = opts.get("ignore").expect("should have ignore key");
         let arr = ignore.as_array().expect("ignore should be an array");
@@ -4820,7 +4837,10 @@ overrides:
         // test parse_package_json_stylelint directly.
         let contents = std::fs::read_to_string(&pkg).unwrap();
         let raw = parse_package_json_stylelint(&contents).unwrap();
-        assert_eq!(raw.extends, Some(vec!["stylelint-config-standard".to_string()]));
+        assert_eq!(
+            raw.extends,
+            Some(vec!["stylelint-config-standard".to_string()])
+        );
     }
 
     #[test]

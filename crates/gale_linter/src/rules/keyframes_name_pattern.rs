@@ -57,10 +57,7 @@ impl Rule for KeyframesNamePattern {
         let name = name
             .strip_prefix('"')
             .and_then(|s| s.strip_suffix('"'))
-            .or_else(|| {
-                name.strip_prefix('\'')
-                    .and_then(|s| s.strip_suffix('\''))
-            })
+            .or_else(|| name.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')))
             .unwrap_or(name);
 
         if !re.is_match(name) {
@@ -127,8 +124,7 @@ mod tests {
 
     #[test]
     fn checks_webkit_keyframes() {
-        let d =
-            KeyframesNamePattern.check(&keyframes("-webkit-keyframes", "slideIn"), &ctx());
+        let d = KeyframesNamePattern.check(&keyframes("-webkit-keyframes", "slideIn"), &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("slideIn"));
     }

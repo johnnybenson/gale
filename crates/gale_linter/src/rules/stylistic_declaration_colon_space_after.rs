@@ -62,8 +62,7 @@ impl Rule for StylisticDeclarationColonSpaceAfter {
                 if is_declaration_colon(bytes, i) {
                     let colon_pos = i;
                     let after = colon_pos + 1;
-                    let has_space_after =
-                        after < len && bytes[after] == b' ';
+                    let has_space_after = after < len && bytes[after] == b' ';
                     let is_single_line = {
                         // Find the end of the declaration (semicolon or closing brace)
                         let mut end = after;
@@ -82,9 +81,7 @@ impl Rule for StylisticDeclarationColonSpaceAfter {
 
                     if violation {
                         let msg = match option {
-                            "always" | "always-single-line" => {
-                                "Expected a space after the colon"
-                            }
+                            "always" | "always-single-line" => "Expected a space after the colon",
                             "never" => "Unexpected space after the colon",
                             _ => "Expected a space after the colon",
                         };
@@ -136,15 +133,13 @@ fn is_declaration_colon(bytes: &[u8], pos: usize) -> bool {
         }
     }
     // Skip whitespace before the property name
-    while k > 0 && (bytes[k] == b' ' || bytes[k] == b'\t' || bytes[k] == b'\n' || bytes[k] == b'\r') {
+    while k > 0 && (bytes[k] == b' ' || bytes[k] == b'\t' || bytes[k] == b'\n' || bytes[k] == b'\r')
+    {
         k -= 1;
     }
     // If preceded by `{`, `;`, start of string, or `}` (nested), it's a declaration
     matches!(bytes[k], b'{' | b';' | b'}')
-        || (k == 0
-            && (bytes[k].is_ascii_alphanumeric()
-                || bytes[k] == b'-'
-                || bytes[k] == b'_'))
+        || (k == 0 && (bytes[k].is_ascii_alphanumeric() || bytes[k] == b'-' || bytes[k] == b'_'))
 }
 
 #[cfg(test)]

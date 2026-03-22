@@ -28,7 +28,14 @@ impl Rule for NoDuplicateSelectors {
         let mut seen: HashMap<String, usize> = HashMap::new();
         let mut diagnostics = Vec::new();
 
-        collect_selectors(nodes, &mut seen, &mut diagnostics, self, &line_index, context.source);
+        collect_selectors(
+            nodes,
+            &mut seen,
+            &mut diagnostics,
+            self,
+            &line_index,
+            context.source,
+        );
 
         diagnostics
     }
@@ -63,11 +70,7 @@ fn collect_selectors(
                         // (before the opening brace).
                         let src = &source[start..end];
                         let trimmed = src.trim();
-                        if trimmed.is_empty() {
-                            raw
-                        } else {
-                            trimmed
-                        }
+                        if trimmed.is_empty() { raw } else { trimmed }
                     } else {
                         raw
                     }
@@ -79,8 +82,7 @@ fn collect_selectors(
                             rule.name(),
                             format!(
                                 "Unexpected duplicate selector \"{}\", first used at line {}",
-                                display_selector,
-                                first_line,
+                                display_selector, first_line,
                             ),
                         )
                         .severity(rule.default_severity())

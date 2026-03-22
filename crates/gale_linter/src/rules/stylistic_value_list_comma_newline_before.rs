@@ -125,9 +125,7 @@ impl Rule for StylisticValueListCommaNewlineBefore {
 
                 if violation {
                     let msg = match option {
-                        "always" | "always-multi-line" => {
-                            "Expected newline before \",\""
-                        }
+                        "always" | "always-multi-line" => "Expected newline before \",\"",
                         "never" => "Unexpected whitespace before \",\"",
                         _ => continue,
                     };

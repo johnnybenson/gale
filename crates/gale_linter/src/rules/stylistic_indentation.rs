@@ -157,9 +157,7 @@ impl Rule for StylisticIndentation {
                     diagnostics.push(
                         Diagnostic::new(
                             self.name(),
-                            format!(
-                                "Expected indentation of {expected} {unit}{plural}",
-                            ),
+                            format!("Expected indentation of {expected} {unit}{plural}",),
                         )
                         .severity(self.default_severity())
                         .span(Span::new(line_start, j - line_start)),
@@ -195,7 +193,11 @@ mod tests {
         let opt = serde_json::json!(2);
         let source = "a {\n  color: red;\n}";
         let d = StylisticIndentation.check_root(&[], &ctx_with_option(source, &opt));
-        assert!(d.is_empty(), "got: {:?}", d.iter().map(|d| &d.message).collect::<Vec<_>>());
+        assert!(
+            d.is_empty(),
+            "got: {:?}",
+            d.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -212,7 +214,11 @@ mod tests {
         let opt = serde_json::json!("tab");
         let source = "a {\n\tcolor: red;\n}";
         let d = StylisticIndentation.check_root(&[], &ctx_with_option(source, &opt));
-        assert!(d.is_empty(), "got: {:?}", d.iter().map(|d| &d.message).collect::<Vec<_>>());
+        assert!(
+            d.is_empty(),
+            "got: {:?}",
+            d.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
     }
 
     #[test]

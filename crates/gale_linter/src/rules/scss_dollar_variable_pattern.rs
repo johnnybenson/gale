@@ -272,9 +272,11 @@ mod tests {
     #[test]
     fn allows_kebab_case() {
         let nodes = vec![dollar_var("$my-var")];
-        assert!(ScssDollarVariablePattern
-            .check_root(&nodes, &scss_ctx())
-            .is_empty());
+        assert!(
+            ScssDollarVariablePattern
+                .check_root(&nodes, &scss_ctx())
+                .is_empty()
+        );
     }
 
     #[test]
@@ -294,9 +296,11 @@ mod tests {
             important: false,
         });
         let nodes = vec![node];
-        assert!(ScssDollarVariablePattern
-            .check_root(&nodes, &scss_ctx())
-            .is_empty());
+        assert!(
+            ScssDollarVariablePattern
+                .check_root(&nodes, &scss_ctx())
+                .is_empty()
+        );
     }
 
     #[test]
@@ -308,9 +312,11 @@ mod tests {
             options: None,
         };
         let nodes = vec![dollar_var("$myVar")];
-        assert!(ScssDollarVariablePattern
-            .check_root(&nodes, &css_ctx)
-            .is_empty());
+        assert!(
+            ScssDollarVariablePattern
+                .check_root(&nodes, &css_ctx)
+                .is_empty()
+        );
     }
 
     // -- Loop variable tests --
@@ -329,9 +335,11 @@ mod tests {
                 important: false,
             })],
         })];
-        assert!(ScssDollarVariablePattern
-            .check_root(&nodes, &scss_ctx())
-            .is_empty());
+        assert!(
+            ScssDollarVariablePattern
+                .check_root(&nodes, &scss_ctx())
+                .is_empty()
+        );
     }
 
     #[test]
@@ -356,9 +364,11 @@ mod tests {
                 }),
             ],
         })];
-        assert!(ScssDollarVariablePattern
-            .check_root(&nodes, &scss_ctx())
-            .is_empty());
+        assert!(
+            ScssDollarVariablePattern
+                .check_root(&nodes, &scss_ctx())
+                .is_empty()
+        );
     }
 
     #[test]
@@ -375,9 +385,11 @@ mod tests {
                 important: false,
             })],
         })];
-        assert!(ScssDollarVariablePattern
-            .check_root(&nodes, &scss_ctx())
-            .is_empty());
+        assert!(
+            ScssDollarVariablePattern
+                .check_root(&nodes, &scss_ctx())
+                .is_empty()
+        );
     }
 
     #[test]
@@ -395,9 +407,11 @@ mod tests {
                 important: false,
             })],
         })];
-        assert!(ScssDollarVariablePattern
-            .check_root(&nodes, &scss_ctx())
-            .is_empty());
+        assert!(
+            ScssDollarVariablePattern
+                .check_root(&nodes, &scss_ctx())
+                .is_empty()
+        );
     }
 
     // -- ignoreInside tests --
@@ -425,9 +439,11 @@ mod tests {
                 important: false,
             })],
         })];
-        assert!(ScssDollarVariablePattern
-            .check_root(&nodes, &ctx)
-            .is_empty());
+        assert!(
+            ScssDollarVariablePattern
+                .check_root(&nodes, &ctx)
+                .is_empty()
+        );
     }
 
     #[test]
@@ -470,9 +486,11 @@ mod tests {
                 important: false,
             })],
         })];
-        assert!(ScssDollarVariablePattern
-            .check_root(&nodes, &ctx)
-            .is_empty());
+        assert!(
+            ScssDollarVariablePattern
+                .check_root(&nodes, &ctx)
+                .is_empty()
+        );
     }
 
     // -- Helper extraction tests --
@@ -529,9 +547,11 @@ mod tests {
                 }),
             ],
         })];
-        assert!(ScssDollarVariablePattern
-            .check_root(&nodes, &scss_ctx())
-            .is_empty());
+        assert!(
+            ScssDollarVariablePattern
+                .check_root(&nodes, &scss_ctx())
+                .is_empty()
+        );
     }
 
     #[test]
@@ -557,9 +577,11 @@ mod tests {
                 })],
             })],
         })];
-        assert!(ScssDollarVariablePattern
-            .check_root(&nodes, &scss_ctx())
-            .is_empty());
+        assert!(
+            ScssDollarVariablePattern
+                .check_root(&nodes, &scss_ctx())
+                .is_empty()
+        );
     }
 
     #[test]
@@ -578,9 +600,11 @@ mod tests {
                 important: false,
             })],
         })];
-        assert!(ScssDollarVariablePattern
-            .check_root(&nodes, &scss_ctx())
-            .is_empty());
+        assert!(
+            ScssDollarVariablePattern
+                .check_root(&nodes, &scss_ctx())
+                .is_empty()
+        );
     }
 
     #[test]

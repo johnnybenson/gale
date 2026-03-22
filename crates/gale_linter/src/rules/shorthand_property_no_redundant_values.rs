@@ -30,7 +30,9 @@ fn is_standard_syntax_value(value: &str) -> bool {
     let bytes = value.as_bytes();
     for i in 1..bytes.len().saturating_sub(1) {
         if bytes[i] == b'.'
-            && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'-' || bytes[i - 1] == b'_')
+            && (bytes[i - 1].is_ascii_alphanumeric()
+                || bytes[i - 1] == b'-'
+                || bytes[i - 1] == b'_')
             && (bytes[i + 1].is_ascii_alphabetic() || bytes[i + 1] == b'-' || bytes[i + 1] == b'_')
         {
             return false;
@@ -173,7 +175,9 @@ impl Rule for ShorthandPropertyNoRedundantValues {
             // For border-radius, handle the `/` separator.
             // (border-radius allows var() in each half — checked per-half)
             if is_border_radius(&decl.property) {
-                if let Some(diag) = check_border_radius(&raw_value, value_offset, decl, ctx, self.name()) {
+                if let Some(diag) =
+                    check_border_radius(&raw_value, value_offset, decl, ctx, self.name())
+                {
                     diags.push(diag);
                 }
                 continue;
@@ -298,7 +302,11 @@ fn strip_important(tokens: &[String]) -> Vec<String> {
     }
 
     // Check if last token is literally "!important"
-    if result.last().map(|s| s.eq_ignore_ascii_case("!important")).unwrap_or(false) {
+    if result
+        .last()
+        .map(|s| s.eq_ignore_ascii_case("!important"))
+        .unwrap_or(false)
+    {
         result.pop();
         return result;
     }
@@ -531,7 +539,9 @@ mod tests {
         // However, we need a raw source check, so let's build manually.
         // Source format: `a { property: value; }`
         // Find the declaration within the source.
-        let decl_start = source.find(|c: char| c.is_alphabetic() && c != 'a').unwrap_or(4);
+        let decl_start = source
+            .find(|c: char| c.is_alphabetic() && c != 'a')
+            .unwrap_or(4);
         // Actually, let's find past "a { "
         let brace_pos = source.find('{').unwrap();
         let after_brace = &source[brace_pos + 1..];
@@ -540,7 +550,9 @@ mod tests {
 
         // Find the end of the declaration (before closing brace).
         let end_brace = source.rfind('}').unwrap();
-        let decl_text = source[prop_start..end_brace].trim_end().trim_end_matches(';');
+        let decl_text = source[prop_start..end_brace]
+            .trim_end()
+            .trim_end_matches(';');
         let decl_end = prop_start + decl_text.len();
 
         let colon = decl_text.find(':').unwrap();
@@ -593,11 +605,19 @@ mod tests {
     fn allows_non_redundant_values() {
         let source = "a { margin: 1px 2px 3px 4px; }";
         let (node, ctx) = build_node_from_source(source);
-        assert!(ShorthandPropertyNoRedundantValues.check(&node, &ctx).is_empty());
+        assert!(
+            ShorthandPropertyNoRedundantValues
+                .check(&node, &ctx)
+                .is_empty()
+        );
 
         let source2 = "a { margin: 1px; }";
         let (node2, ctx2) = build_node_from_source(source2);
-        assert!(ShorthandPropertyNoRedundantValues.check(&node2, &ctx2).is_empty());
+        assert!(
+            ShorthandPropertyNoRedundantValues
+                .check(&node2, &ctx2)
+                .is_empty()
+        );
     }
 
     #[test]

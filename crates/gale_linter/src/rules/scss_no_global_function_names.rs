@@ -110,9 +110,7 @@ fn is_deprecated_global(name: &str) -> bool {
 
 fn is_css_native(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
-    CSS_NATIVE_FUNCTIONS
-        .binary_search(&lower.as_str())
-        .is_ok()
+    CSS_NATIVE_FUNCTIONS.binary_search(&lower.as_str()).is_ok()
 }
 
 impl Rule for ScssNoGlobalFunctionNames {
@@ -185,10 +183,7 @@ impl Rule for ScssNoGlobalFunctionNames {
                 // Skip namespaced calls (e.g., `math.div(`, `map.get(`)
                 let is_namespaced = start > 0 && bytes[start - 1] == b'.';
 
-                if !is_namespaced
-                    && is_deprecated_global(func_name)
-                    && !is_css_native(func_name)
-                {
+                if !is_namespaced && is_deprecated_global(func_name) && !is_css_native(func_name) {
                     diagnostics.push(
                         Diagnostic::new(
                             self.name(),
@@ -295,8 +290,7 @@ mod tests {
 
     #[test]
     fn allows_function_in_string() {
-        let d = ScssNoGlobalFunctionNames
-            .check(&decl("\"use map-get() instead\""), &scss_ctx());
+        let d = ScssNoGlobalFunctionNames.check(&decl("\"use map-get() instead\""), &scss_ctx());
         assert!(d.is_empty());
     }
 

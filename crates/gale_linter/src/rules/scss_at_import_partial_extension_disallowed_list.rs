@@ -127,8 +127,8 @@ mod tests {
     fn allows_import_without_disallowed_extension() {
         let opt = serde_json::json!([[".scss"]]);
         let ctx = scss_ctx_with_option(&opt);
-        let d = ScssAtImportPartialExtensionDisallowedList
-            .check(&at_rule("import", "\"foo\""), &ctx);
+        let d =
+            ScssAtImportPartialExtensionDisallowedList.check(&at_rule("import", "\"foo\""), &ctx);
         assert!(d.is_empty());
     }
 
@@ -136,8 +136,8 @@ mod tests {
     fn reports_disallowed_extension_in_use() {
         let opt = serde_json::json!([[".scss"]]);
         let ctx = scss_ctx_with_option(&opt);
-        let d = ScssAtImportPartialExtensionDisallowedList
-            .check(&at_rule("use", "\"bar.scss\""), &ctx);
+        let d =
+            ScssAtImportPartialExtensionDisallowedList.check(&at_rule("use", "\"bar.scss\""), &ctx);
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("@use"));
     }

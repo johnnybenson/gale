@@ -46,7 +46,9 @@ fn find_trailing_zeros(
 
     while i < len {
         // Look for start of a number
-        if bytes[i].is_ascii_digit() || (bytes[i] == b'.' && i + 1 < len && bytes[i + 1].is_ascii_digit()) {
+        if bytes[i].is_ascii_digit()
+            || (bytes[i] == b'.' && i + 1 < len && bytes[i + 1].is_ascii_digit())
+        {
             let num_start = i;
 
             // Skip integer part

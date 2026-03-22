@@ -49,10 +49,7 @@ impl Rule for ScssLoadNoPartialLeadingUnderscore {
         }
 
         // Skipping importing CSS: url(), ".css", URI with a protocol
-        if path.starts_with("url(")
-            || path.ends_with(".css")
-            || path.contains("//")
-        {
+        if path.starts_with("url(") || path.ends_with(".css") || path.contains("//") {
             return vec![];
         }
 
@@ -61,19 +58,18 @@ impl Rule for ScssLoadNoPartialLeadingUnderscore {
         if filename.starts_with('_') {
             // Compute the span pointing to the path within the params,
             // matching Stylelint's column positioning (word: pathStripped).
-            let path_offset = if at.span.length > 0
-                && at.span.offset + at.span.length <= ctx.source.len()
-            {
-                let at_src = &ctx.source[at.span.offset..at.span.offset + at.span.length];
-                // Find the path string within the at-rule source
-                if let Some(pos) = at_src.find(path) {
-                    at.span.offset + pos
+            let path_offset =
+                if at.span.length > 0 && at.span.offset + at.span.length <= ctx.source.len() {
+                    let at_src = &ctx.source[at.span.offset..at.span.offset + at.span.length];
+                    // Find the path string within the at-rule source
+                    if let Some(pos) = at_src.find(path) {
+                        at.span.offset + pos
+                    } else {
+                        at.span.offset
+                    }
                 } else {
                     at.span.offset
-                }
-            } else {
-                at.span.offset
-            };
+                };
             vec![
                 Diagnostic::new(
                     self.name(),
@@ -123,7 +119,10 @@ fn has_trailing_keyword(s: &str) -> bool {
         return false;
     }
     let prev = bytes[end - 1];
-    matches!(prev, b' ' | b'\t' | b'\n' | b'\r' | b',' | b')' | b'"' | b'\'')
+    matches!(
+        prev,
+        b' ' | b'\t' | b'\n' | b'\r' | b',' | b')' | b'"' | b'\''
+    )
 }
 
 /// Extract a path string from at-rule params, stripping quotes.

@@ -65,33 +65,34 @@ impl Rule for StylisticNumberLeadingZero {
                         // Check that the char before is not a digit (which would be e.g. 1.5)
                         let prev_is_digit = i > 0 && bytes[i - 1].is_ascii_digit();
                         // Also not after a letter or hyphen (could be part of identifier)
-                        let prev_is_ident =
-                            i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'-' || bytes[i - 1] == b'_');
+                        let prev_is_ident = i > 0
+                            && (bytes[i - 1].is_ascii_alphanumeric()
+                                || bytes[i - 1] == b'-'
+                                || bytes[i - 1] == b'_');
                         if !prev_is_digit && !prev_is_ident {
                             diagnostics.push(
-                                Diagnostic::new(
-                                    self.name(),
-                                    "Expected a leading zero",
-                                )
-                                .severity(self.default_severity())
-                                .span(Span::new(i, 1)),
+                                Diagnostic::new(self.name(), "Expected a leading zero")
+                                    .severity(self.default_severity())
+                                    .span(Span::new(i, 1)),
                             );
                         }
                     }
                 }
                 "never" => {
                     // Look for 0.N pattern (unnecessary leading zero)
-                    if bytes[i] == b'0' && i + 1 < len && bytes[i + 1] == b'.' && i + 2 < len && bytes[i + 2].is_ascii_digit() {
+                    if bytes[i] == b'0'
+                        && i + 1 < len
+                        && bytes[i + 1] == b'.'
+                        && i + 2 < len
+                        && bytes[i + 2].is_ascii_digit()
+                    {
                         // Make sure it's not part of a larger number like 10.5
                         let prev_is_digit = i > 0 && bytes[i - 1].is_ascii_digit();
                         if !prev_is_digit {
                             diagnostics.push(
-                                Diagnostic::new(
-                                    self.name(),
-                                    "Unexpected leading zero",
-                                )
-                                .severity(self.default_severity())
-                                .span(Span::new(i, 1)),
+                                Diagnostic::new(self.name(), "Unexpected leading zero")
+                                    .severity(self.default_severity())
+                                    .span(Span::new(i, 1)),
                             );
                         }
                     }

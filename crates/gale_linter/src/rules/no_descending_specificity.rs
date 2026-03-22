@@ -199,11 +199,7 @@ fn has_preprocessor_constructs(selector: &str) -> bool {
 /// - `a, b` → last individual selector's last compound
 fn last_compound_selector_without_pseudo_classes(selector: &str) -> String {
     // For comma-separated selector lists, take the last individual selector.
-    let individual = selector
-        .rsplit(',')
-        .next()
-        .unwrap_or(selector)
-        .trim();
+    let individual = selector.rsplit(',').next().unwrap_or(selector).trim();
 
     // Split by combinators (` `, `>`, `+`, `~`) to get the last compound.
     // We walk backwards to find the last combinator.
@@ -220,9 +216,7 @@ fn last_compound_selector_without_pseudo_classes(selector: &str) -> String {
                 // Found a combinator; the last compound starts after it
                 // (skip any whitespace/combinators).
                 let mut j = i + 1;
-                while j < chars.len()
-                    && matches!(chars[j], ' ' | '>' | '+' | '~')
-                {
+                while j < chars.len() && matches!(chars[j], ' ' | '>' | '+' | '~') {
                     j += 1;
                 }
                 last_compound_start = j;
@@ -440,8 +434,7 @@ impl Rule for NoDescendingSpecificity {
         let mut diagnostics = Vec::new();
         let mut comparison_ctx: HashMap<String, (Specificity, String)> = HashMap::new();
 
-        let is_preprocessor =
-            matches!(context.syntax, Syntax::Scss | Syntax::Sass | Syntax::Less);
+        let is_preprocessor = matches!(context.syntax, Syntax::Scss | Syntax::Sass | Syntax::Less);
 
         // For SCSS/Sass/Less: only compare top-level selectors (nested selectors
         // compose with their parent so their written specificity is incomplete),
@@ -526,7 +519,10 @@ mod tests {
             }),
         ];
         let diags = rule.check_root(&nodes, &make_context());
-        assert!(diags.is_empty(), "different last compound selectors should not be compared");
+        assert!(
+            diags.is_empty(),
+            "different last compound selectors should not be compared"
+        );
     }
 
     #[test]
@@ -634,7 +630,11 @@ mod tests {
             }),
         ];
         let diags = rule.check_root(&nodes, &make_scss_context());
-        assert_eq!(diags.len(), 1, "should report descending specificity for top-level SCSS selectors");
+        assert_eq!(
+            diags.len(),
+            1,
+            "should report descending specificity for top-level SCSS selectors"
+        );
     }
 
     #[test]
@@ -642,26 +642,27 @@ mod tests {
         let rule = NoDescendingSpecificity;
         // A top-level `.foo .bar` with a nested `.bar` child — the nested `.bar`
         // should NOT be compared in SCSS because nested selectors compose with parent.
-        let nodes = vec![
-            CssNode::Style(StyleRule {
-                selector: ".foo .bar".to_string(),
-                declarations: vec![],
-                children: vec![StyleRule {
-                    selector: ".bar".to_string(),
-                    declarations: vec![Declaration {
-                        property: "color".to_string(),
-                        value: "blue".to_string(),
-                        span: ParserSpan::new(12, 11),
-                        important: false,
-                    }],
-                    children: vec![],
-                    span: ParserSpan::new(8, 17),
+        let nodes = vec![CssNode::Style(StyleRule {
+            selector: ".foo .bar".to_string(),
+            declarations: vec![],
+            children: vec![StyleRule {
+                selector: ".bar".to_string(),
+                declarations: vec![Declaration {
+                    property: "color".to_string(),
+                    value: "blue".to_string(),
+                    span: ParserSpan::new(12, 11),
+                    important: false,
                 }],
-                span: ParserSpan::new(0, 27),
-            }),
-        ];
+                children: vec![],
+                span: ParserSpan::new(8, 17),
+            }],
+            span: ParserSpan::new(0, 27),
+        })];
         let diags = rule.check_root(&nodes, &make_scss_context());
-        assert!(diags.is_empty(), "should not compare nested SCSS children against parent");
+        assert!(
+            diags.is_empty(),
+            "should not compare nested SCSS children against parent"
+        );
 
         // Same structure in plain CSS SHOULD compare nested children
         // (both share last compound `.bar`)
@@ -687,7 +688,10 @@ mod tests {
             }),
         ];
         let diags = rule.check_root(&nodes, &make_scss_context());
-        assert!(diags.is_empty(), "should skip selectors with SCSS interpolation");
+        assert!(
+            diags.is_empty(),
+            "should skip selectors with SCSS interpolation"
+        );
     }
 
     #[test]
@@ -729,7 +733,10 @@ mod tests {
             }),
         ];
         let diags = rule.check_root(&nodes, &make_scss_context());
-        assert!(diags.is_empty(), "should skip placeholder selectors in SCSS");
+        assert!(
+            diags.is_empty(),
+            "should skip placeholder selectors in SCSS"
+        );
     }
 
     #[test]
@@ -757,6 +764,10 @@ mod tests {
             options: None,
         };
         let diags = rule.check_root(&nodes, &less_context);
-        assert_eq!(diags.len(), 1, "should report top-level descending specificity in Less");
+        assert_eq!(
+            diags.len(),
+            1,
+            "should report top-level descending specificity in Less"
+        );
     }
 }

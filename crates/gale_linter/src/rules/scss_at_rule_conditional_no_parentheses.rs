@@ -44,7 +44,11 @@ impl Rule for ScssAtRuleConditionalNoParentheses {
 
         // Check if this is a conditional at-rule
         let name_lower = at.name.to_ascii_lowercase();
-        if name_lower != "if" && name_lower != "elsif" && name_lower != "else if" && name_lower != "while" {
+        if name_lower != "if"
+            && name_lower != "elsif"
+            && name_lower != "else if"
+            && name_lower != "while"
+        {
             return vec![];
         }
 
@@ -52,15 +56,14 @@ impl Rule for ScssAtRuleConditionalNoParentheses {
 
         // Check if the entire parameter is wrapped in parentheses
         if is_wrapped_in_parens(params) {
-            vec![Diagnostic::new(
-                self.name(),
-                format!(
-                    "Unexpected parentheses in conditional @{} rule",
-                    at.name
-                ),
-            )
-            .severity(self.default_severity())
-            .span(Span::new(at.span.offset, at.span.length))]
+            vec![
+                Diagnostic::new(
+                    self.name(),
+                    format!("Unexpected parentheses in conditional @{} rule", at.name),
+                )
+                .severity(self.default_severity())
+                .span(Span::new(at.span.offset, at.span.length)),
+            ]
         } else {
             vec![]
         }
@@ -118,14 +121,16 @@ mod tests {
 
     #[test]
     fn reports_parenthesized_if() {
-        let d = ScssAtRuleConditionalNoParentheses.check(&at_node("if", "($condition)"), &scss_ctx());
+        let d =
+            ScssAtRuleConditionalNoParentheses.check(&at_node("if", "($condition)"), &scss_ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("Unexpected parentheses"));
     }
 
     #[test]
     fn reports_parenthesized_elsif() {
-        let d = ScssAtRuleConditionalNoParentheses.check(&at_node("elsif", "($x > 1)"), &scss_ctx());
+        let d =
+            ScssAtRuleConditionalNoParentheses.check(&at_node("elsif", "($x > 1)"), &scss_ctx());
         assert_eq!(d.len(), 1);
     }
 
@@ -138,15 +143,13 @@ mod tests {
 
     #[test]
     fn allows_no_parens_if() {
-        let d =
-            ScssAtRuleConditionalNoParentheses.check(&at_node("if", "$condition"), &scss_ctx());
+        let d = ScssAtRuleConditionalNoParentheses.check(&at_node("if", "$condition"), &scss_ctx());
         assert!(d.is_empty());
     }
 
     #[test]
     fn allows_no_parens_elsif() {
-        let d =
-            ScssAtRuleConditionalNoParentheses.check(&at_node("elsif", "$x > 1"), &scss_ctx());
+        let d = ScssAtRuleConditionalNoParentheses.check(&at_node("elsif", "$x > 1"), &scss_ctx());
         assert!(d.is_empty());
     }
 
@@ -159,8 +162,8 @@ mod tests {
     #[test]
     fn allows_inner_parens_not_wrapping() {
         // `($a) and ($b)` — not wrapped in a single outer paren pair
-        let d = ScssAtRuleConditionalNoParentheses
-            .check(&at_node("if", "($a) and ($b)"), &scss_ctx());
+        let d =
+            ScssAtRuleConditionalNoParentheses.check(&at_node("if", "($a) and ($b)"), &scss_ctx());
         assert!(d.is_empty());
     }
 
@@ -173,8 +176,8 @@ mod tests {
 
     #[test]
     fn ignores_non_conditional_at_rules() {
-        let d =
-            ScssAtRuleConditionalNoParentheses.check(&at_node("media", "(min-width: 768px)"), &scss_ctx());
+        let d = ScssAtRuleConditionalNoParentheses
+            .check(&at_node("media", "(min-width: 768px)"), &scss_ctx());
         assert!(d.is_empty());
     }
 

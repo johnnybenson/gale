@@ -51,8 +51,7 @@ static MATH_FUNC_START: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 /// Regex to detect CSS comments.
-static COMMENT_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"/\*[\s\S]*?\*/").unwrap());
+static COMMENT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"/\*[\s\S]*?\*/").unwrap());
 
 /// Functions whose arguments should be skipped entirely.
 fn is_opaque_function(name: &str) -> bool {
@@ -118,17 +117,15 @@ fn skip_preprocessor_token(bytes: &[u8], pos: usize) -> Option<usize> {
     // SCSS variable: $name-with-hyphens
     if bytes[pos] == b'$' {
         let mut i = pos + 1;
-        while i < len
-            && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
+        while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
         {
             i += 1;
         }
         if i > pos + 1 {
             if i < len && bytes[i] == b'(' {
-                if let Some((_, end)) = extract_paren_body(
-                    std::str::from_utf8(bytes).unwrap_or(""),
-                    i + 1,
-                ) {
+                if let Some((_, end)) =
+                    extract_paren_body(std::str::from_utf8(bytes).unwrap_or(""), i + 1)
+                {
                     return Some(end);
                 }
             }
@@ -139,8 +136,7 @@ fn skip_preprocessor_token(bytes: &[u8], pos: usize) -> Option<usize> {
     // Less variable: @name-with-hyphens
     if bytes[pos] == b'@' {
         let mut i = pos + 1;
-        while i < len
-            && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
+        while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
         {
             i += 1;
         }
@@ -309,11 +305,8 @@ fn find_unspaced_operators(
 
                     // For any function (math or not), recurse into its body
                     // to find nested math functions and check their operators.
-                    let inner_results = find_unspaced_operators(
-                        inner_body,
-                        base_offset + inner_start,
-                        is_scss,
-                    );
+                    let inner_results =
+                        find_unspaced_operators(inner_body, base_offset + inner_start, is_scss);
                     results.extend(inner_results);
                     i = end;
                     continue;
@@ -336,11 +329,8 @@ fn find_unspaced_operators(
             let inner_start = i + 1;
             if let Some((inner_body, end)) = extract_paren_body(body, inner_start) {
                 // Recurse into parenthesized expression
-                let inner_results = find_unspaced_operators(
-                    inner_body,
-                    base_offset + inner_start,
-                    is_scss,
-                );
+                let inner_results =
+                    find_unspaced_operators(inner_body, base_offset + inner_start, is_scss);
                 results.extend(inner_results);
                 i = end;
                 continue;
@@ -382,9 +372,7 @@ fn find_unspaced_operators(
             if ch == b'-' && i + 1 < len && bytes[i + 1] == b'-' {
                 let mut j = i + 2;
                 while j < len
-                    && (bytes[j].is_ascii_alphanumeric()
-                        || bytes[j] == b'-'
-                        || bytes[j] == b'_')
+                    && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'-' || bytes[j] == b'_')
                 {
                     j += 1;
                 }
@@ -402,12 +390,9 @@ fn find_unspaced_operators(
                 let after = i + 1;
                 if after >= len
                     || bytes[after] == b')'
-                    || (bytes[after] == b' '
-                        && (after + 1 >= len || bytes[after + 1] == b')'))
+                    || (bytes[after] == b' ' && (after + 1 >= len || bytes[after + 1] == b')'))
                 {
-                    if i > 0
-                        && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'%')
-                    {
+                    if i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'%') {
                         i += 1;
                         continue;
                     }
@@ -506,14 +491,10 @@ impl Rule for FunctionCalcNoUnspacedOperator {
                 for (offset, op, side) in &violations {
                     let msg = match side {
                         UnspacedSide::Before => {
-                            format!(
-                                "Expected a space before the '{op}' operator in calc function"
-                            )
+                            format!("Expected a space before the '{op}' operator in calc function")
                         }
                         UnspacedSide::After => {
-                            format!(
-                                "Expected a space after the '{op}' operator in calc function"
-                            )
+                            format!("Expected a space after the '{op}' operator in calc function")
                         }
                     };
 

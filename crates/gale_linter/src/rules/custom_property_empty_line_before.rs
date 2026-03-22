@@ -68,8 +68,8 @@ impl Rule for CustomPropertyEmptyLineBefore {
 
             // Determine base expectation
             let mut expectation = match opts.primary {
-                PrimaryOption::Always => true,  // expects empty line
-                PrimaryOption::Never => false,  // expects no empty line
+                PrimaryOption::Always => true, // expects empty line
+                PrimaryOption::Never => false, // expects no empty line
             };
 
             // Apply exceptions (flip expectation)

@@ -44,9 +44,8 @@ impl Rule for RuleSelectorPropertyDisallowedList {
         let mut diags = Vec::new();
 
         for (pattern, disallowed_props) in &entries {
-            let matches = if let Some(regex_body) = pattern
-                .strip_prefix('/')
-                .and_then(|s| s.strip_suffix('/'))
+            let matches = if let Some(regex_body) =
+                pattern.strip_prefix('/').and_then(|s| s.strip_suffix('/'))
             {
                 regex::Regex::new(regex_body)
                     .map(|re| re.is_match(selector))

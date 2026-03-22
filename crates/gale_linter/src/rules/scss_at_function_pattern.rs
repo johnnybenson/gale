@@ -96,7 +96,11 @@ mod tests {
 
     #[test]
     fn allows_kebab_case() {
-        assert!(ScssAtFunctionPattern.check(&function("my-func($a)"), &scss_ctx()).is_empty());
+        assert!(
+            ScssAtFunctionPattern
+                .check(&function("my-func($a)"), &scss_ctx())
+                .is_empty()
+        );
     }
 
     #[test]
@@ -125,6 +129,10 @@ mod tests {
             syntax: Syntax::Css,
             options: None,
         };
-        assert!(ScssAtFunctionPattern.check(&function("MyFunc"), &css_ctx).is_empty());
+        assert!(
+            ScssAtFunctionPattern
+                .check(&function("MyFunc"), &css_ctx)
+                .is_empty()
+        );
     }
 }
