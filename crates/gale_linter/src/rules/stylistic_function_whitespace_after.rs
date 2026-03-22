@@ -61,13 +61,38 @@ impl Rule for StylisticFunctionWhitespaceAfter {
                 continue;
             }
 
-            // Detect function call
+            // Detect function call — but skip pseudo-class functions like :not(), :is(), etc.
             if bytes[i] == b'('
                 && i > 0
                 && (bytes[i - 1].is_ascii_alphanumeric()
                     || bytes[i - 1] == b'-'
                     || bytes[i - 1] == b'_')
             {
+                // Walk back to find the function name start
+                let mut fname_start = i - 1;
+                while fname_start > 0
+                    && (bytes[fname_start - 1].is_ascii_alphanumeric()
+                        || bytes[fname_start - 1] == b'-'
+                        || bytes[fname_start - 1] == b'_')
+                {
+                    fname_start -= 1;
+                }
+                // Skip if preceded by `:` (pseudo-class/element) or `::` (pseudo-element)
+                if fname_start > 0 && bytes[fname_start - 1] == b':' {
+                    // Skip the entire pseudo-function parenthesized content
+                    let mut depth_p = 1;
+                    let mut j = i + 1;
+                    while j < len && depth_p > 0 {
+                        if bytes[j] == b'(' {
+                            depth_p += 1;
+                        } else if bytes[j] == b')' {
+                            depth_p -= 1;
+                        }
+                        j += 1;
+                    }
+                    i = j;
+                    continue;
+                }
                 let mut depth = 1;
                 let mut j = i + 1;
                 while j < len && depth > 0 {

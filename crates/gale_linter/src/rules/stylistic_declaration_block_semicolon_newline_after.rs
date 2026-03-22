@@ -108,13 +108,19 @@ impl Rule for StylisticDeclarationBlockSemicolonNewlineAfter {
                     continue;
                 }
 
-                // Find the next non-whitespace character (excluding newlines for checking)
+                // Find the next non-whitespace character (excluding newlines for checking).
+                // SCSS line comments (`//`) count as "rest of line" so if we see
+                // `; // comment\n`, the newline IS there.
                 let mut j = i + 1;
                 let mut found_newline = false;
                 while j < len && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\r') {
                     j += 1;
                 }
                 if j < len && bytes[j] == b'\n' {
+                    found_newline = true;
+                }
+                // SCSS line comment after `;` — the newline at end of comment counts
+                if j + 1 < len && bytes[j] == b'/' && bytes[j + 1] == b'/' {
                     found_newline = true;
                 }
                 // If we reached } it's fine (last declaration)

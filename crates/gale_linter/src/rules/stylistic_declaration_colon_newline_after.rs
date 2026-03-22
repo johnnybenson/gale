@@ -100,8 +100,40 @@ impl Rule for StylisticDeclarationColonNewlineAfter {
                     while k > 0 && (bytes[k] == b' ' || bytes[k] == b'\t') {
                         k -= 1;
                     }
-                    // Check if preceded by identifier chars (property name)
+                    // Check if preceded by identifier chars (property name).
                     if bytes[k].is_ascii_alphanumeric() || bytes[k] == b'-' || bytes[k] == b'_' {
+                        // Scan backwards from the colon to the last statement boundary
+                        // ({, ;, or start of line after whitespace).  If we find any
+                        // selector-like character (., #, [, >, +, ~, *, &, :, ))
+                        // this colon is inside a selector, not a declaration.
+                        let mut is_selector_colon = false;
+                        let mut scan = i;
+                        while scan > 0 {
+                            scan -= 1;
+                            let b = bytes[scan];
+                            if b == b'{' || b == b';' {
+                                break;
+                            }
+                            if b == b'.'
+                                || b == b'#'
+                                || b == b'['
+                                || b == b']'
+                                || b == b'>'
+                                || b == b'+'
+                                || b == b'~'
+                                || b == b'*'
+                                || b == b'&'
+                                || b == b':'
+                                || b == b')'
+                            {
+                                is_selector_colon = true;
+                                break;
+                            }
+                        }
+                        if is_selector_colon {
+                            i += 1;
+                            continue;
+                        }
                         let colon_pos = i;
                         in_value = true;
 

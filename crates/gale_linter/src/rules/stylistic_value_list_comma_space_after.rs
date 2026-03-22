@@ -85,7 +85,46 @@ impl Rule for StylisticValueListCommaSpaceAfter {
                     in_value = false;
                 }
                 b':' if brace_depth > 0 && paren_depth == 0 => {
-                    in_value = true;
+                    // Only set in_value if this colon is preceded by a
+                    // property name, not a pseudo-selector like :hover.
+                    // Check: is the previous non-ws char part of an identifier
+                    // that is NOT preceded by another `:`?
+                    let mut is_property = false;
+                    if i > 0 {
+                        let mut k = i - 1;
+                        while k > 0 && (bytes[k] == b' ' || bytes[k] == b'\t') {
+                            k -= 1;
+                        }
+                        if bytes[k].is_ascii_alphanumeric() || bytes[k] == b'-' || bytes[k] == b'_'
+                        {
+                            // Walk back through identifier
+                            while k > 0
+                                && (bytes[k - 1].is_ascii_alphanumeric()
+                                    || bytes[k - 1] == b'-'
+                                    || bytes[k - 1] == b'_')
+                            {
+                                k -= 1;
+                            }
+                            // Skip whitespace before the identifier
+                            let mut pre = if k > 0 { k - 1 } else { 0 };
+                            while pre > 0
+                                && (bytes[pre] == b' '
+                                    || bytes[pre] == b'\t'
+                                    || bytes[pre] == b'\n'
+                                    || bytes[pre] == b'\r')
+                            {
+                                pre -= 1;
+                            }
+                            // It's a property if preceded by '{', ';', or start
+                            is_property = k == 0
+                                || bytes[pre] == b'{'
+                                || bytes[pre] == b';'
+                                || pre == 0;
+                        }
+                    }
+                    if is_property {
+                        in_value = true;
+                    }
                 }
                 b'(' => paren_depth += 1,
                 b')' => {
