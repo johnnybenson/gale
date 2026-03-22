@@ -69,6 +69,14 @@ npm install -D @lyricalstring/gale
 
 The npm package automatically downloads the correct platform binary on install. Supported platforms: macOS (arm64, x64), Linux (x64, arm64).
 
+### Cargo
+
+```bash
+cargo install gale-lint
+```
+
+The crate is named `gale-lint` on crates.io (since `gale` was taken), but the installed binary is called `gale`.
+
 ### From source
 
 ```bash
@@ -304,7 +312,7 @@ The [release workflow](.github/workflows/release.yml) will:
 # Build for all platforms (requires cross + Docker)
 ./scripts/build-npm.sh --all
 
-# Set version across all packages before building
+# Set npm package version before building
 ./scripts/build-npm.sh --version 0.2.0
 ```
 

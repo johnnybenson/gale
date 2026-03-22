@@ -34,7 +34,7 @@ Both tools run on the same files with the same config. Results are compared auto
 ### How to reproduce
 
 ```bash
-git clone https://github.com/user/gale && cd gale
+git clone https://github.com/LyricalString/gale && cd gale
 cargo build --release
 python3 tests/differential/run.py --benchmark         # all repos
 python3 tests/differential/run.py bootstrap --benchmark  # specific repo

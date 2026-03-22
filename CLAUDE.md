@@ -11,6 +11,7 @@ Gale is a **drop-in replacement for [Stylelint](https://stylelint.io/)**, writte
 - 0 false positives, 0 false negatives across 16 real-world repos
 - 100x-400x faster than Stylelint
 - Published on npm as `@lyricalstring/gale`
+- Published on crates.io as `gale-lint` (binary name is `gale`)
 
 ## Build and test commands
 
@@ -386,7 +387,11 @@ Three workflows:
 
 The npm package (`@lyricalstring/gale`) uses a postinstall script (`npm/install.js`) that downloads the correct platform binary from GitHub Releases. Supported platforms: `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`.
 
-The `scripts/build-npm.sh` script handles building for all platforms and documents the publish workflow.
+The `scripts/build-npm.sh` script handles building the binary and copying it into `npm/bin/`.
+
+### crates.io
+
+The crate is published as `gale-lint` on crates.io (the name `gale` was taken). The binary name is `gale`. Install via `cargo install gale-lint`.
 
 ### Releasing a new version
 

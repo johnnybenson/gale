@@ -19,3 +19,5 @@ tests/differential/results/
 *.swo
 .DS_Store
 dist/
+.claude/
+__pycache__/

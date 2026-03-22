@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Build and package Gale binaries for npm distribution.
+# Build and package the Gale binary for npm distribution.
 #
 # Usage:
 #   ./scripts/build-npm.sh                 # Build for current platform only
 #   ./scripts/build-npm.sh --all           # Build for all supported platforms (requires cross)
-#   ./scripts/build-npm.sh --version 0.2.0 # Set version across all packages before building
+#   ./scripts/build-npm.sh --version 0.2.0 # Set version in npm/package.json before building
 #
 set -euo pipefail
 
@@ -40,44 +40,20 @@ done
 # Version sync
 # --------------------------------------------------------------------------
 if [[ -n "$VERSION" ]]; then
-  echo "==> Syncing version to $VERSION across all npm packages..."
-
-  # Update main package version and its optionalDependencies
-  cd "$NPM_DIR/gale-linter"
+  echo "==> Syncing version to $VERSION in npm/package.json..."
+  cd "$NPM_DIR"
   npm version "$VERSION" --no-git-tag-version --allow-same-version 2>/dev/null
-
-  # Update optionalDependencies to match
-  node -e "
-    const fs = require('fs');
-    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-    for (const dep of Object.keys(pkg.optionalDependencies || {})) {
-      pkg.optionalDependencies[dep] = '$VERSION';
-    }
-    fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
-  "
-
-  # Update each platform package
-  for dir in "$NPM_DIR"/@gale-linter/cli-*/; do
-    if [[ -f "$dir/package.json" ]]; then
-      cd "$dir"
-      npm version "$VERSION" --no-git-tag-version --allow-same-version 2>/dev/null
-    fi
-  done
-
-  echo "    All packages set to $VERSION"
+  echo "    npm package set to $VERSION"
 fi
 
 # --------------------------------------------------------------------------
-# Target definitions: rust_target -> npm_platform_dir : binary_name
+# Target definitions: rust_target -> artifact_name
 # --------------------------------------------------------------------------
 declare -A TARGETS=(
-  ["aarch64-apple-darwin"]="@gale-linter/cli-darwin-arm64:gale"
-  ["x86_64-apple-darwin"]="@gale-linter/cli-darwin-x64:gale"
-  ["x86_64-unknown-linux-gnu"]="@gale-linter/cli-linux-x64:gale"
-  ["aarch64-unknown-linux-gnu"]="@gale-linter/cli-linux-arm64:gale"
-  ["x86_64-unknown-linux-musl"]="@gale-linter/cli-linux-x64-musl:gale"
-  ["aarch64-unknown-linux-musl"]="@gale-linter/cli-linux-arm64-musl:gale"
-  ["x86_64-pc-windows-msvc"]="@gale-linter/cli-win32-x64:gale.exe"
+  ["aarch64-apple-darwin"]="gale-aarch64-apple-darwin"
+  ["x86_64-apple-darwin"]="gale-x86_64-apple-darwin"
+  ["x86_64-unknown-linux-gnu"]="gale-x86_64-unknown-linux-gnu"
+  ["aarch64-unknown-linux-gnu"]="gale-aarch64-unknown-linux-gnu"
 )
 
 # --------------------------------------------------------------------------
@@ -93,7 +69,6 @@ detect_current_target() {
     Darwin-x86_64)  echo "x86_64-apple-darwin" ;;
     Linux-x86_64)   echo "x86_64-unknown-linux-gnu" ;;
     Linux-aarch64)  echo "aarch64-unknown-linux-gnu" ;;
-    MINGW*-x86_64|MSYS*-x86_64|CYGWIN*-x86_64) echo "x86_64-pc-windows-msvc" ;;
     *)
       echo "ERROR: Cannot detect Rust target for $os-$arch" >&2
       exit 1
@@ -106,26 +81,24 @@ detect_current_target() {
 # --------------------------------------------------------------------------
 build_target() {
   local rust_target="$1"
-  local npm_info="${TARGETS[$rust_target]}"
-  local npm_dir="${npm_info%%:*}"
-  local binary_name="${npm_info##*:}"
   local use_cross="$2"
 
   echo "==> Building for $rust_target..."
 
   if [[ "$use_cross" == "true" ]]; then
     cross build --release --target "$rust_target" --manifest-path "$ROOT/Cargo.toml"
-    local src="$ROOT/target/$rust_target/release/$binary_name"
+    local src="$ROOT/target/$rust_target/release/gale"
   else
     cargo build --release --manifest-path "$ROOT/Cargo.toml"
-    local src="$ROOT/target/release/$binary_name"
+    local src="$ROOT/target/release/gale"
   fi
 
-  local dest="$NPM_DIR/$npm_dir/$binary_name"
+  local dest="$NPM_DIR/bin/gale"
   echo "    Copying $src -> $dest"
+  mkdir -p "$NPM_DIR/bin"
   cp "$src" "$dest"
   chmod +x "$dest"
-  echo "    Done: $rust_target -> $npm_dir/$binary_name"
+  echo "    Done: $rust_target"
 }
 
 # --------------------------------------------------------------------------
@@ -148,7 +121,6 @@ if [[ "$BUILD_ALL" == "true" ]]; then
 
   for rust_target in "${!TARGETS[@]}"; do
     if [[ "$rust_target" == "$CURRENT_TARGET" ]]; then
-      # Native build — no need for cross
       build_target "$rust_target" "false"
     else
       build_target "$rust_target" "true"
@@ -165,15 +137,9 @@ echo "=========================================="
 echo " Build complete!"
 echo "=========================================="
 echo ""
-echo "Packages ready in: $NPM_DIR/"
+echo "Binary ready in: $NPM_DIR/bin/gale"
 echo ""
-echo "To publish (platform packages first, then main package):"
+echo "To publish:"
 echo ""
-echo "  # 1. Publish platform packages"
-echo "  for dir in $NPM_DIR/@gale-linter/cli-*/; do"
-echo "    (cd \"\$dir\" && npm publish --access public)"
-echo "  done"
-echo ""
-echo "  # 2. Publish main package"
-echo "  (cd $NPM_DIR/gale-linter && npm publish --access public)"
+echo "  cd $NPM_DIR && npm publish --access public"
 echo ""

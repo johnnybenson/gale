@@ -1,43 +1,28 @@
 # Publishing Gale to npm
 
-Gale is distributed on npm as precompiled platform-specific binaries, following the
-same pattern used by [Biome](https://biomejs.dev) and other Rust-to-npm tools.
+Gale is distributed on npm as `@lyricalstring/gale`. The package uses a postinstall
+script that downloads the correct precompiled binary from GitHub Releases.
 
 ## Package layout
 
-| npm package | Contents |
-|---|---|
-| `gale-linter` | Main package with JS wrapper + postinstall. Declares platform packages as `optionalDependencies`. |
-| `@gale-linter/cli-darwin-arm64` | macOS Apple Silicon binary |
-| `@gale-linter/cli-darwin-x64` | macOS Intel binary |
-| `@gale-linter/cli-linux-x64` | Linux x64 (glibc) binary |
-| `@gale-linter/cli-linux-arm64` | Linux ARM64 (glibc) binary |
-| `@gale-linter/cli-linux-x64-musl` | Linux x64 (musl/Alpine) binary |
-| `@gale-linter/cli-linux-arm64-musl` | Linux ARM64 (musl/Alpine) binary |
-| `@gale-linter/cli-win32-x64` | Windows x64 binary |
+```
+npm/
+  package.json    @lyricalstring/gale — main package
+  install.js      Postinstall script (downloads platform binary from GitHub Releases)
+  bin/gale        Placeholder script (replaced by real binary on install)
+  README.md       npm page README
+```
 
-When a user runs `bun install gale-linter`, their package manager resolves only the
-`optionalDependency` matching their OS/arch. The `bin/gale` wrapper script uses
-`require.resolve()` to find the platform binary at runtime.
+When a user runs `npm install @lyricalstring/gale`, the postinstall script
+(`install.js`) detects the platform and downloads the matching binary from the
+GitHub Release matching the package version.
+
+Supported platforms: `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`.
 
 ## Prerequisites
 
-- npm account with publish access to the `@gale-linter` scope
-- Create the scope on npmjs.com first: https://www.npmjs.com/org/create
-- For cross-compilation: `cargo install cross` + Docker
-
-## First-time setup
-
-```bash
-# 1. Create the @gale-linter org on npm (do this once)
-npm org create gale-linter
-
-# 2. Log in to npm
-npm login
-
-# 3. Verify you can publish to the scope
-npm access ls-packages @gale-linter
-```
+- npm account with publish access to the `@lyricalstring` scope
+- GitHub Release with precompiled binaries for the target version
 
 ## Release process
 
@@ -46,75 +31,52 @@ npm access ls-packages @gale-linter
 Push a git tag matching `v*` (e.g. `v0.2.0`) to trigger the release workflow:
 
 ```bash
+# 1. Update workspace.package.version in Cargo.toml
+# 2. Commit the version bump
 git tag v0.2.0
-git push --tags
+git push && git push --tags
 ```
 
 The workflow will:
-1. Build binaries for all platforms in parallel
-2. Update version numbers
-3. Publish platform packages
-4. Publish the main `gale-linter` package
-5. Create a GitHub Release with the binaries attached
+1. Build Linux binaries (x64 + arm64)
+2. Create a GitHub Release with the binaries
+3. Set the npm package version to match
+4. Publish `@lyricalstring/gale` to npm
 
 ### Option B: Manual
 
 ```bash
-# 1. Set the version across all packages
-./scripts/build-npm.sh --version 0.2.0
-
-# 2. Build for current platform (or --all with cross + Docker)
+# 1. Build the binary for your platform
 ./scripts/build-npm.sh
 
-# 3. Publish platform packages first — they must exist before the main package
-for dir in npm/@gale-linter/cli-*/; do
-  (cd "$dir" && npm publish --access public)
-done
+# 2. Set the version
+./scripts/build-npm.sh --version 0.2.0
 
-# 4. Publish the main package
-(cd npm/gale-linter && npm publish --access public)
+# 3. Publish
+cd npm && npm publish --access public
 ```
 
-### Option C: CI matrix build (recommended for production)
-
-For best results, build each platform natively in CI rather than cross-compiling.
-Each CI job builds one target, then a final job publishes everything.
-
-Example matrix:
-
-| Runner | Rust target | npm package |
-|---|---|---|
-| `macos-14` (ARM) | `aarch64-apple-darwin` | `@gale-linter/cli-darwin-arm64` |
-| `macos-13` (Intel) | `x86_64-apple-darwin` | `@gale-linter/cli-darwin-x64` |
-| `ubuntu-latest` | `x86_64-unknown-linux-gnu` | `@gale-linter/cli-linux-x64` |
-| `ubuntu-latest` + cross | `aarch64-unknown-linux-gnu` | `@gale-linter/cli-linux-arm64` |
-| `ubuntu-latest` + cross | `x86_64-unknown-linux-musl` | `@gale-linter/cli-linux-x64-musl` |
-| `ubuntu-latest` + cross | `aarch64-unknown-linux-musl` | `@gale-linter/cli-linux-arm64-musl` |
-| `windows-latest` | `x86_64-pc-windows-msvc` | `@gale-linter/cli-win32-x64` |
+Note: For users to install successfully, the GitHub Release for the matching
+version must contain binaries for all supported platforms. Use the CI release
+workflow for production releases.
 
 ## Rust targets reference
 
-| npm platform | Rust target | Build tool |
+| Platform | Rust target | GitHub Release artifact name |
 |---|---|---|
-| darwin-arm64 | `aarch64-apple-darwin` | `cargo` (native on M1+) |
-| darwin-x64 | `x86_64-apple-darwin` | `cargo` (native or `rustup target add`) |
-| linux-x64 | `x86_64-unknown-linux-gnu` | `cargo` (native) or `cross` |
-| linux-arm64 | `aarch64-unknown-linux-gnu` | `cross` |
-| linux-x64-musl | `x86_64-unknown-linux-musl` | `cross` |
-| linux-arm64-musl | `aarch64-unknown-linux-musl` | `cross` |
-| win32-x64 | `x86_64-pc-windows-msvc` | `cargo` (native on Windows) or `cross` |
+| macOS ARM (M1+) | `aarch64-apple-darwin` | `gale-aarch64-apple-darwin` |
+| macOS Intel | `x86_64-apple-darwin` | `gale-x86_64-apple-darwin` |
+| Linux x64 | `x86_64-unknown-linux-gnu` | `gale-x86_64-unknown-linux-gnu` |
+| Linux ARM64 | `aarch64-unknown-linux-gnu` | `gale-aarch64-unknown-linux-gnu` |
 
-## Version management
+## Crates.io
 
-All packages must have the same version. The build script handles this:
+The Rust crate is published separately as `gale-lint` on crates.io (since the
+name `gale` was already taken). The binary it installs is still called `gale`.
 
 ```bash
-./scripts/build-npm.sh --version 0.2.0
+cargo install gale-lint
 ```
-
-This updates:
-- `npm/gale-linter/package.json` — version + all `optionalDependencies` versions
-- `npm/@gale-linter/cli-*/package.json` — version in each platform package
 
 ## Testing locally
 
@@ -123,24 +85,20 @@ This updates:
 ./scripts/build-npm.sh
 
 # 2. Pack (dry run) to see what would be published
-(cd npm/gale-linter && npm pack --dry-run)
-(cd npm/@gale-linter/cli-darwin-arm64 && npm pack --dry-run)
+cd npm && npm pack --dry-run
 
 # 3. Test the full install flow locally
 mkdir /tmp/gale-test && cd /tmp/gale-test
 npm init -y
-npm install /path/to/gale/npm/gale-linter
+npm install /path/to/gale/npm
 npx gale --version
 ```
 
 ## Troubleshooting
 
-**"Platform package was not installed"**: Some package managers skip optional
-dependencies. Users can set `GALE_BINARY=/path/to/gale` as a workaround.
+**"Gale binary not found"**: The postinstall download may have failed. Run
+`npm rebuild @lyricalstring/gale` to retry, or check network access to
+`github.com`.
 
-**musl detection**: The wrapper script detects musl by running `ldd --version`
-and checking for "musl" in the output. Alpine Linux and similar distros will
-get the musl variant automatically.
-
-**Binary not executable**: The build script sets `chmod +x` on the binary.
-If publishing from Windows, ensure the execute bit is preserved.
+**Unsupported platform**: The postinstall script only supports darwin and linux
+on arm64/x64. Windows is not yet supported via npm. Build from source instead.
