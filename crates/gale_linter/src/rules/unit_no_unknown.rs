@@ -211,6 +211,18 @@ fn extract_units_with_context(value: &str) -> Vec<UnitOccurrence> {
                     }
                     continue;
                 }
+                // Skip SCSS map keys: tokens like `2xl:` where the "unit" is
+                // actually part of a map key (e.g., `(2xl: value)`).
+                let mut peek = i;
+                while peek < len && chars[peek].is_ascii_whitespace() {
+                    peek += 1;
+                }
+                if peek < len && chars[peek] == ':' {
+                    // Looks like a map key — skip this token entirely.
+                    i = peek + 1;
+                    continue;
+                }
+
                 let unit: String = chars[unit_char_start..i].iter().collect();
                 let func = func_stack.last().cloned();
                 results.push(UnitOccurrence {
@@ -396,7 +408,31 @@ impl Rule for UnitNoUnknown {
             CssNode::AtRule(at_rule) => {
                 if !at_rule.params.is_empty() {
                     let at_name = at_rule.name.to_ascii_lowercase();
-                    if at_name != "font-face" {
+                    // Skip at-rules whose params are identifiers, not CSS values
+                    if matches!(
+                        at_name.as_str(),
+                        "font-face"
+                            | "mixin"
+                            | "include"
+                            | "function"
+                            | "extend"
+                            | "import"
+                            | "use"
+                            | "forward"
+                            | "at-root"
+                            | "return"
+                            | "debug"
+                            | "warn"
+                            | "error"
+                            | "each"
+                            | "for"
+                            | "while"
+                            | "namespace"
+                            | "layer"
+                            | "charset"
+                    ) {
+                        // skip
+                    } else {
                         let params_offset = find_params_offset(ctx.source, at_rule.span.offset);
                         check_at_rule_params(
                             &at_rule.params,
@@ -643,5 +679,46 @@ mod tests {
     fn does_not_extract_unit_from_function_names() {
         let d = UnitNoUnknown.check(&style_with_value("scale3d(1.1, 1.1, 1.1)"), &ctx());
         assert!(d.is_empty());
+    }
+
+    #[test]
+    fn skips_scss_map_keys() {
+        // SCSS map keys like `2xl:` should not be treated as "number 2 + unit xl"
+        let units = extract_units_with_context("2xl: 100px");
+        let unit_names: Vec<&str> = units.iter().map(|u| u.unit.as_str()).collect();
+        assert!(
+            !unit_names.contains(&"xl"),
+            "should not extract 'xl' from SCSS map key '2xl:'; got: {:?}",
+            unit_names
+        );
+        // The value part (100px) should still be parsed
+        assert!(
+            unit_names.contains(&"px"),
+            "should still extract 'px' from value; got: {:?}",
+            unit_names
+        );
+    }
+
+    #[test]
+    fn skips_scss_map_key_with_whitespace() {
+        // `2xs :` with whitespace before colon
+        let units = extract_units_with_context("2xs : 50rem");
+        let unit_names: Vec<&str> = units.iter().map(|u| u.unit.as_str()).collect();
+        assert!(
+            !unit_names.contains(&"xs"),
+            "should not extract 'xs' from map key '2xs :'; got: {:?}",
+            unit_names
+        );
+    }
+
+    #[test]
+    fn still_reports_unknown_unit_not_followed_by_colon() {
+        let units = extract_units_with_context("2xl");
+        let unit_names: Vec<&str> = units.iter().map(|u| u.unit.as_str()).collect();
+        assert!(
+            unit_names.contains(&"xl"),
+            "should extract 'xl' when not followed by colon; got: {:?}",
+            unit_names
+        );
     }
 }

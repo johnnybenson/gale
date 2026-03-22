@@ -869,6 +869,13 @@ pub fn resolve_preset(name: &str) -> Option<HashMap<String, RuleConfig>> {
                     })),
                 },
             );
+            rules.insert(
+                "length-zero-no-unit".to_string(),
+                RuleConfig {
+                    severity: Some(Severity::Warning),
+                    options: Some(serde_json::json!({"ignore": ["custom-properties"]})),
+                },
+            );
             Some(rules)
         }
         "stylelint-config-standard-scss" => {
@@ -928,6 +935,13 @@ pub fn resolve_preset(name: &str) -> Option<HashMap<String, RuleConfig>> {
                     options: Some(serde_json::json!({
                         "ignoreValues": ["box", "inline-box"]
                     })),
+                },
+            );
+            rules.insert(
+                "length-zero-no-unit".to_string(),
+                RuleConfig {
+                    severity: Some(Severity::Warning),
+                    options: Some(serde_json::json!({"ignore": ["custom-properties"]})),
                 },
             );
             // Disable rules that conflict with SCSS (inherited from recommended-scss)
@@ -3551,6 +3565,34 @@ formatter: text
     fn unknown_preset_returns_none() {
         assert!(resolve_preset("gale:nonexistent").is_none());
         assert!(resolve_preset("stylelint:recommended").is_none());
+    }
+
+    #[test]
+    fn standard_preset_includes_length_zero_no_unit_ignore_custom_properties() {
+        let preset = resolve_preset("stylelint-config-standard").unwrap();
+        let rule = preset.get("length-zero-no-unit").expect("length-zero-no-unit should be in standard preset");
+        let opts = rule.options.as_ref().expect("should have options");
+        let ignore = opts.get("ignore").expect("should have ignore key");
+        let arr = ignore.as_array().expect("ignore should be an array");
+        assert!(
+            arr.iter().any(|v| v.as_str() == Some("custom-properties")),
+            "ignore should contain 'custom-properties'; got: {:?}",
+            arr
+        );
+    }
+
+    #[test]
+    fn standard_scss_preset_includes_length_zero_no_unit_ignore_custom_properties() {
+        let preset = resolve_preset("stylelint-config-standard-scss").unwrap();
+        let rule = preset.get("length-zero-no-unit").expect("length-zero-no-unit should be in standard-scss preset");
+        let opts = rule.options.as_ref().expect("should have options");
+        let ignore = opts.get("ignore").expect("should have ignore key");
+        let arr = ignore.as_array().expect("ignore should be an array");
+        assert!(
+            arr.iter().any(|v| v.as_str() == Some("custom-properties")),
+            "ignore should contain 'custom-properties'; got: {:?}",
+            arr
+        );
     }
 
     #[test]

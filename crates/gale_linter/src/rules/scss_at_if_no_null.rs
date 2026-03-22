@@ -36,6 +36,14 @@ impl Rule for ScssAtIfNoNull {
         }
 
         let params = at.params.to_ascii_lowercase();
+
+        // Stylelint's scss/at-if-no-null skips `!= null and ...` patterns —
+        // these are compound conditions where the null check is part of a
+        // larger boolean expression and removing it would change semantics.
+        if params.contains("!= null and ") {
+            return vec![];
+        }
+
         if params.contains("== null") || params.contains("!= null") {
             vec![
                 Diagnostic::new(self.name(), "Unexpected null comparison in @if condition")
@@ -92,6 +100,13 @@ mod tests {
     #[test]
     fn allows_not_variable() {
         let d = ScssAtIfNoNull.check(&if_rule("not $var"), &scss_ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn allows_not_equals_null_and_compound() {
+        // `!= null and <expr>` is a compound condition — Stylelint skips these.
+        let d = ScssAtIfNoNull.check(&if_rule("$var != null and $var != ''"), &scss_ctx());
         assert!(d.is_empty());
     }
 

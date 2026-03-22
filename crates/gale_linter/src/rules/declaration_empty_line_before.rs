@@ -410,11 +410,19 @@ fn is_after_block(source: &str, offset: usize) -> bool {
 /// Walks backwards through the source to find the previous non-empty, non-comment
 /// line and checks if it looks like a standard CSS declaration (contains `:` and
 /// doesn't start with `--`, `$`, or `@`).
+///
+/// Handles multi-line declarations: when a value spans multiple lines (e.g. with
+/// closing `)`, `);`, or comma-continued values), we walk past continuation lines
+/// to find the actual property declaration line with `:`.
 fn is_after_declaration(source: &str, offset: usize) -> bool {
     if offset == 0 || offset > source.len() {
         return false;
     }
     let before = &source[..offset];
+
+    // Track nesting depth for parentheses — when we encounter `)` or `);`
+    // we need to walk back to find the matching `(` to skip the whole group.
+    let mut paren_depth: i32 = 0;
 
     // Walk backwards to find the previous meaningful line
     for line in before.lines().rev() {
@@ -422,27 +430,109 @@ fn is_after_declaration(source: &str, offset: usize) -> bool {
         if stripped.is_empty() {
             continue;
         }
-        // Skip comments
+        // Skip comments — but extract the code portion before inline comments
         if stripped.starts_with("//") || stripped.starts_with("/*") || stripped.ends_with("*/") {
-            // If it's a trailing inline comment like `color: red; /* comment */`
-            // we need to check if there's a declaration before the comment
             if let Some(comment_start) = stripped.find("/*") {
                 let before_comment = stripped[..comment_start].trim();
                 if !before_comment.is_empty() {
-                    return is_declaration_like(before_comment);
+                    // Use the code before the comment as the effective line
+                    // and fall through to normal processing below
+                    let effective = before_comment;
+                    // Count parens in the effective line
+                    let for_parens = effective.strip_suffix(';').unwrap_or(effective);
+                    for ch in for_parens.chars().rev() {
+                        match ch {
+                            ')' => paren_depth += 1,
+                            '(' => paren_depth -= 1,
+                            _ => {}
+                        }
+                    }
+                    if paren_depth > 0 {
+                        continue;
+                    }
+                    if is_declaration_like(effective) {
+                        return true;
+                    }
+                    if is_value_continuation(effective) {
+                        continue;
+                    }
+                    return false;
                 }
             }
             continue;
         }
         // If the line ends with `}`, it's a block, not a declaration
-        if stripped.ends_with('}') {
+        if stripped.ends_with('}') && paren_depth == 0 {
             return false;
         }
         // If the line ends with `{`, it's a selector/at-rule
-        if stripped.ends_with('{') {
+        if stripped.ends_with('{') && paren_depth == 0 {
             return false;
         }
-        return is_declaration_like(stripped);
+
+        // Count parentheses on this line (in reverse order) to track nesting.
+        // Strip a trailing semicolon before counting — `);` ends a declaration
+        // but the `;` is not part of paren nesting.
+        let for_parens = stripped.strip_suffix(';').unwrap_or(stripped);
+        for ch in for_parens.chars().rev() {
+            match ch {
+                ')' => paren_depth += 1,
+                '(' => paren_depth -= 1,
+                _ => {}
+            }
+        }
+
+        // If we're inside unclosed parens, keep walking back
+        if paren_depth > 0 {
+            continue;
+        }
+
+        // We've reached a line where parens are balanced (or we were never
+        // inside parens). Check if this line is a declaration.
+        if is_declaration_like(stripped) {
+            return true;
+        }
+
+        // If the line is a continuation (no `:`, doesn't end with `{` or `}`,
+        // and looks like an indented value continuation — e.g. comma-separated
+        // multi-line values), keep walking back to find the property line.
+        if is_value_continuation(stripped) {
+            continue;
+        }
+
+        return false;
+    }
+    false
+}
+
+/// Check if a line looks like a continuation of a multi-line declaration value.
+///
+/// Continuation lines typically:
+/// - End with a comma (comma-separated value list)
+/// - Are just `)` or `);` (closing a function call) — handled by paren tracking
+/// - Don't contain `:` and don't look like selectors or at-rules
+/// - Are indented value fragments without a property name (no `:`)
+fn is_value_continuation(line: &str) -> bool {
+    // Lines ending with comma are value continuations (e.g. multi-line box-shadow)
+    if line.ends_with(',') {
+        return true;
+    }
+    // Lines that are just closing parens with optional semicolon
+    let no_semi = line.strip_suffix(';').unwrap_or(line);
+    if no_semi.chars().all(|c| c == ')' || c.is_whitespace()) && !no_semi.is_empty() {
+        return true;
+    }
+    // A line with no `:` that doesn't look like a selector, at-rule, or block
+    // boundary is likely a continuation of a multi-line value. This handles
+    // cases like the last line of a comma-separated value list:
+    //   box-shadow: 0 0 1px red,
+    //     0 0 2px blue,
+    //     0 0 3px green;   <-- this line
+    if !line.contains(':') && !line.starts_with('@')
+        && !line.starts_with("--") && !line.ends_with('{') && !line.ends_with('}')
+        && !line.starts_with('.')  && !line.starts_with('#') && !line.starts_with('&')
+    {
+        return true;
     }
     false
 }
@@ -689,6 +779,64 @@ mod tests {
         assert!(
             is_first_in_block_by_source(src, top_offset),
             "top should be first-nested after {{"
+        );
+    }
+
+    #[test]
+    fn is_after_declaration_multiline_paren_value() {
+        // Multi-line declaration with nested function calls ending with );
+        // The declaration after it should be recognized as after-declaration.
+        let src = "a {\n  inset-block-start: min(\n    calc(\n      (layout.size('height') - convert.to-rem(16px)) / 2\n    ),\n    var(--temp-padding)\n  );\n  inset-inline-end: layout.density('padding-inline');\n}";
+        let end_offset = src.find("inset-inline-end").unwrap();
+        assert!(
+            is_after_declaration(src, end_offset),
+            "inset-inline-end should be recognized as after a multi-line declaration"
+        );
+    }
+
+    #[test]
+    fn is_after_declaration_multiline_comma_value() {
+        // Multi-line box-shadow with comma continuations
+        let src = "a {\n  box-shadow: 0 0 1px red,\n    0 0 2px blue,\n    0 0 3px green;\n  animation: fade 1s;\n}";
+        let anim_offset = src.find("animation").unwrap();
+        assert!(
+            is_after_declaration(src, anim_offset),
+            "animation should be recognized as after a multi-line box-shadow declaration"
+        );
+    }
+
+    #[test]
+    fn multiline_decl_ignore_after_declaration() {
+        // Full integration test: with ignore: ["after-declaration"], a declaration
+        // following a multi-line value should not be flagged.
+        let opts = serde_json::json!(["always", {"except": ["first-nested"], "ignore": ["after-declaration"]}]);
+        let src = "a {\n  inset-block-start: min(\n    calc(1px),\n    var(--x)\n  );\n  inset-inline-end: 10px;\n}";
+        let inset_start = src.find("inset-block-start").unwrap();
+        let inset_end_offset = src.find("inset-inline-end").unwrap();
+        let node = CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![
+                Declaration {
+                    property: "inset-block-start".to_string(),
+                    value: "min(calc(1px), var(--x))".to_string(),
+                    span: ParserSpan::new(inset_start, "inset-block-start:".len()),
+                    important: false,
+                },
+                Declaration {
+                    property: "inset-inline-end".to_string(),
+                    value: "10px".to_string(),
+                    span: ParserSpan::new(inset_end_offset, "inset-inline-end: 10px;".len()),
+                    important: false,
+                },
+            ],
+            children: vec![],
+            span: ParserSpan::new(0, src.len()),
+        });
+        let d = DeclarationEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
+        assert!(
+            d.is_empty(),
+            "Expected no diagnostics for declaration after multi-line value, got {:?}",
+            d.iter().map(|d| &d.message).collect::<Vec<_>>()
         );
     }
 }

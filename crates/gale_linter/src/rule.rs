@@ -39,12 +39,15 @@ impl<'a> RuleContext<'a> {
 
     /// Extract the **secondary options object** from Stylelint-format options.
     ///
-    /// Only present when options are in array form `[primary, secondary]` and
-    /// the secondary element is an object.
+    /// Present when options are in array form `[primary, secondary]` (returns
+    /// the second element), OR when options is a bare object (returned directly,
+    /// e.g. from preset configs that store `{"ignore": [...]}` without a
+    /// primary option wrapper).
     pub fn secondary_options(&self) -> Option<&'a serde_json::Value> {
         let value = self.options?;
         match value {
             serde_json::Value::Array(arr) => arr.get(1),
+            serde_json::Value::Object(_) => Some(value),
             _ => None,
         }
     }

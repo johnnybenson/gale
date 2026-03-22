@@ -42,11 +42,18 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
         let ignore_list: Vec<String> = ctx
             .options
             .and_then(|v| v.get("ignore"))
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|item| item.as_str().map(|s| s.to_string()))
-                    .collect()
+            .and_then(|v| {
+                if let Some(arr) = v.as_array() {
+                    Some(
+                        arr.iter()
+                            .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                            .collect(),
+                    )
+                } else if let Some(s) = v.as_str() {
+                    Some(vec![s.to_string()])
+                } else {
+                    None
+                }
             })
             .unwrap_or_default();
 
@@ -1122,5 +1129,45 @@ mod tests {
     fn test_equal_value_syntaxes_different_functions() {
         assert!(!is_equal_value_syntaxes("min(10px, 11px)", "max(10px, 11px)", "width"));
         assert!(!is_equal_value_syntaxes("100%", "fit-content", "width"));
+    }
+
+    #[test]
+    fn ignore_option_accepts_single_string() {
+        // The `ignore` option should accept a single string, not just an array
+        let rule = DeclarationBlockNoDuplicateProperties;
+        let node = CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![
+                Declaration {
+                    property: "color".to_string(),
+                    value: "pink".to_string(),
+                    span: ParserSpan::new(4, 11),
+                    important: false,
+                },
+                Declaration {
+                    property: "color".to_string(),
+                    value: "orange".to_string(),
+                    span: ParserSpan::new(16, 13),
+                    important: false,
+                },
+            ],
+            children: vec![],
+            span: ParserSpan::new(0, 30),
+        });
+        let opts = serde_json::json!({
+            "ignore": "consecutive-duplicates-with-different-values"
+        });
+        let ctx = RuleContext {
+            file_path: "test.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: Some(&opts),
+        };
+        let diags = rule.check(&node, &ctx);
+        assert!(
+            diags.is_empty(),
+            "consecutive duplicates with different values should be allowed when ignore is a single string; got {} diagnostics",
+            diags.len()
+        );
     }
 }

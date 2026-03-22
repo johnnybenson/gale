@@ -5,19 +5,26 @@ use crate::rule::{Rule, RuleContext};
 
 /// Disallow redundant nesting selectors (`&`).
 ///
-/// Reports when `&` is used as the entire selector in a nested rule, which is
-/// redundant because the declarations could be placed in the parent rule.
+/// Reports when `&` appears at the start of a nested selector followed by a
+/// combinator or descendant selector, because the `&` can be removed without
+/// changing the meaning.
+///
+/// A standalone `& { ... }` is **not** flagged — it serves as a scoping
+/// mechanism (e.g. after `@include` or `@extend`).
 ///
 /// ```scss
 /// // Bad
 /// .foo {
-///   & { color: red; }
+///   & .bar { color: red; }   // → `.bar { color: red; }`
+///   & > .bar { color: red; } // → `> .bar { color: red; }`
 /// }
 ///
 /// // Good
 /// .foo {
-///   &:hover { color: red; }
-///   &.bar { color: red; }
+///   & { color: red; }        // scoping block
+///   &:hover { color: red; }  // pseudo-class append
+///   &.bar { color: red; }    // class append
+///   &__element { ... }       // BEM concatenation
 /// }
 /// ```
 ///
@@ -48,20 +55,56 @@ impl Rule for ScssSelectorNoRedundantNestingSelector {
 
         let mut diags = Vec::new();
 
-        // Check nested children for redundant `&` selectors
+        // Check nested children for redundant `&` selectors.
+        //
+        // A standalone `& { ... }` (where the entire selector is just `&`) is NOT
+        // flagged.  In SCSS it serves as a scoping mechanism (e.g. after `@include`
+        // or `@extend`), and Stylelint's scss/selector-no-redundant-nesting-selector
+        // does not flag it either.
+        //
+        // We only flag `&` when it appears at the **start** of a compound selector
+        // followed by a combinator or another simple selector — i.e. the `&` can be
+        // removed without changing the meaning:
+        //   `& .foo`  → `.foo`
+        //   `& > .bar` → `> .bar`
+        //   `& + .baz` → `+ .baz`
+        //   `& ~ .qux` → `~ .qux`
         for child in &rule.children {
             let selector = child.selector.trim();
 
-            // The selector is just `&` with nothing else
+            // Skip standalone `&` — it's a scoping block, not redundant.
             if selector == "&" {
-                diags.push(
-                    Diagnostic::new(
-                        self.name(),
-                        "Unexpected redundant nesting selector (&)".to_string(),
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(child.span.offset, child.span.length)),
-                );
+                continue;
+            }
+
+            // Flag `& <combinator-or-descendant> ...` patterns where the leading
+            // `&` is unnecessary.
+            if let Some(rest) = selector.strip_prefix('&') {
+                let after = rest.trim_start();
+                // After stripping `&` and whitespace the remainder must start with
+                // a simple selector or combinator — i.e. the `&` was at the
+                // beginning of a compound/complex selector.
+                // If the very first char after `&` is NOT a combinator char, class
+                // selector, id selector, pseudo-class/element, or attribute
+                // selector, then the `&` was concatenated (e.g. `&__element`) which
+                // is fine.
+                let redundant = if rest.starts_with(char::is_whitespace) {
+                    // `& .foo`, `& > .bar`, etc. — descendant / combinator after
+                    // whitespace: `&` is redundant.
+                    !after.is_empty()
+                } else {
+                    false
+                };
+                if redundant {
+                    diags.push(
+                        Diagnostic::new(
+                            self.name(),
+                            "Unexpected redundant nesting selector (&)".to_string(),
+                        )
+                        .severity(self.default_severity())
+                        .span(Span::new(child.span.offset, child.span.length)),
+                    );
+                }
             }
         }
 
@@ -122,8 +165,38 @@ mod tests {
     }
 
     #[test]
-    fn reports_redundant_ampersand() {
+    fn allows_standalone_ampersand_block() {
+        // A bare `& { ... }` is a scoping mechanism and should NOT be flagged.
         let node = nested_rule(".foo", "&");
+        assert!(
+            ScssSelectorNoRedundantNestingSelector
+                .check(&node, &scss_ctx())
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn reports_redundant_ampersand_descendant() {
+        // `& .bar` is redundant — can be written as `.bar`.
+        let node = nested_rule(".foo", "& .bar");
+        let d = ScssSelectorNoRedundantNestingSelector.check(&node, &scss_ctx());
+        assert_eq!(d.len(), 1);
+        assert!(d[0].message.contains("redundant"));
+    }
+
+    #[test]
+    fn reports_redundant_ampersand_child_combinator() {
+        // `& > .bar` is redundant — can be written as `> .bar`.
+        let node = nested_rule(".foo", "& > .bar");
+        let d = ScssSelectorNoRedundantNestingSelector.check(&node, &scss_ctx());
+        assert_eq!(d.len(), 1);
+        assert!(d[0].message.contains("redundant"));
+    }
+
+    #[test]
+    fn reports_redundant_ampersand_sibling_combinator() {
+        // `& + .bar` is redundant — can be written as `+ .bar`.
+        let node = nested_rule(".foo", "& + .bar");
         let d = ScssSelectorNoRedundantNestingSelector.check(&node, &scss_ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("redundant"));
@@ -150,8 +223,9 @@ mod tests {
     }
 
     #[test]
-    fn allows_descendant_selector() {
-        let node = nested_rule(".foo", "& .bar");
+    fn allows_ampersand_concatenation() {
+        // `&__element` is BEM-style concatenation, NOT redundant.
+        let node = nested_rule(".foo", "&__element");
         assert!(
             ScssSelectorNoRedundantNestingSelector
                 .check(&node, &scss_ctx())

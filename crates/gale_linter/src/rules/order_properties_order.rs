@@ -44,10 +44,19 @@ struct GroupInfo {
     flexible: bool,
 }
 
+/// A compiled regex pattern entry from the property order config.
+#[derive(Debug, Clone)]
+struct RegexEntry {
+    pattern: regex::Regex,
+    info: PropertyInfo,
+}
+
 /// Parsed configuration for the rule.
 struct Config {
     /// Map from lowercase property name to its ordering info.
     property_map: HashMap<String, PropertyInfo>,
+    /// Regex patterns for property matching (tried when exact match fails).
+    regex_patterns: Vec<RegexEntry>,
     /// Per-group settings (indexed by group_index).
     groups: Vec<GroupInfo>,
     /// How to handle unspecified properties.
@@ -126,7 +135,14 @@ impl Rule for OrderPropertiesOrder {
             let lookup = strip_vendor_prefix(&prop_lower);
             let is_vendor_prefixed = prop.starts_with('-');
 
-            let info = config.property_map.get(lookup);
+            let info = config.property_map.get(lookup).or_else(|| {
+                // Try regex patterns if exact match fails.
+                config
+                    .regex_patterns
+                    .iter()
+                    .find(|re| re.pattern.is_match(lookup))
+                    .map(|re| &re.info)
+            });
 
             if let Some(info) = info {
                 // === SPECIFIED PROPERTY ===
@@ -616,14 +632,59 @@ fn has_standalone_comment_or_atrule_before(source: &str, offset: usize) -> bool 
     false
 }
 
+/// Insert a property name or regex pattern (strings delimited by `/`) into the
+/// appropriate collection.
+fn insert_property_or_regex(
+    s: &str,
+    order_index: usize,
+    group_index: usize,
+    property_map: &mut HashMap<String, PropertyInfo>,
+    regex_patterns: &mut Vec<RegexEntry>,
+) {
+    let info = PropertyInfo {
+        order_index,
+        group_index,
+    };
+
+    // Detect regex patterns: strings starting and ending with `/`.
+    if s.starts_with('/') && s.ends_with('/') && s.len() > 2 {
+        let pattern_str = &s[1..s.len() - 1];
+        if let Ok(re) = regex::Regex::new(pattern_str) {
+            regex_patterns.push(RegexEntry {
+                pattern: re,
+                info,
+            });
+            return;
+        }
+        // If regex compilation fails, fall through and treat as a literal name.
+    }
+
+    property_map.insert(s.to_ascii_lowercase(), info);
+}
+
 /// Parse the rule configuration from the context.
 fn parse_config(ctx: &RuleContext) -> Option<Config> {
-    let primary = ctx.primary_option()?;
+    let options = ctx.options?;
     let secondary = ctx.secondary_options();
 
-    let arr = primary.as_array()?;
+    // The options can be:
+    // 1. A bare array of property groups: [{properties: [...]}, ...]
+    // 2. An array [primary_array, secondary_object]: [[...groups...], {unspecified: "bottom"}]
+    // We need the array of property groups.
+    let arr = match options {
+        serde_json::Value::Array(arr) => {
+            // Check if first element is an array (nested format)
+            if arr.first().map_or(false, |v| v.is_array()) {
+                arr.first().and_then(|v| v.as_array())?
+            } else {
+                arr
+            }
+        }
+        _ => return None,
+    };
 
     let mut property_map = HashMap::new();
+    let mut regex_patterns: Vec<RegexEntry> = Vec::new();
     let mut groups: Vec<GroupInfo> = Vec::new();
     let mut order_idx = 0usize;
     let mut group_idx = 0usize;
@@ -631,12 +692,12 @@ fn parse_config(ctx: &RuleContext) -> Option<Config> {
     for item in arr {
         match item {
             serde_json::Value::String(s) => {
-                property_map.insert(
-                    s.to_ascii_lowercase(),
-                    PropertyInfo {
-                        order_index: order_idx,
-                        group_index: group_idx,
-                    },
+                insert_property_or_regex(
+                    s,
+                    order_idx,
+                    group_idx,
+                    &mut property_map,
+                    &mut regex_patterns,
                 );
                 order_idx += 1;
                 groups.push(GroupInfo {
@@ -671,12 +732,12 @@ fn parse_config(ctx: &RuleContext) -> Option<Config> {
                 if let Some(props) = obj.get("properties").and_then(|v| v.as_array()) {
                     for prop in props {
                         if let Some(s) = prop.as_str() {
-                            property_map.insert(
-                                s.to_ascii_lowercase(),
-                                PropertyInfo {
-                                    order_index: order_idx,
-                                    group_index: group_idx,
-                                },
+                            insert_property_or_regex(
+                                s,
+                                order_idx,
+                                group_idx,
+                                &mut property_map,
+                                &mut regex_patterns,
                             );
                             order_idx += 1;
                         }
@@ -725,6 +786,7 @@ fn parse_config(ctx: &RuleContext) -> Option<Config> {
 
     Some(Config {
         property_map,
+        regex_patterns,
         groups,
         unspecified,
         empty_line_before_unspecified,
@@ -1006,6 +1068,55 @@ mod tests {
         assert_eq!(strip_vendor_prefix("-ms-flex"), "flex");
         assert_eq!(strip_vendor_prefix("-o-transition"), "transition");
         assert_eq!(strip_vendor_prefix("--custom"), "--custom");
+    }
+
+    #[test]
+    fn regex_pattern_matches_properties() {
+        // Config with a regex pattern `/^animation/` that should match
+        // any property starting with "animation".
+        let rule = OrderPropertiesOrder;
+        let options = serde_json::json!([
+            [
+                "display",
+                "/^animation/"
+            ]
+        ]);
+        let node = CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![
+                make_decl("display", "block", 4, 14),
+                make_decl("animation-name", "fade", 19, 21),
+            ],
+            children: vec![],
+            span: ParserSpan::new(0, 45),
+        });
+        // Correct order: display then animation-name (matches /^animation/).
+        let diags = rule.check(&node, &ctx_with_options(&options));
+        assert!(diags.is_empty());
+    }
+
+    #[test]
+    fn regex_pattern_wrong_order() {
+        let rule = OrderPropertiesOrder;
+        let options = serde_json::json!([
+            [
+                "/^animation/",
+                "display"
+            ]
+        ]);
+        let node = CssNode::Style(StyleRule {
+            selector: "a".to_string(),
+            declarations: vec![
+                make_decl("display", "block", 4, 14),
+                make_decl("animation-name", "fade", 19, 21),
+            ],
+            children: vec![],
+            span: ParserSpan::new(0, 45),
+        });
+        // Wrong order: display before animation-name, but /^animation/ should come first.
+        let diags = rule.check(&node, &ctx_with_options(&options));
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].message.contains("animation-name"));
     }
 
     #[test]
