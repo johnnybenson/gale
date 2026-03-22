@@ -81,7 +81,15 @@ impl Rule for StylisticDeclarationColonNewlineAfter {
                 in_value = false;
             }
 
-            // Detect property: value pattern inside blocks
+            // Skip SCSS line comments
+            if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                continue;
+            }
+
+            // Detect property: value pattern inside blocks only.
             if bytes[i] == b':' && depth > 0 && !in_value {
                 // Make sure this isn't a pseudo-selector (::before) or selector (:hover)
                 // A declaration colon is preceded by a property name (letters/hyphens)
@@ -129,6 +137,13 @@ impl Rule for StylisticDeclarationColonNewlineAfter {
                             let mut j = colon_pos + 1;
                             while j < len && (bytes[j] == b' ' || bytes[j] == b'\t') {
                                 j += 1;
+                            }
+                            // Skip SCSS map/list literals — `(` after colon is the
+                            // start of a multi-line map, not a value that needs a
+                            // newline after the colon.
+                            if j < len && (bytes[j] == b'(' || bytes[j] == b'[') {
+                                i += 1;
+                                continue;
                             }
                             if j < len && bytes[j] != b'\n' {
                                 diagnostics.push(

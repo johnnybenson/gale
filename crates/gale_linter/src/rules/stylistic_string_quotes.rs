@@ -34,13 +34,43 @@ impl Rule for StylisticStringQuotes {
         };
 
         while i < len {
-            // Skip comments
+            // Skip block comments
             if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
                 i += 2;
                 while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
                     i += 1;
                 }
+                if i + 1 < len {
+                    i += 2;
+                }
+                continue;
+            }
+
+            // Skip SCSS line comments
+            if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                continue;
+            }
+
+            // Skip SCSS interpolation #{...} — quotes inside are SCSS, not CSS
+            if bytes[i] == b'#' && i + 1 < len && bytes[i + 1] == b'{' {
                 i += 2;
+                let mut depth = 1;
+                while i < len && depth > 0 {
+                    if bytes[i] == b'{' {
+                        depth += 1;
+                    } else if bytes[i] == b'}' {
+                        depth -= 1;
+                    }
+                    if depth > 0 {
+                        i += 1;
+                    }
+                }
+                if i < len {
+                    i += 1;
+                }
                 continue;
             }
 

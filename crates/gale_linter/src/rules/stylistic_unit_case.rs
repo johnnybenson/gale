@@ -76,6 +76,22 @@ fn find_units(value: &str) -> Vec<(usize, String)> {
     let mut i = 0;
 
     while i < len {
+        // Skip quoted strings (e.g. content: "\00A0")
+        if bytes[i] == b'"' || bytes[i] == b'\'' {
+            let quote = bytes[i];
+            i += 1;
+            while i < len && bytes[i] != quote {
+                if bytes[i] == b'\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            if i < len {
+                i += 1;
+            }
+            continue;
+        }
+
         // Skip past a number (digits, dots)
         if bytes[i].is_ascii_digit()
             || (bytes[i] == b'.' && i + 1 < len && bytes[i + 1].is_ascii_digit())

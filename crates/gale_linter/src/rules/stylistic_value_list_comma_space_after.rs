@@ -32,15 +32,26 @@ impl Rule for StylisticValueListCommaSpaceAfter {
         let mut brace_depth = 0;
         // Track paren depth to skip function arguments (handled by function-comma rules)
         let mut paren_depth = 0;
+        // Track whether we're inside a declaration value (after `:`, before `;` or `}`)
+        let mut in_value = false;
 
         while i < len {
-            // Skip comments
+            // Skip block comments
             if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
                 i += 2;
                 while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
                     i += 1;
                 }
-                i += 2;
+                if i + 1 < len {
+                    i += 2;
+                }
+                continue;
+            }
+            // Skip SCSS line comments
+            if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
                 continue;
             }
             // Skip strings
@@ -60,11 +71,21 @@ impl Rule for StylisticValueListCommaSpaceAfter {
             }
 
             match bytes[i] {
-                b'{' => brace_depth += 1,
+                b'{' => {
+                    brace_depth += 1;
+                    in_value = false;
+                }
                 b'}' => {
                     if brace_depth > 0 {
                         brace_depth -= 1;
                     }
+                    in_value = false;
+                }
+                b';' | b'\n' => {
+                    in_value = false;
+                }
+                b':' if brace_depth > 0 && paren_depth == 0 => {
+                    in_value = true;
                 }
                 b'(' => paren_depth += 1,
                 b')' => {
@@ -72,7 +93,8 @@ impl Rule for StylisticValueListCommaSpaceAfter {
                         paren_depth -= 1;
                     }
                 }
-                b',' if brace_depth > 0 && paren_depth == 0 => {
+                // Only check commas inside declaration values, not selector commas
+                b',' if in_value && paren_depth == 0 => {
                     let comma_pos = i;
                     let after = comma_pos + 1;
                     let has_space = after < len && bytes[after] == b' ';

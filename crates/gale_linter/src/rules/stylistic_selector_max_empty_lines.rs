@@ -21,154 +21,97 @@ impl Rule for StylisticSelectorMaxEmptyLines {
         Severity::Warning
     }
 
-    fn check_root(&self, _nodes: &[CssNode], context: &RuleContext) -> Vec<Diagnostic> {
-        let max = context
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
+        let max = ctx
             .primary_option()
             .and_then(|v| v.as_u64())
             .unwrap_or(0) as usize;
 
-        let source = context.source;
-        let bytes = source.as_bytes();
-        let len = bytes.len();
-        let mut diagnostics = Vec::new();
-        let mut i = 0;
-        let mut brace_depth = 0;
-        let mut in_selector = true;
+        let CssNode::Style(rule) = node else {
+            return vec![];
+        };
 
-        while i < len {
-            // Skip strings
-            if bytes[i] == b'"' || bytes[i] == b'\'' {
-                let quote = bytes[i];
-                i += 1;
-                while i < len && bytes[i] != quote {
-                    if bytes[i] == b'\\' {
-                        i += 1;
-                    }
-                    i += 1;
+        // Check for consecutive empty lines within the selector string.
+        let selector = &rule.selector;
+        let mut consecutive_empty = 0usize;
+        let mut max_found = 0usize;
+
+        for line in selector.lines() {
+            if line.trim().is_empty() {
+                consecutive_empty += 1;
+                if consecutive_empty > max_found {
+                    max_found = consecutive_empty;
                 }
-                i += 1;
-                continue;
+            } else {
+                consecutive_empty = 0;
             }
-
-            // Skip comments
-            if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
-                i += 2;
-                while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
-                    i += 1;
-                }
-                i += 2;
-                continue;
-            }
-
-            if bytes[i] == b'{' {
-                brace_depth += 1;
-                in_selector = false;
-                i += 1;
-                continue;
-            }
-
-            if bytes[i] == b'}' {
-                if brace_depth > 0 {
-                    brace_depth -= 1;
-                }
-                in_selector = true;
-                i += 1;
-                continue;
-            }
-
-            if bytes[i] == b';' {
-                in_selector = true;
-                i += 1;
-                continue;
-            }
-
-            // Count consecutive empty lines within selectors
-            if in_selector && bytes[i] == b'\n' {
-                let line_start = i;
-                i += 1;
-                let mut consecutive_empty = 0;
-                while i < len {
-                    // Check if this line is empty (only whitespace until newline)
-                    let mut j = i;
-                    while j < len && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\r') {
-                        j += 1;
-                    }
-                    if j < len && bytes[j] == b'\n' {
-                        consecutive_empty += 1;
-                        i = j + 1;
-                    } else {
-                        break;
-                    }
-                }
-
-                if consecutive_empty > max {
-                    diagnostics.push(
-                        Diagnostic::new(
-                            self.name(),
-                            format!("Expected no more than {} empty line(s)", max),
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(line_start, i - line_start)),
-                    );
-                }
-                continue;
-            }
-
-            if !in_selector
-                && bytes[i] != b' '
-                && bytes[i] != b'\t'
-                && bytes[i] != b'\n'
-                && bytes[i] != b'\r'
-            {
-                // Non-whitespace inside a block -- still not in selector
-            }
-
-            i += 1;
         }
 
-        diagnostics
+        if max_found > max {
+            vec![
+                Diagnostic::new(
+                    self.name(),
+                    format!("Expected no more than {max} empty line(s)"),
+                )
+                .severity(self.default_severity())
+                .span(Span::new(rule.span.offset, rule.span.length)),
+            ]
+        } else {
+            vec![]
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gale_css_parser::Syntax;
+    use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
 
-    fn check(source: &str, max: u64) -> Vec<Diagnostic> {
+    fn check_selector(selector: &str, max: u64) -> Vec<Diagnostic> {
         let rule = StylisticSelectorMaxEmptyLines;
         let opts = serde_json::json!(max);
         let ctx = RuleContext {
             file_path: "test.css",
-            source,
+            source: "",
             syntax: Syntax::Css,
             options: Some(&opts),
         };
-        rule.check_root(&[], &ctx)
+        let node = CssNode::Style(StyleRule {
+            selector: selector.to_string(),
+            declarations: vec![Declaration {
+                property: "color".to_string(),
+                value: "red".to_string(),
+                span: ParserSpan::new(0, 0),
+                important: false,
+            }],
+            children: vec![],
+            span: ParserSpan::new(0, 0),
+        });
+        rule.check(&node, &ctx)
     }
 
     #[test]
     fn allows_no_empty_lines_in_selector() {
-        let d = check("a,\nb { color: red; }", 0);
+        let d = check_selector("a,\nb", 0);
         assert!(d.is_empty());
     }
 
     #[test]
     fn reports_empty_line_in_selector_when_max_zero() {
-        let d = check("a,\n\nb { color: red; }", 0);
+        let d = check_selector("a,\n\nb", 0);
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("no more than 0"));
     }
 
     #[test]
     fn allows_one_empty_line_when_max_one() {
-        let d = check("a,\n\nb { color: red; }", 1);
+        let d = check_selector("a,\n\nb", 1);
         assert!(d.is_empty());
     }
 
     #[test]
     fn reports_two_empty_lines_when_max_one() {
-        let d = check("a,\n\n\nb { color: red; }", 1);
+        let d = check_selector("a,\n\n\nb", 1);
         assert_eq!(d.len(), 1);
     }
 }

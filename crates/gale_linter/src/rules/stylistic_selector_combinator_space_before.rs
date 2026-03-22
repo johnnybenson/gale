@@ -48,13 +48,23 @@ impl Rule for StylisticSelectorCombinatorSpaceBefore {
                 continue;
             }
 
-            // Skip comments
+            // Skip block comments
             if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
                 i += 2;
                 while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
                     i += 1;
                 }
-                i += 2;
+                if i + 1 < len {
+                    i += 2;
+                }
+                continue;
+            }
+
+            // Skip SCSS line comments
+            if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
                 continue;
             }
 
@@ -66,15 +76,15 @@ impl Rule for StylisticSelectorCombinatorSpaceBefore {
             }
             if bytes[i] == b'}' {
                 depth -= 1;
-                if depth <= 0 {
+                if depth < 0 {
                     depth = 0;
                 }
-                in_selector = true;
+                in_selector = depth > 0;
                 i += 1;
                 continue;
             }
             if bytes[i] == b';' {
-                // After a declaration semicolon inside a block, still not in selector
+                in_selector = depth > 0;
                 i += 1;
                 continue;
             }

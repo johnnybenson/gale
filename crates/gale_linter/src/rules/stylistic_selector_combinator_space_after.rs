@@ -50,7 +50,7 @@ impl Rule for StylisticSelectorCombinatorSpaceAfter {
                 continue;
             }
 
-            // Skip comments
+            // Skip block comments
             if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
                 i += 2;
                 while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
@@ -58,6 +58,14 @@ impl Rule for StylisticSelectorCombinatorSpaceAfter {
                 }
                 if i + 1 < len {
                     i += 2;
+                }
+                continue;
+            }
+
+            // Skip SCSS line comments
+            if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
                 }
                 continue;
             }
@@ -70,10 +78,21 @@ impl Rule for StylisticSelectorCombinatorSpaceAfter {
             }
             if bytes[i] == b'}' {
                 depth -= 1;
-                if depth <= 0 {
+                if depth < 0 {
                     depth = 0;
                 }
-                in_selector = true;
+                // After a closing brace inside a parent block, next content
+                // is a selector.  At the top level, next content is NOT a selector
+                // (it could be an at-rule or the start of a new ruleset).
+                in_selector = depth > 0;
+                i += 1;
+                continue;
+            }
+
+            // Semicolons end declarations/at-rules.  After `;` inside a block,
+            // the next content could be a selector (for nested rules in SCSS).
+            if bytes[i] == b';' {
+                in_selector = depth > 0;
                 i += 1;
                 continue;
             }

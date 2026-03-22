@@ -47,11 +47,15 @@ impl Rule for CommentWhitespaceInside {
         }
 
         // Extract the inner content between /* and */, skipping any extra
-        // asterisks that form part of the opener/closer (e.g. /** ... **/).
-        // Stylelint treats `/**` the same as `/*` — the extra `*` chars are
-        // part of the comment marker, not the content.
+        // asterisks or `!` that form part of the opener/closer (e.g. /** ... **/ or /*! ... */).
+        // Stylelint treats `/**` and `/*!` the same as `/*` — the extra chars
+        // are part of the comment marker, not the content.
         let inner_full = &raw[2..raw.len() - 2];
-        let leading_stars = inner_full.chars().take_while(|c| *c == '*').count();
+        let leading_special = inner_full
+            .chars()
+            .take_while(|c| *c == '*' || *c == '!')
+            .count();
+        let leading_stars = leading_special;
         let trailing_stars = inner_full.chars().rev().take_while(|c| *c == '*').count();
         let inner_start = leading_stars;
         let inner_end = inner_full.len().saturating_sub(trailing_stars);

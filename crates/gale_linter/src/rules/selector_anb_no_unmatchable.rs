@@ -116,6 +116,11 @@ fn extract_anb_expressions(selector: &str) -> Vec<String> {
             }
             if end > abs_pos {
                 let content: String = chars[abs_pos..end].iter().collect();
+                // Skip SCSS interpolation — the actual value is dynamic
+                if content.contains("#{") || content.contains("@{") {
+                    search_from = abs_pos;
+                    continue;
+                }
                 // The content before any "of" keyword (for :nth-child(An+B of S))
                 let anb_part = if let Some(of_pos) = content.to_ascii_lowercase().find(" of ") {
                     &content[..of_pos]

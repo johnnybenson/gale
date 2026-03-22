@@ -74,9 +74,39 @@ impl Rule for StylisticDeclarationBlockSemicolonNewlineAfter {
                 continue;
             }
 
-            // Check semicolons inside blocks
+            // Skip SCSS line comments
+            if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                continue;
+            }
+
+            // Check semicolons inside blocks — but only those that end
+            // declarations (property: value;), not SCSS at-rules (@include;).
             if bytes[i] == b';' && depth > 0 {
                 let semi_pos = i;
+
+                // Check if this semicolon ends an at-rule (e.g. @include, @import).
+                // Scan backwards to find the start of the statement.
+                let mut is_at_rule = false;
+                {
+                    let mut k = semi_pos;
+                    while k > 0 {
+                        k -= 1;
+                        if bytes[k] == b'{' || bytes[k] == b'}' || bytes[k] == b';' {
+                            break;
+                        }
+                        if bytes[k] == b'@' {
+                            is_at_rule = true;
+                            break;
+                        }
+                    }
+                }
+                if is_at_rule {
+                    i += 1;
+                    continue;
+                }
 
                 // Find the next non-whitespace character (excluding newlines for checking)
                 let mut j = i + 1;

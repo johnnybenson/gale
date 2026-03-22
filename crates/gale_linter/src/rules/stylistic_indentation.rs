@@ -46,7 +46,8 @@ impl Rule for StylisticIndentation {
         let len = bytes.len();
         let mut diagnostics = Vec::new();
         let mut i = 0;
-        let mut depth: i32 = 0;
+        let mut brace_depth: i32 = 0;
+        let mut paren_depth: i32 = 0;
         let mut line_start = 0;
 
         while i < len {
@@ -69,7 +70,7 @@ impl Rule for StylisticIndentation {
                 continue;
             }
 
-            // Skip comments
+            // Skip block comments
             if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
                 i += 2;
                 while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
@@ -84,16 +85,39 @@ impl Rule for StylisticIndentation {
                 continue;
             }
 
+            // Skip SCSS line comments
+            if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                continue;
+            }
+
             if bytes[i] == b'{' {
-                depth += 1;
+                brace_depth += 1;
                 i += 1;
                 continue;
             }
 
             if bytes[i] == b'}' {
-                depth -= 1;
-                if depth < 0 {
-                    depth = 0;
+                brace_depth -= 1;
+                if brace_depth < 0 {
+                    brace_depth = 0;
+                }
+                i += 1;
+                continue;
+            }
+
+            // Track parenthesis depth (SCSS maps, function arguments)
+            if bytes[i] == b'(' {
+                paren_depth += 1;
+                i += 1;
+                continue;
+            }
+            if bytes[i] == b')' {
+                paren_depth -= 1;
+                if paren_depth < 0 {
+                    paren_depth = 0;
                 }
                 i += 1;
                 continue;
@@ -104,7 +128,7 @@ impl Rule for StylisticIndentation {
                 i += 1;
 
                 // Now check the indentation of the next line
-                let expected_depth = depth as usize;
+                let expected_depth = (brace_depth + paren_depth) as usize;
                 let mut actual_indent = 0;
                 let mut j = line_start;
                 let mut wrong_char = false;
@@ -130,8 +154,8 @@ impl Rule for StylisticIndentation {
                     continue;
                 }
 
-                // A closing brace should be at parent level
-                let expected = if j < len && bytes[j] == b'}' {
+                // A closing brace or paren should be at parent level
+                let expected = if j < len && (bytes[j] == b'}' || bytes[j] == b')') {
                     if expected_depth > 0 {
                         (expected_depth - 1) * indent_size
                     } else {

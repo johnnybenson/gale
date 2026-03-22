@@ -69,6 +69,14 @@ fn count_combinators(selector: &str) -> usize {
     let mut in_brackets = 0i32;
 
     while i < len {
+        // Skip SCSS line comments
+        if chars[i] == '/' && i + 1 < len && chars[i + 1] == '/' {
+            while i < len && chars[i] != '\n' {
+                i += 1;
+            }
+            continue;
+        }
+
         if chars[i] == '[' || chars[i] == '(' {
             in_brackets += 1;
             i += 1;
