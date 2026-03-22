@@ -49,11 +49,18 @@ impl Rule for StylisticIndentation {
         let mut brace_depth: i32 = 0;
         let mut paren_depth: i32 = 0;
         let mut line_start = 0;
+        // Track the last meaningful (non-whitespace, non-comment) character
+        // to detect multi-line value continuation lines.
+        // A line is a "continuation" if the previous meaningful char was not
+        // `;`, `{`, or `}` — meaning we're inside a multi-line value,
+        // multi-line @import, etc. Stylelint skips indentation checks on those.
+        let mut last_meaningful_char: u8 = b';'; // start as if after a statement
 
         while i < len {
             // Skip strings
             if bytes[i] == b'"' || bytes[i] == b'\'' {
                 let quote = bytes[i];
+                last_meaningful_char = quote;
                 i += 1;
                 while i < len && bytes[i] != quote {
                     if bytes[i] == b'\\' {
@@ -65,6 +72,7 @@ impl Rule for StylisticIndentation {
                     i += 1;
                 }
                 if i < len {
+                    last_meaningful_char = bytes[i]; // closing quote
                     i += 1;
                 }
                 continue;
@@ -82,6 +90,7 @@ impl Rule for StylisticIndentation {
                 if i + 1 < len {
                     i += 2;
                 }
+                // Don't update last_meaningful_char — comments don't count
                 continue;
             }
 
@@ -90,6 +99,7 @@ impl Rule for StylisticIndentation {
                 while i < len && bytes[i] != b'\n' {
                     i += 1;
                 }
+                // Don't update last_meaningful_char — comments don't count
                 continue;
             }
 
@@ -110,11 +120,13 @@ impl Rule for StylisticIndentation {
                 if i < len {
                     i += 1;
                 }
+                last_meaningful_char = b'}';
                 continue;
             }
 
             if bytes[i] == b'{' {
                 brace_depth += 1;
+                last_meaningful_char = b'{';
                 i += 1;
                 continue;
             }
@@ -124,6 +136,7 @@ impl Rule for StylisticIndentation {
                 if brace_depth < 0 {
                     brace_depth = 0;
                 }
+                last_meaningful_char = b'}';
                 i += 1;
                 continue;
             }
@@ -131,6 +144,7 @@ impl Rule for StylisticIndentation {
             // Track parenthesis depth (SCSS maps, function arguments)
             if bytes[i] == b'(' {
                 paren_depth += 1;
+                last_meaningful_char = b'(';
                 i += 1;
                 continue;
             }
@@ -139,6 +153,13 @@ impl Rule for StylisticIndentation {
                 if paren_depth < 0 {
                     paren_depth = 0;
                 }
+                last_meaningful_char = b')';
+                i += 1;
+                continue;
+            }
+
+            if bytes[i] == b';' {
+                last_meaningful_char = b';';
                 i += 1;
                 continue;
             }
@@ -147,8 +168,19 @@ impl Rule for StylisticIndentation {
                 line_start = i + 1;
                 i += 1;
 
+                // Determine if the next line is a continuation of a
+                // multi-line value. Continuation lines are skipped, matching
+                // Stylelint's behavior. A line is a continuation when:
+                //  - we are inside parentheses (paren_depth > 0), OR
+                //  - the last meaningful char before the newline was not a
+                //    statement terminator (`;`, `{`, `}`)
+                let is_continuation = paren_depth > 0
+                    || (last_meaningful_char != b';'
+                        && last_meaningful_char != b'{'
+                        && last_meaningful_char != b'}');
+
                 // Now check the indentation of the next line
-                let expected_depth = (brace_depth + paren_depth) as usize;
+                let expected_depth = brace_depth as usize;
                 let mut actual_indent = 0;
                 let mut j = line_start;
                 let mut wrong_char = false;
@@ -174,8 +206,13 @@ impl Rule for StylisticIndentation {
                     continue;
                 }
 
-                // A closing brace or paren should be at parent level
-                let expected = if j < len && (bytes[j] == b'}' || bytes[j] == b')') {
+                // Skip continuation lines (multi-line values, @import lists, etc.)
+                if is_continuation {
+                    continue;
+                }
+
+                // A closing brace should be at parent level
+                let expected = if j < len && bytes[j] == b'}' {
                     if expected_depth > 0 {
                         (expected_depth - 1) * indent_size
                     } else {
@@ -209,6 +246,11 @@ impl Rule for StylisticIndentation {
                 }
 
                 continue;
+            }
+
+            // Track any other non-whitespace character as meaningful
+            if bytes[i] != b' ' && bytes[i] != b'\t' && bytes[i] != b'\r' {
+                last_meaningful_char = bytes[i];
             }
 
             i += 1;
@@ -280,5 +322,57 @@ mod tests {
         let source = "a {\n    color: red;\n}";
         let d = StylisticIndentation.check_root(&[], &ctx_with_option(source, &opt));
         assert!(d.is_empty());
+    }
+
+    #[test]
+    fn skips_multiline_value_continuation() {
+        let opt = serde_json::json!(2);
+        // Multi-line value: continuation lines after `src:` should not be checked
+        let source = "@font-face {\n  src:\n    url('a.woff2') format('woff2'),\n    url('a.woff') format('woff');\n  font-weight: normal;\n}";
+        let d = StylisticIndentation.check_root(&[], &ctx_with_option(source, &opt));
+        assert!(
+            d.is_empty(),
+            "got: {:?}",
+            d.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn skips_multiline_import() {
+        let opt = serde_json::json!(2);
+        // Multi-line @import: continuation lines should not be checked
+        let source = "@import\n  'foo',\n  'bar';";
+        let d = StylisticIndentation.check_root(&[], &ctx_with_option(source, &opt));
+        assert!(
+            d.is_empty(),
+            "got: {:?}",
+            d.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn skips_multiline_value_with_parens() {
+        let opt = serde_json::json!(2);
+        // Multi-line value with nested parens (calc, var)
+        let source = "a {\n  margin: calc(\n    var(--x) * -1\n  );\n  color: red;\n}";
+        let d = StylisticIndentation.check_root(&[], &ctx_with_option(source, &opt));
+        assert!(
+            d.is_empty(),
+            "got: {:?}",
+            d.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn skips_multiline_transition() {
+        let opt = serde_json::json!(2);
+        // Multi-line transition property value
+        let source = "a {\n  transition:\n    background-color 0.2s linear,\n    opacity 0.2s linear;\n  color: red;\n}";
+        let d = StylisticIndentation.check_root(&[], &ctx_with_option(source, &opt));
+        assert!(
+            d.is_empty(),
+            "got: {:?}",
+            d.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
     }
 }
