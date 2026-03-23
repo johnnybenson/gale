@@ -189,6 +189,15 @@ def install_deps(clone_dir: Path, search_paths: list[str] | None = None) -> bool
             current = _get_current_node_version()
             print(f"  [skip] requires Node {req2} (current: {current})")
             return "skip"
+        # Fallback to bun if the detected package manager fails
+        if pm != "bun":
+            print(f"  [warn] {pm} install failed, falling back to bun...")
+            fallback = run_cmd(
+                ["bun", "install", "--ignore-scripts"],
+                cwd=str(install_dir), timeout=300,
+            )
+            if fallback.returncode == 0:
+                return True
         print(f"  [error] {pm} install failed: {stderr[:200]}")
         return False
     return True

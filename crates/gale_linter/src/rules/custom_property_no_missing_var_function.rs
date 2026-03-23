@@ -19,16 +19,24 @@ fn has_bare_custom_property(value: &str) -> bool {
         return true;
     }
 
-    // Also check for bare `--` tokens that are NOT inside `var(...)`.
-    // Strategy: remove all `var(...)` occurrences then check for remaining `--` tokens.
+    // Also check for bare `--` tokens that are NOT inside `var(...)` or parentheses.
+    // Strategy: remove all `var(...)` occurrences then check for remaining `--` tokens
+    // that are not inside parentheses (non-var parens like `(--x, 0.72)` are not
+    // custom property references).
     let without_var = remove_var_functions(trimmed);
-    // Look for `--` that starts a CSS custom property identifier
     let chars_vec: Vec<char> = without_var.chars().collect();
+    let mut paren_depth = 0i32;
     for (idx, ch) in chars_vec.iter().enumerate() {
+        if *ch == '(' {
+            paren_depth += 1;
+        } else if *ch == ')' {
+            paren_depth -= 1;
+        }
         if *ch == '-'
             && idx + 1 < chars_vec.len()
             && chars_vec[idx + 1] == '-'
             && (idx == 0 || !chars_vec[idx - 1].is_ascii_alphanumeric())
+            && paren_depth == 0
         {
             return true;
         }
