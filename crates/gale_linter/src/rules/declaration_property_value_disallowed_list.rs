@@ -66,8 +66,19 @@ impl Rule for DeclarationPropertyValueDisallowedList {
         let len = bytes.len();
         let mut diagnostics = Vec::new();
         let mut i = 0;
+        let mut paren_depth: i32 = 0;
 
         while i < len {
+            // Track parens (colons inside parens are selector pseudo-classes)
+            if bytes[i] == b'(' {
+                paren_depth += 1;
+            } else if bytes[i] == b')' {
+                paren_depth -= 1;
+                if paren_depth < 0 {
+                    paren_depth = 0;
+                }
+            }
+
             // Skip comments
             if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
                 i += 2;
@@ -105,7 +116,8 @@ impl Rule for DeclarationPropertyValueDisallowedList {
             // Skip selectors / at-rules — look for property: value;
             // A declaration starts after a `{` or `;` or start of line inside a block.
             // We look for `property: value` pattern.
-            if bytes[i] == b':' {
+            // Skip colons inside parens (pseudo-classes in selectors like `:has(input:invalid)`)
+            if bytes[i] == b':' && paren_depth == 0 {
                 // Walk backward to find the property name
                 let colon = i;
                 let mut prop_end = colon;

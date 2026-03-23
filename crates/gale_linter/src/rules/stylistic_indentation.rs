@@ -55,9 +55,15 @@ impl Rule for StylisticIndentation {
         // Track how many "value indent levels" deep we are. This increments
         // when we see a newline after an opening paren `(`, and decrements
         // when we see `)` as the first meaningful char on a new line.
-        // This matches Stylelint's behavior of only adding indentation for
-        // parens that span multiple lines, not same-line parens.
         let mut value_indent_depth: i32 = 0;
+        // Whether the current multi-line value started on the same line as
+        // the property colon. Only these contexts get indentation checks.
+        // E.g. `color: calc(\n var(...)` → true, `color:\n var(...)` → false.
+        let mut value_started_on_colon_line = false;
+        // Set to true when we see `:` in a declaration context, cleared on newline
+        let mut colon_seen_this_line = false;
+        // Set to true when we see `@include` on this line (SCSS mixin calls)
+        let mut at_include_seen_this_line = false;
 
         while i < len {
             // Skip strings
@@ -130,7 +136,8 @@ impl Rule for StylisticIndentation {
             if bytes[i] == b'{' {
                 brace_depth += 1;
                 last_meaningful_char = b'{';
-                value_indent_depth = 0; // reset on block boundary
+                value_indent_depth = 0;
+                value_started_on_colon_line = false;
                 i += 1;
                 continue;
             }
@@ -141,7 +148,8 @@ impl Rule for StylisticIndentation {
                     brace_depth = 0;
                 }
                 last_meaningful_char = b'}';
-                value_indent_depth = 0; // reset on block boundary
+                value_indent_depth = 0;
+                value_started_on_colon_line = false;
                 i += 1;
                 continue;
             }
@@ -149,6 +157,29 @@ impl Rule for StylisticIndentation {
             // Track parenthesis depth (SCSS maps, function arguments)
             if bytes[i] == b'(' {
                 paren_depth += 1;
+                // If this is the first `(` in a declaration that started with
+                // a colon on the same line, OR this `(` is part of an @include
+                // call, mark this value as "checked" for multi-line indentation.
+                // Exclude pseudo-class functions like :where(), :not(), etc.
+                if paren_depth == 1 && !value_started_on_colon_line {
+                    let mut is_pseudo = false;
+                    if i > 0 {
+                        let mut p = i - 1;
+                        while p > 0
+                            && (bytes[p].is_ascii_alphanumeric()
+                                || bytes[p] == b'-'
+                                || bytes[p] == b'_')
+                        {
+                            p -= 1;
+                        }
+                        if bytes[p] == b':' {
+                            is_pseudo = true;
+                        }
+                    }
+                    if !is_pseudo && (colon_seen_this_line || at_include_seen_this_line) {
+                        value_started_on_colon_line = true;
+                    }
+                }
                 last_meaningful_char = b'(';
                 i += 1;
                 continue;
@@ -158,6 +189,9 @@ impl Rule for StylisticIndentation {
                 if paren_depth < 0 {
                     paren_depth = 0;
                 }
+                if paren_depth == 0 {
+                    value_started_on_colon_line = false;
+                }
                 last_meaningful_char = b')';
                 i += 1;
                 continue;
@@ -165,18 +199,22 @@ impl Rule for StylisticIndentation {
 
             if bytes[i] == b';' {
                 last_meaningful_char = b';';
-                value_indent_depth = 0; // reset on statement terminator
+                value_indent_depth = 0;
+                value_started_on_colon_line = false;
                 i += 1;
                 continue;
             }
 
             if bytes[i] == b'\n' {
                 line_start = i + 1;
+                colon_seen_this_line = false;
+                at_include_seen_this_line = false;
 
                 // If the last meaningful char before this newline was `(`,
                 // it means a paren was opened and the content continues on
-                // the next line. Increment value_indent_depth.
-                if last_meaningful_char == b'(' {
+                // the next line. Only increment value_indent_depth if we're
+                // in a "checked" value context.
+                if last_meaningful_char == b'(' && value_started_on_colon_line {
                     value_indent_depth += 1;
                 }
 
@@ -184,15 +222,14 @@ impl Rule for StylisticIndentation {
 
                 // Determine if the next line is a continuation of a
                 // multi-line value that should be skipped.
-                // Continuation lines inside parentheses within a rule block
-                // (brace_depth > 0) are checked for indentation. All other
-                // continuation lines (top-level SCSS maps, @import lists,
-                // multi-line values not in parens) are skipped.
+                // Only continuation lines where the value started on the same
+                // line as the colon AND we're inside parens get indentation
+                // checks. All other continuation lines are skipped.
                 let is_continuation = last_meaningful_char != b';'
                     && last_meaningful_char != b'{'
                     && last_meaningful_char != b'}';
                 let is_skippable_continuation = is_continuation
-                    && (paren_depth == 0 || brace_depth == 0);
+                    && !(value_started_on_colon_line && paren_depth > 0 && brace_depth > 0);
 
                 // Now check the indentation of the next line
                 let expected_depth = brace_depth as usize;
@@ -277,6 +314,14 @@ impl Rule for StylisticIndentation {
             // Track any other non-whitespace character as meaningful
             if bytes[i] != b' ' && bytes[i] != b'\t' && bytes[i] != b'\r' {
                 last_meaningful_char = bytes[i];
+                // Track colons for declaration detection
+                if bytes[i] == b':' {
+                    colon_seen_this_line = true;
+                }
+                // Track @include for SCSS mixin call detection
+                if bytes[i] == b'@' && i + 7 < len && &source[i..i + 8] == "@include" {
+                    at_include_seen_this_line = true;
+                }
             }
 
             i += 1;
