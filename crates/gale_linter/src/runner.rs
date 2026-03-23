@@ -211,19 +211,32 @@ fn handle_directive(
 /// Returns a Vec of Option<String> where None means "all rules".
 /// E.g. " rule-a, rule-b " → [Some("rule-a"), Some("rule-b")]
 ///      "" → [None]  (all rules)
+///
+/// Deprecated rule name aliases (e.g. `scss/at-import-no-partial-leading-underscore`)
+/// are resolved to their canonical names so that disable comments using old names
+/// still suppress diagnostics emitted under the new name.
 fn parse_rule_names(text: &str) -> Vec<Option<String>> {
     let t = text.trim();
     // Strip description after ` -- ` separator (Stylelint convention).
     // E.g. "rule-name -- reason" → "rule-name"
     let t = if let Some(pos) = t.find(" -- ") {
         t[..pos].trim()
+    } else if t.starts_with("--") {
+        // The entire text is a description (e.g. "-- Disable reason: ...")
+        ""
     } else {
-        // Also strip leading ` -- ` separators sometimes used in comments
-        t.trim_start_matches("--").trim()
+        t
     };
     if t.is_empty() {
         return vec![None]; // disable all rules
     }
+
+    let resolve = |name: &str| -> String {
+        crate::registry::resolve_deprecated_alias(name)
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| name.to_string())
+    };
+
     // If there are commas, split by comma
     if t.contains(',') {
         t.split(',')
@@ -232,13 +245,13 @@ fn parse_rule_names(text: &str) -> Vec<Option<String>> {
                 if p.is_empty() {
                     None
                 } else {
-                    Some(p.to_string())
+                    Some(resolve(p))
                 }
             })
             .filter(|n| n.is_some()) // filter out empty parts
             .collect()
     } else {
-        vec![Some(t.to_string())]
+        vec![Some(resolve(t))]
     }
 }
 
@@ -553,9 +566,30 @@ impl LintRunner {
             eprintln!("[perf] walk: {:.3}s", t2.elapsed().as_secs_f64());
         }
 
+        // Build alias map: canonical rule name -> config-specified name.
+        // When the config uses a deprecated name (e.g. "function-comma-space-after"),
+        // the registry resolves it to the canonical name (e.g. "@stylistic/function-comma-space-after").
+        // We need to relabel diagnostics back to the config name for output compatibility.
+        let alias_map: HashMap<String, String> = enabled_rules
+            .iter()
+            .filter_map(|config_name| {
+                let rule = self.registry.get(config_name)?;
+                let canonical = rule.name();
+                if canonical != config_name.as_str() {
+                    Some((canonical.to_string(), config_name.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
         for diag in &mut diagnostics {
             if diag.file_path.is_empty() {
                 diag.file_path = file_path.to_string();
+            }
+            // Relabel rule name from canonical to config-specified alias.
+            if let Some(config_name) = alias_map.get(&diag.rule_name) {
+                diag.rule_name = config_name.clone();
             }
             // Apply config-specified severity overrides (check override-specific
             // map first, then fall back to the runner's default map).

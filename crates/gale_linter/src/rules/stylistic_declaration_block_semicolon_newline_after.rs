@@ -102,6 +102,22 @@ impl Rule for StylisticDeclarationBlockSemicolonNewlineAfter {
                 continue;
             }
 
+            // Skip url() contents — they can contain semicolons (e.g., data URIs)
+            if i + 4 <= len && bytes[i..].starts_with(b"url(") {
+                i += 4;
+                // Find the matching closing paren, handling nested parens
+                let mut paren_depth = 1;
+                while i < len && paren_depth > 0 {
+                    if bytes[i] == b'(' {
+                        paren_depth += 1;
+                    } else if bytes[i] == b')' {
+                        paren_depth -= 1;
+                    }
+                    i += 1;
+                }
+                continue;
+            }
+
             // Check semicolons inside blocks — but only those that end
             // declarations (property: value;), not SCSS at-rules (@include;).
             if bytes[i] == b';' && depth > 0 {
@@ -165,10 +181,33 @@ impl Rule for StylisticDeclarationBlockSemicolonNewlineAfter {
                 // Find the next non-whitespace character (excluding newlines for checking).
                 // SCSS line comments (`//`) count as "rest of line" so if we see
                 // `; // comment\n`, the newline IS there.
+                // Block comments (`/* ... */`) are also skipped: `; /* comment */\n`
+                // is treated as having a newline after `;`.
                 let mut j = i + 1;
                 let mut found_newline = false;
                 while j < len && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\r') {
                     j += 1;
+                }
+                // Skip inline block comment /* ... */ then re-check
+                if j + 1 < len && bytes[j] == b'/' && bytes[j + 1] == b'*' {
+                    let mut c = j + 2;
+                    while c + 1 < len && !(bytes[c] == b'*' && bytes[c + 1] == b'/') {
+                        c += 1;
+                    }
+                    if c + 1 < len {
+                        c += 2; // skip */
+                    }
+                    // Skip trailing spaces/tabs after comment
+                    while c < len && (bytes[c] == b' ' || bytes[c] == b'\t') {
+                        c += 1;
+                    }
+                    if c < len && (bytes[c] == b'\n' || bytes[c] == b'\r') {
+                        found_newline = true;
+                    }
+                    // Also update j so the } check below uses the right position
+                    if found_newline {
+                        j = c;
+                    }
                 }
                 if j < len && bytes[j] == b'\n' {
                     found_newline = true;

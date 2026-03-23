@@ -229,7 +229,12 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
                 builder.git_global(false);
                 builder.git_exclude(false);
             } else {
-                builder.git_ignore(true);
+                // Do NOT respect .gitignore — Stylelint only uses .stylelintignore,
+                // so we must match that behavior for drop-in compatibility.
+                builder.git_ignore(false);
+                builder.git_global(false);
+                builder.git_exclude(false);
+
                 builder.add_custom_ignore_filename(".galeignore");
                 builder.add_custom_ignore_filename(".stylelintignore");
 
@@ -244,8 +249,10 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
                     }
                 }
 
-                if !opts.ignore_patterns.is_empty() {
+                // Always exclude node_modules (Stylelint default behavior).
+                {
                     let mut overrides = ignore::overrides::OverrideBuilder::new(&walk_root);
+                    let _ = overrides.add("!**/node_modules/**");
                     for pat in opts.ignore_patterns {
                         if let Err(err) = overrides.add(&format!("!{pat}")) {
                             eprintln!("Warning: invalid ignore pattern '{pat}': {err}");
@@ -358,8 +365,11 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
             builder.git_global(false);
             builder.git_exclude(false);
         } else {
-            // Respect .gitignore (enabled by default, but be explicit).
-            builder.git_ignore(true);
+            // Do NOT respect .gitignore — Stylelint only uses .stylelintignore,
+            // so we must match that behavior for drop-in compatibility.
+            builder.git_ignore(false);
+            builder.git_global(false);
+            builder.git_exclude(false);
 
             // Automatically respect .galeignore files found in traversed dirs.
             builder.add_custom_ignore_filename(".galeignore");
@@ -382,8 +392,10 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
             }
 
             // Apply ignore_patterns from config as glob overrides.
-            if !opts.ignore_patterns.is_empty() {
+            // Always exclude node_modules (Stylelint default behavior).
+            {
                 let mut overrides = ignore::overrides::OverrideBuilder::new(path);
+                let _ = overrides.add("!**/node_modules/**");
                 for pat in opts.ignore_patterns {
                     // Negate the pattern so matching files are excluded.
                     if let Err(err) = overrides.add(&format!("!{pat}")) {
@@ -597,30 +609,44 @@ pub fn run() -> Result<()> {
         LintCache::default()
     };
 
-    // Extract per-rule options from the config.
+    // Extract per-rule options from the config, keyed by canonical rule name.
+    // Config may use deprecated aliases (e.g. "function-comma-space-after")
+    // but the runner looks up options by canonical name
+    // (e.g. "@stylistic/function-comma-space-after").
     let rule_options: std::collections::HashMap<String, serde_json::Value> = config
         .rules
         .iter()
         .filter_map(|(name, cfg)| {
-            cfg.options
-                .as_ref()
-                .map(|opts| (name.clone(), opts.clone()))
+            cfg.options.as_ref().map(|opts| {
+                // Resolve to canonical name if this is a deprecated alias
+                let canonical = registry
+                    .get(name)
+                    .map(|r| r.name().to_string())
+                    .unwrap_or_else(|| name.clone());
+                (canonical, opts.clone())
+            })
         })
         .collect();
 
-    // Extract per-rule severity overrides from the config.
+    // Extract per-rule severity overrides from the config, keyed by canonical name.
     let rule_severities: std::collections::HashMap<String, gale_diagnostics::Severity> = config
         .rules
         .iter()
         .filter_map(|(name, cfg)| {
-            cfg.severity.as_ref().and_then(|s| match s {
-                gale_config::Severity::Error => {
-                    Some((name.clone(), gale_diagnostics::Severity::Error))
+            cfg.severity.as_ref().and_then(|s| {
+                let canonical = registry
+                    .get(name)
+                    .map(|r| r.name().to_string())
+                    .unwrap_or_else(|| name.clone());
+                match s {
+                    gale_config::Severity::Error => {
+                        Some((canonical, gale_diagnostics::Severity::Error))
+                    }
+                    gale_config::Severity::Warning => {
+                        Some((canonical, gale_diagnostics::Severity::Warning))
+                    }
+                    gale_config::Severity::Off => None,
                 }
-                gale_config::Severity::Warning => {
-                    Some((name.clone(), gale_diagnostics::Severity::Warning))
-                }
-                gale_config::Severity::Off => None,
             })
         })
         .collect();
@@ -708,6 +734,16 @@ pub fn run() -> Result<()> {
         syntax: gale_css_parser::Syntax,
         config: &GaleConfig,
     ) -> LintResult {
+        // Stylelint marks files as fully ignored when they match an override's
+        // `files` pattern AND its `ignoreFiles` pattern.  Return an empty
+        // result so we don't produce false positives.
+        if config.is_file_ignored_by_override(file_path) {
+            return LintResult {
+                file_path: file_path.to_string(),
+                diagnostics: Vec::new(),
+                source: source.to_string(),
+            };
+        }
         let effective_rules = config.rules_for_file(file_path);
         let file_enabled: Vec<String> = effective_rules
             .iter()

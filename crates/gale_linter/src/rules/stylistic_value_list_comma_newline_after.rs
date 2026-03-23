@@ -148,7 +148,7 @@ impl Rule for StylisticValueListCommaNewlineAfter {
                 let is_multi_line = val_slice.contains('\n');
 
                 let after = i + 1;
-                // Check what follows the comma
+                // Check what follows the comma, treating comments as transparent
                 let mut k = after;
                 let mut has_newline = false;
                 let mut has_space = false;
@@ -159,6 +159,19 @@ impl Rule for StylisticValueListCommaNewlineAfter {
                     } else if bytes[k] == b' ' || bytes[k] == b'\t' {
                         has_space = true;
                         k += 1;
+                    } else if k + 1 < len && bytes[k] == b'/' && bytes[k + 1] == b'/' {
+                        // SCSS line comment — implicitly ends with newline
+                        has_newline = true;
+                        break;
+                    } else if k + 1 < len && bytes[k] == b'/' && bytes[k + 1] == b'*' {
+                        // Block comment — skip to end, then keep checking
+                        k += 2;
+                        while k + 1 < len && !(bytes[k] == b'*' && bytes[k + 1] == b'/') {
+                            k += 1;
+                        }
+                        if k + 1 < len {
+                            k += 2; // skip past `*/`
+                        }
                     } else {
                         break;
                     }
@@ -268,6 +281,22 @@ mod tests {
         let source = "a:hover, a:focus { color: red; }";
         let d = StylisticValueListCommaNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
         assert!(d.is_empty(), "Should not flag selector commas, got: {:?}", d.len());
+    }
+
+    #[test]
+    fn allows_scss_line_comment_after_comma() {
+        let opt = serde_json::Value::String("always".to_string());
+        let source = "a { background: url(foo.png), // comment\n  url(bar.png); }";
+        let d = StylisticValueListCommaNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
+        assert!(d.is_empty(), "Should not flag comma followed by SCSS line comment, got {} diagnostics", d.len());
+    }
+
+    #[test]
+    fn allows_block_comment_newline_after_comma() {
+        let opt = serde_json::Value::String("always".to_string());
+        let source = "a { background: url(foo.png), /* comment */\n  url(bar.png); }";
+        let d = StylisticValueListCommaNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
+        assert!(d.is_empty(), "Should not flag comma followed by block comment then newline, got {} diagnostics", d.len());
     }
 
     #[test]

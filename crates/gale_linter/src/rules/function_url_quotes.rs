@@ -162,6 +162,15 @@ fn check_urls(
             if is_data_uri(&url_content) {
                 continue;
             }
+            // Skip URLs with SCSS/Less interpolation — Stylelint skips these
+            if (ctx.syntax == Syntax::Scss || ctx.syntax == Syntax::Sass)
+                && has_scss_interpolation(&url_content)
+            {
+                continue;
+            }
+            if ctx.syntax == Syntax::Less && has_less_interpolation(&url_content) {
+                continue;
+            }
             let abs_offset = base_offset + rel_offset;
             let total_len = url_content.len() + 2 * quote_len;
             diags.push(

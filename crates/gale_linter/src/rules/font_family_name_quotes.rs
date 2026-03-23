@@ -513,13 +513,30 @@ impl FontFamilyNameQuotes {
         mode: &str,
         diagnostics: &mut Vec<Diagnostic>,
     ) {
-        let families = parse_font_families_from_value(&decl.value);
+        let value = &decl.value;
+        let prop_lower = decl.property.to_ascii_lowercase();
+
+        // For `font` shorthand, extract only the font-family portion.
+        let family_value = if prop_lower == "font" {
+            extract_font_families_from_shorthand(value)
+        } else {
+            value.to_string()
+        };
+
+        let families = parse_font_families_from_value(&family_value);
         for (name, quoted) in families {
             if name.starts_with('$')
                 || name.starts_with("var(")
                 || name.starts_with('@')
                 || name.contains("#{")
                 || name.contains('(')
+                // Skip SCSS namespace references like `variables.$font-family-body`
+                || name.contains(".$")
+                // Skip values that look like SCSS nested property syntax
+                // (e.g. `font: { size: 0.8em; style: italic; }`)
+                || name.contains('{')
+                || name.contains('}')
+                || name.contains(';')
             {
                 continue;
             }
@@ -530,6 +547,62 @@ impl FontFamilyNameQuotes {
                 src_length: decl.span.length,
             };
             self.check_family(&family, mode, diagnostics);
+        }
+    }
+}
+
+/// Extract the font-family portion from a `font` shorthand value.
+/// Format: [style] [variant] [weight] [stretch] size[/line-height] family[, family]*
+/// The family starts after the size/line-height token.
+fn extract_font_families_from_shorthand(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+
+    loop {
+        // Skip whitespace
+        while i < len && bytes[i].is_ascii_whitespace() {
+            i += 1;
+        }
+        if i >= len {
+            return String::new();
+        }
+
+        // Read a token
+        let token_start = i;
+        while i < len && !bytes[i].is_ascii_whitespace() && bytes[i] != b',' {
+            if bytes[i] == b'/' {
+                // size/line-height: consume rest of compound token
+                i += 1;
+                while i < len && !bytes[i].is_ascii_whitespace() && bytes[i] != b',' {
+                    i += 1;
+                }
+                break;
+            }
+            i += 1;
+        }
+
+        let token = &value[token_start..i];
+
+        // Check if this looks like a font-size (starts with digit, or contains `/`)
+        let first_char = token.chars().next().unwrap_or(' ');
+        let is_size = (first_char.is_ascii_digit() || first_char == '.')
+            && (token.contains("px")
+                || token.contains("em")
+                || token.contains("rem")
+                || token.contains("pt")
+                || token.contains('%')
+                || token.contains("vh")
+                || token.contains("vw")
+                || token.contains('/')
+                || token.ends_with("0"));
+
+        if is_size {
+            // Everything after this is the font-family
+            while i < len && bytes[i].is_ascii_whitespace() {
+                i += 1;
+            }
+            return value[i..].to_string();
         }
     }
 }
@@ -567,7 +640,21 @@ fn parse_font_families_from_value(value: &str) -> Vec<(String, bool)> {
             }
         } else {
             let start = i;
-            while i < len && bytes[i] != b',' {
+            // Track paren depth to skip function calls like var(), env(), etc.
+            let mut paren_depth = 0;
+            while i < len {
+                if bytes[i] == b'(' {
+                    paren_depth += 1;
+                } else if bytes[i] == b')' {
+                    if paren_depth > 0 {
+                        paren_depth -= 1;
+                    } else {
+                        // Unmatched closing paren — stop here
+                        break;
+                    }
+                } else if bytes[i] == b',' && paren_depth == 0 {
+                    break;
+                }
                 i += 1;
             }
             let raw = value[start..i].trim();
@@ -655,6 +742,15 @@ span: ParserSpan::new(0, value.len() + property.len() + 20),
         let node = make_node("font-family", "1234, sans-serif");
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
+    }
+
+    #[test]
+    fn font_shorthand_extracts_family_only() {
+        let rule = FontFamilyNameQuotes;
+        // `font: normal 30px/1 dashicons` — "dashicons" is a single-word family, no quoting needed
+        let node = make_node("font", "normal 30px/1 dashicons");
+        let diags = rule.check(&node, &make_context());
+        assert!(diags.is_empty(), "single-word font family in shorthand should not be flagged: {:?}", diags);
     }
 
     #[test]

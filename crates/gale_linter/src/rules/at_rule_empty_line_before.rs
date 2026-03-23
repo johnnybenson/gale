@@ -160,8 +160,22 @@ fn is_blockless_source(at_rule: &gale_css_parser::AtRule, source: &str) -> bool 
     if !at_rule.children.is_empty() {
         return false;
     }
+
+    // Some at-rules are inherently blockless (they always end with `;`).
+    let name_lower = at_rule.name.to_ascii_lowercase();
+    if matches!(
+        name_lower.as_str(),
+        "import" | "use" | "forward" | "charset" | "namespace" | "layer"
+    ) && at_rule.children.is_empty()
+    {
+        return true;
+    }
+
     // Check the source text within this at-rule's span for a `{` that isn't
     // part of SCSS interpolation `#{`.
+    // Note: some parsers report overly-long spans that extend beyond the actual
+    // at-rule statement. Limit the search to the first line that ends with `;`
+    // or `{` to avoid false matches from subsequent content.
     let start = at_rule.span.offset;
     let end = (start + at_rule.span.length).min(source.len());
     if start < source.len() && end > start {
@@ -173,6 +187,11 @@ fn is_blockless_source(at_rule: &gale_css_parser::AtRule, source: &str) -> bool 
                     continue;
                 }
                 return false; // Has a real block
+            }
+            // If we hit a semicolon before any `{`, the at-rule ends with `;`
+            // (blockless).
+            if bytes[j] == b';' {
+                return true;
             }
         }
     }
@@ -208,10 +227,16 @@ fn check_at_rule_nodes(
             // Always recurse into children first
             check_at_rule_nodes(rule_impl, &at_rule.children, ctx, opts, diags);
 
-            // Check if this at-rule is in the ignoreAtRules list
+            // Check if this at-rule is in the ignoreAtRules list.
+            // Match both exact names and prefix matches (e.g. "else" matches
+            // both "@else" and "@else if").
             if !opts.ignore_at_rules.is_empty() {
                 let name_lower = at_rule.name.to_ascii_lowercase();
-                if opts.ignore_at_rules.iter().any(|r| r == &name_lower) {
+                if opts.ignore_at_rules.iter().any(|r| {
+                    r == &name_lower
+                        || (name_lower.starts_with(r.as_str())
+                            && name_lower[r.len()..].starts_with(' '))
+                }) {
                     continue;
                 }
             }
@@ -312,19 +337,15 @@ fn check_at_rule_nodes(
                 PrimaryOption::Never => false,
             };
 
-            // Apply except options (flip expectation)
-            if opts.except_first_nested && is_first_nested {
-                expectation = !expectation;
-            }
-            if opts.except_blockless_after_same_name_blockless
-                && is_blockless_after_same_name_blockless
-            {
-                expectation = !expectation;
-            }
-            if opts.except_blockless_after_blockless && is_blockless_after_blockless {
-                expectation = !expectation;
-            }
-            if opts.except_after_same_name && is_after_same_name {
+            // Apply except options (flip expectation ONCE if any condition matches).
+            // Multiple matching conditions do not stack — the expectation is only
+            // flipped a single time, matching Stylelint's behavior.
+            let any_except = (opts.except_first_nested && is_first_nested)
+                || (opts.except_blockless_after_same_name_blockless
+                    && is_blockless_after_same_name_blockless)
+                || (opts.except_blockless_after_blockless && is_blockless_after_blockless)
+                || (opts.except_after_same_name && is_after_same_name);
+            if any_except {
                 expectation = !expectation;
             }
 
@@ -334,7 +355,7 @@ fn check_at_rule_nodes(
                 diags.push(
                     Diagnostic::new(
                         rule_impl.name(),
-                        format!("Expected empty line before at-rule \"@{}\"", at_rule.name),
+                        "Expected empty line before at-rule".to_string(),
                     )
                     .severity(rule_impl.default_severity())
                     .span(Span::new(at_rule.span.offset, at_rule.span.length)),
@@ -343,10 +364,7 @@ fn check_at_rule_nodes(
                 diags.push(
                     Diagnostic::new(
                         rule_impl.name(),
-                        format!(
-                            "Unexpected empty line before at-rule \"@{}\"",
-                            at_rule.name
-                        ),
+                        "Unexpected empty line before at-rule".to_string(),
                     )
                     .severity(rule_impl.default_severity())
                     .span(Span::new(at_rule.span.offset, at_rule.span.length)),
@@ -376,8 +394,66 @@ fn check_at_rule_nodes(
 }
 
 fn has_empty_line_before(before: &str) -> bool {
-    let trimmed = before.trim_end_matches([' ', '\t']);
-    trimmed.ends_with("\n\n") || trimmed.ends_with("\r\n\r\n")
+    // Walk backwards from the end of `before` to find an empty line
+    // (a line containing only whitespace).
+    let bytes = before.as_bytes();
+    let mut pos = bytes.len();
+
+    // Skip trailing horizontal whitespace (the indentation before the at-rule)
+    while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t') {
+        pos -= 1;
+    }
+
+    // Expect a newline
+    if pos > 0 && bytes[pos - 1] == b'\n' {
+        pos -= 1;
+        if pos > 0 && bytes[pos - 1] == b'\r' {
+            pos -= 1;
+        }
+    } else {
+        return false;
+    }
+
+    // Now check the previous line: skip horizontal whitespace
+    while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t') {
+        pos -= 1;
+    }
+
+    // Empty line if we hit another newline (or start of content)
+    pos == 0 || bytes[pos - 1] == b'\n'
+}
+
+/// Find the position of an inline `//` comment in a line, skipping `//` inside strings.
+/// Returns `None` if no inline comment is found.
+fn find_line_comment_start(line: &str) -> Option<usize> {
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+
+    while i < len {
+        let ch = bytes[i];
+        if in_single_quote {
+            if ch == b'\'' && (i == 0 || bytes[i - 1] != b'\\') {
+                in_single_quote = false;
+            }
+        } else if in_double_quote {
+            if ch == b'"' && (i == 0 || bytes[i - 1] != b'\\') {
+                in_double_quote = false;
+            }
+        } else {
+            if ch == b'\'' {
+                in_single_quote = true;
+            } else if ch == b'"' {
+                in_double_quote = true;
+            } else if ch == b'/' && i + 1 < len && bytes[i + 1] == b'/' {
+                return Some(i);
+            }
+        }
+        i += 1;
+    }
+    None
 }
 
 /// Check if the at-rule is the first meaningful content in a block,
@@ -403,12 +479,25 @@ fn is_first_in_block(before: &str) -> bool {
             }
             return false;
         }
-        // Check for SCSS line comment
+        // Check for SCSS line comment (both standalone and inline)
         let line_start = before[..pos].rfind('\n').map(|p| p + 1).unwrap_or(0);
         let line = before[line_start..pos].trim();
         if line.starts_with("//") {
+            // Entire line is a comment — skip past it
             pos = line_start;
             continue;
+        }
+        // Check for inline `//` comment on the same line as code (e.g., `{ // comment`)
+        // We need to find `//` that isn't inside a string
+        if let Some(comment_pos) = find_line_comment_start(&before[line_start..pos]) {
+            pos = line_start + comment_pos;
+            // Re-skip whitespace before the comment
+            while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t') {
+                pos -= 1;
+            }
+            if pos == 0 {
+                return true;
+            }
         }
         return bytes[pos - 1] == b'{';
     }
@@ -470,7 +559,7 @@ span: ParserSpan::new(0, 17),
         ];
         let d = AtRuleEmptyLineBefore.check_root(&nodes, &make_ctx(src));
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("@media"));
+        assert!(d[0].message.contains("Expected empty line before at-rule"));
     }
 
     #[test]

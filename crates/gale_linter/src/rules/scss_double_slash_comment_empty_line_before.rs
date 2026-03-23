@@ -232,7 +232,11 @@ fn is_first_nested_in_block(source: &str, offset: usize) -> bool {
     false
 }
 
-/// Check if the previous non-blank line is also a `//` comment.
+/// Check if the previous content is also a `//` comment.
+/// This handles:
+/// - Previous line is a standalone `//` comment
+/// - Previous line is code with an inline `//` comment at the end
+/// - Previous non-blank lines contain a `//` comment (skipping blank lines)
 fn is_preceded_by_slash_comment(source: &str, offset: usize) -> bool {
     let bytes = source.as_bytes();
     let mut pos = offset;
@@ -252,17 +256,74 @@ fn is_preceded_by_slash_comment(source: &str, offset: usize) -> bool {
         return false;
     }
 
-    // Now we're at the end of the previous line. Find the start of that line.
-    let line_end = pos;
-    while pos > 0 && bytes[pos - 1] != b'\n' {
-        pos -= 1;
-    }
-    let line_start = pos;
+    // Skip blank lines to find the previous content line
+    loop {
+        let line_end = pos;
+        while pos > 0 && bytes[pos - 1] != b'\n' {
+            pos -= 1;
+        }
+        let line_start = pos;
 
-    // Trim leading whitespace
-    let line = &source[line_start..line_end];
-    let trimmed = line.trim_start();
-    trimmed.starts_with("//")
+        let line = &source[line_start..line_end];
+        let trimmed = line.trim();
+
+        if !trimmed.is_empty() {
+            // Check if this line starts with `//` (standalone comment)
+            // or contains `//` (inline comment at end of code)
+            if trimmed.starts_with("//") {
+                return true;
+            }
+            // Check for inline comment: code followed by //
+            // Look for `//` that is not inside a string
+            if line_contains_slash_comment(trimmed) {
+                return true;
+            }
+            return false;
+        }
+
+        // Line is blank — keep looking back
+        if pos == 0 {
+            return false;
+        }
+        // Skip the newline before this blank line
+        if pos > 0 && bytes[pos - 1] == b'\n' {
+            pos -= 1;
+            if pos > 0 && bytes[pos - 1] == b'\r' {
+                pos -= 1;
+            }
+        } else {
+            return false;
+        }
+    }
+}
+
+/// Check if a line contains a `//` comment (not inside a string).
+fn line_contains_slash_comment(line: &str) -> bool {
+    let bytes = line.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+    while i < len {
+        match bytes[i] {
+            b'"' | b'\'' => {
+                let quote = bytes[i];
+                i += 1;
+                while i < len {
+                    if bytes[i] == b'\\' {
+                        i += 2;
+                        continue;
+                    }
+                    if bytes[i] == quote {
+                        i += 1;
+                        break;
+                    }
+                    i += 1;
+                }
+            }
+            b'/' if i + 1 < len && bytes[i + 1] == b'/' => return true,
+            _ => i += 1,
+        }
+    }
+    false
 }
 
 fn is_stylelint_command(comment_text: &str) -> bool {

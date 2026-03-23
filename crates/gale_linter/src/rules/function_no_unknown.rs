@@ -71,6 +71,7 @@ static KNOWN_FUNCTIONS: &[&str] = &[
     "pow",
     "radial-gradient",
     "ray",
+    "rect",
     "rem",
     "repeat",
     "repeating-conic-gradient",

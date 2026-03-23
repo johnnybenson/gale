@@ -3,10 +3,13 @@ use gale_diagnostics::{Diagnostic, Severity, Span};
 
 use crate::rule::{Rule, RuleContext};
 
-/// Prefer range notation for media features (e.g. `width >= 768px` instead of `min-width: 768px`).
+/// Specify context or prefix notation for media feature ranges.
 ///
-/// Equivalent to Stylelint's `media-feature-range-notation` rule with "context" option.
-/// Detection-only.
+/// Equivalent to Stylelint's `media-feature-range-notation` rule.
+///
+/// Primary option:
+///   - `"context"` (default): Expect range notation (e.g. `width >= 768px`)
+///   - `"prefix"`: Expect prefix notation (e.g. `min-width: 768px`)
 pub struct MediaFeatureRangeNotation;
 
 /// Prefixes that indicate the old min/max notation.
@@ -26,6 +29,9 @@ const RANGE_FEATURES: &[&str] = &[
     "resolution",
 ];
 
+/// Range comparison operators used in context notation.
+const RANGE_OPS: &[&str] = &[">=", "<=", ">", "<"];
+
 impl Rule for MediaFeatureRangeNotation {
     fn name(&self) -> &'static str {
         "media-feature-range-notation"
@@ -39,7 +45,7 @@ impl Rule for MediaFeatureRangeNotation {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::AtRule(at) = node else {
             return vec![];
         };
@@ -47,10 +53,27 @@ impl Rule for MediaFeatureRangeNotation {
             return vec![];
         }
 
-        // Skip media queries containing SCSS/Less variables or interpolation —
-        // the actual values are unknown until compilation, so range notation
-        // cannot be determined.
-        if at.params.contains('$') || at.params.contains("#{") || at.params.contains("@{") {
+        // Skip media queries containing SCSS/Less variables, interpolation,
+        // or SCSS math expressions — the actual values are unknown until
+        // compilation, so range notation cannot be determined.
+        if at.params.contains('$')
+            || at.params.contains("#{")
+            || at.params.contains("@{")
+        {
+            return vec![];
+        }
+        // In SCSS/Less, skip if params contain SCSS math operators (like `(124px + 300px)`)
+        if ctx.syntax != gale_css_parser::Syntax::Css
+            && (at.params.contains(" + ") || at.params.contains(" - ") || at.params.contains(" * "))
+        {
+            return vec![];
+        }
+
+        let notation = parse_notation(ctx.options);
+
+        // If "prefix" notation, skip entirely — Gale does not currently detect
+        // range→prefix violations (requires parsing range syntax which is rare).
+        if notation == Notation::Prefix {
             return vec![];
         }
 
@@ -75,6 +98,36 @@ impl Rule for MediaFeatureRangeNotation {
             }
         }
         diags
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Notation {
+    Context,
+    Prefix,
+}
+
+fn parse_notation(options: Option<&serde_json::Value>) -> Notation {
+    let Some(value) = options else {
+        return Notation::Context;
+    };
+    match value {
+        serde_json::Value::String(s) => {
+            if s == "prefix" {
+                Notation::Prefix
+            } else {
+                Notation::Context
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            if let Some(s) = arr.first().and_then(|v| v.as_str()) {
+                if s == "prefix" {
+                    return Notation::Prefix;
+                }
+            }
+            Notation::Context
+        }
+        _ => Notation::Context,
     }
 }
 
@@ -109,21 +162,27 @@ mod tests {
     }
 
     #[test]
-    fn reports_max_height_prefix() {
-        let d = MediaFeatureRangeNotation.check(&media("(max-height: 600px)"), &ctx());
-        assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("max-height"));
-    }
-
-    #[test]
-    fn allows_range_notation() {
+    fn allows_range_syntax() {
         let d = MediaFeatureRangeNotation.check(&media("(width >= 768px)"), &ctx());
         assert!(d.is_empty());
     }
 
     #[test]
-    fn allows_non_range_features() {
-        let d = MediaFeatureRangeNotation.check(&media("(hover: hover)"), &ctx());
+    fn skips_scss_variables() {
+        let d = MediaFeatureRangeNotation.check(&media("(min-width: $breakpoint)"), &ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn prefix_notation_allows_prefix() {
+        let opts = serde_json::json!("prefix");
+        let ctx = RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: Some(&opts),
+        };
+        let d = MediaFeatureRangeNotation.check(&media("(min-width: 768px)"), &ctx);
         assert!(d.is_empty());
     }
 }

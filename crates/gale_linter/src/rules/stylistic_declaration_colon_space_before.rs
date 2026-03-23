@@ -117,6 +117,24 @@ fn is_declaration_colon(bytes: &[u8], pos: usize) -> bool {
     if pos == 0 {
         return false;
     }
+
+    // Check what follows the colon: if it's immediately a letter leading to `(`,
+    // this is a pseudo-class like `:where(`, `:not(`, `:is(`, `:has(` — not a declaration.
+    if pos + 1 < bytes.len() && bytes[pos + 1].is_ascii_alphabetic() {
+        let mut m = pos + 1;
+        while m < bytes.len() && (bytes[m].is_ascii_alphanumeric() || bytes[m] == b'-') {
+            m += 1;
+        }
+        if m < bytes.len() && bytes[m] == b'(' {
+            return false;
+        }
+    }
+
+    // Check for `::` pseudo-element
+    if pos + 1 < bytes.len() && bytes[pos + 1] == b':' {
+        return false;
+    }
+
     let mut j = pos - 1;
     while j > 0 && (bytes[j] == b' ' || bytes[j] == b'\t') {
         j -= 1;

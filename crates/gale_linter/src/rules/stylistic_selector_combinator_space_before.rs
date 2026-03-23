@@ -32,6 +32,7 @@ impl Rule for StylisticSelectorCombinatorSpaceBefore {
         let mut i = 0;
         let mut in_selector = true;
         let mut depth = 0_i32;
+        let mut paren_depth = 0_i32;
 
         while i < len {
             // Skip strings
@@ -109,8 +110,25 @@ impl Rule for StylisticSelectorCombinatorSpaceBefore {
                 continue;
             }
 
-            // Only check combinators in selector context
-            if in_selector && COMBINATORS.contains(&bytes[i]) {
+            // Track parentheses — combinators inside parens are either
+            // :has()/:not() relative selectors or function-call arguments,
+            // neither of which Stylelint flags.
+            if bytes[i] == b'(' {
+                paren_depth += 1;
+                i += 1;
+                continue;
+            }
+            if bytes[i] == b')' {
+                paren_depth -= 1;
+                if paren_depth < 0 {
+                    paren_depth = 0;
+                }
+                i += 1;
+                continue;
+            }
+
+            // Only check combinators in selector context and outside parens
+            if in_selector && paren_depth == 0 && COMBINATORS.contains(&bytes[i]) {
                 let comb_pos = i;
 
                 // Check if preceded by a space

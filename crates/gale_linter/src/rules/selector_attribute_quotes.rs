@@ -106,18 +106,25 @@ fn check_selector_for_unquoted_attrs(
                     // Strip trailing `]`-adjacent flags like `i` or `s` (case sensitivity).
                     let value_clean =
                         value_part.trim_end_matches(|c: char| c.is_ascii_whitespace());
+                    // Calculate the offset of the value within the selector.
+                    // `i` is the position after `[`, `value_start` is relative
+                    // to `attr_content` (which starts at `i`), and we need to
+                    // account for any leading whitespace that `trim()` removed.
+                    let value_raw = &attr_content[value_start..];
+                    let leading_ws = value_raw.len() - value_raw.trim_start().len();
+                    let value_offset_in_selector = i + value_start + leading_ws;
                     diags.push(
                         Diagnostic::new(
                             rule.name(),
                             format!(
-                                "Expected quotes around attribute selector value \"{}\"",
+                                "Expected quotes around \"{}\"",
                                 value_clean,
                             ),
                         )
                         .severity(rule.default_severity())
                         .span(Span::new(
-                            base_offset + bracket_start,
-                            end - bracket_start + 1,
+                            base_offset + value_offset_in_selector,
+                            value_clean.len(),
                         )),
                     );
                 }

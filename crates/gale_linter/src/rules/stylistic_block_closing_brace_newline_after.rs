@@ -95,6 +95,12 @@ impl Rule for StylisticBlockClosingBraceNewlineAfter {
                     continue;
                 }
 
+                // Skip `};` — a common SCSS pattern (e.g., end of @function body
+                // or SCSS map assignment). Stylelint does not flag these.
+                if bytes[after_pos] == b';' {
+                    continue;
+                }
+
                 // Determine if there's a newline immediately after (allowing spaces/tabs before it)
                 let mut j = after_pos;
                 let mut found_newline = false;
@@ -324,6 +330,20 @@ mod tests {
         assert!(
             d.is_empty(),
             "Should not flag }} before @else if, got: {:?}",
+            d.iter().map(|d| &d.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn allows_semicolon_after_closing_brace() {
+        // SCSS pattern: `@function foo() { ... };` or map closings
+        let opt = serde_json::Value::String("always".to_string());
+        let source = "@function foo() {\n  @return 1;\n};\n";
+        let d =
+            StylisticBlockClosingBraceNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
+        assert!(
+            d.is_empty(),
+            "Should not flag }}; pattern, got: {:?}",
             d.iter().map(|d| &d.message).collect::<Vec<_>>()
         );
     }

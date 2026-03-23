@@ -110,14 +110,23 @@ impl Rule for StylisticDeclarationColonSpaceAfter {
 
                     if violation {
                         let msg = match option {
-                            "always" | "always-single-line" => "Expected a space after the colon",
-                            "never" => "Unexpected space after the colon",
-                            _ => "Expected a space after the colon",
+                            "always" => "Expected single space after \":\"",
+                            "always-single-line" => {
+                                "Expected single space after \":\" with a single-line declaration"
+                            }
+                            "never" => "Unexpected space after \":\"",
+                            _ => "Expected single space after \":\"",
+                        };
+                        // Point after the colon (where the space should be)
+                        let report_pos = if option == "never" {
+                            colon_pos
+                        } else {
+                            colon_pos + 1
                         };
                         diagnostics.push(
                             Diagnostic::new(self.name(), msg)
                                 .severity(self.default_severity())
-                                .span(Span::new(colon_pos, 1)),
+                                .span(Span::new(report_pos, 1)),
                         );
                     }
                 }
@@ -159,11 +168,12 @@ fn is_declaration_colon(bytes: &[u8], pos: usize) -> bool {
         while f < bytes.len() && (bytes[f] == b' ' || bytes[f] == b'\t') {
             f += 1;
         }
-        // If followed by `{`, `(`, `,`, `.`, `#`, `[`, `:`, or `&`, it's a selector context
+        // If followed by `{`, `(`, `,`, `.`, `#`, `[`, `:`, `&`, or a combinator
+        // (`~`, `+`, `>`), it's a selector context
         if f < bytes.len()
             && matches!(
                 bytes[f],
-                b'{' | b'(' | b',' | b'.' | b'#' | b'[' | b':' | b'&'
+                b'{' | b'(' | b',' | b'.' | b'#' | b'[' | b':' | b'&' | b'~' | b'+' | b'>'
             )
         {
             return false;
@@ -232,7 +242,7 @@ mod tests {
     fn always_rejects_no_space() {
         let d = check("a { color:red; }", "always");
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("Expected a space"));
+        assert!(d[0].message.contains("Expected single space"));
     }
 
     #[test]

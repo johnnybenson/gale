@@ -33,8 +33,8 @@ impl Rule for StylisticPropertyCase {
         let mut diags = Vec::new();
         for decl in decls {
             let prop = &decl.property;
-            // Skip custom properties (--*)
-            if prop.starts_with("--") {
+            // Skip custom properties (--*) and SCSS variables ($*)
+            if prop.starts_with("--") || prop.starts_with('$') {
                 continue;
             }
             // Skip vendor-prefixed properties for the case check

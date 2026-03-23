@@ -105,15 +105,37 @@ impl Rule for StylisticBlockOpeningBraceNewlineAfter {
                 while after < len && (bytes[after] == b' ' || bytes[after] == b'\t') {
                     after += 1;
                 }
-                let has_newline = after < len
-                    && (bytes[after] == b'\n'
-                        || (bytes[after] == b'\r'
-                            && after + 1 < len
-                            && bytes[after + 1] == b'\n')
-                        // SCSS line comment counts as having a newline
-                        || (after + 1 < len
-                            && bytes[after] == b'/'
-                            && bytes[after + 1] == b'/'));
+                // If next non-whitespace is a comment, skip it, then check for newline
+                let mut check_pos = after;
+                if check_pos + 1 < len
+                    && bytes[check_pos] == b'/'
+                    && bytes[check_pos + 1] == b'*'
+                {
+                    // Skip block comment /* ... */
+                    check_pos += 2;
+                    while check_pos + 1 < len
+                        && !(bytes[check_pos] == b'*' && bytes[check_pos + 1] == b'/')
+                    {
+                        check_pos += 1;
+                    }
+                    if check_pos + 1 < len {
+                        check_pos += 2; // skip */
+                    }
+                    // Skip trailing spaces/tabs after the comment
+                    while check_pos < len
+                        && (bytes[check_pos] == b' ' || bytes[check_pos] == b'\t')
+                    {
+                        check_pos += 1;
+                    }
+                }
+                let has_newline = check_pos < len
+                    && (bytes[check_pos] == b'\n'
+                        || (bytes[check_pos] == b'\r'
+                            && check_pos + 1 < len
+                            && bytes[check_pos + 1] == b'\n'))
+                    || (after + 1 < len
+                        && bytes[after] == b'/'
+                        && bytes[after + 1] == b'/');
 
                 let should_check = match option {
                     "always" => true,

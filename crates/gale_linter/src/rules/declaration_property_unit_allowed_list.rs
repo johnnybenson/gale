@@ -22,6 +22,15 @@ fn extract_units(value: &str) -> Vec<String> {
     let mut i = 0;
 
     while i < len {
+        // Skip SCSS variable references ($var or namespace.$var)
+        if bytes[i] == b'$' {
+            i += 1;
+            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_') {
+                i += 1;
+            }
+            continue;
+        }
+
         // Skip to a digit or decimal point followed by digit
         if bytes[i].is_ascii_digit()
             || (bytes[i] == b'.' && i + 1 < len && bytes[i + 1].is_ascii_digit())

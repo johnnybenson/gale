@@ -469,6 +469,7 @@ static KNOWN_PROPERTIES: &[&str] = &[
     "text-align",
     "text-align-last",
     "text-anchor",
+    "text-autospace",
     "text-combine-upright",
     "text-decoration",
     "text-decoration-color",

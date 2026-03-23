@@ -31,6 +31,19 @@ impl Rule for StylisticDeclarationBlockTrailingSemicolon {
             return vec![];
         }
 
+        // Skip SCSS nested property blocks (value ends with '}')
+        {
+            let last = &rule.declarations[rule.declarations.len() - 1];
+            if last.value.trim_end().ends_with('}') {
+                return vec![];
+            }
+        }
+
+        // Skip SCSS nested property blocks (selector ends with ':')
+        if rule.selector.trim_end().ends_with(':') {
+            return vec![];
+        }
+
         let source = ctx.source;
         let rule_end = rule.span.offset + rule.span.length;
 

@@ -217,9 +217,26 @@ fn extract_type_selectors(selector: &str) -> Vec<String> {
             continue;
         }
 
-        // Skip `&` (nesting selector).
+        // Skip `&` (nesting selector) and any following identifier suffix
+        // (e.g. `&_suggestionsWrapper`, `&--modifier`).
         if ch == '&' {
             i += 1;
+            while i < len && (chars[i].is_alphanumeric() || chars[i] == '-' || chars[i] == '_') {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Skip block comments (/* ... */).
+        if ch == '/' && i + 1 < len && chars[i + 1] == '*' {
+            i += 2;
+            while i + 1 < len {
+                if chars[i] == '*' && chars[i + 1] == '/' {
+                    i += 2;
+                    break;
+                }
+                i += 1;
+            }
             continue;
         }
 
@@ -233,7 +250,16 @@ fn extract_type_selectors(selector: &str) -> Vec<String> {
             continue;
         }
 
-        // Skip anything else (e.g., `%` in keyframe selectors).
+        // Skip SCSS placeholder selectors (%placeholder) and keyframe `%`.
+        if ch == '%' {
+            i += 1;
+            while i < len && (chars[i].is_alphanumeric() || chars[i] == '-' || chars[i] == '_') {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Skip anything else.
         i += 1;
     }
 

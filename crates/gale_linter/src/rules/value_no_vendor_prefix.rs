@@ -59,7 +59,8 @@ impl Rule for ValueNoVendorPrefix {
 
         // Read ignoreValues from options (secondary option object).
         let ignore_values: Vec<String> = ctx
-            .options
+            .secondary_options()
+            .or(ctx.options)
             .and_then(|v| v.get("ignoreValues"))
             .and_then(|v| v.as_array())
             .map(|arr| {

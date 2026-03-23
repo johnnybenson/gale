@@ -818,17 +818,22 @@ fn tokenize_value(value: &str) -> Vec<ValueToken> {
                         let q = bytes[i];
                         i += 1;
                         while i < len && bytes[i] != q {
-                            if bytes[i] == b'\\' {
+                            if bytes[i] == b'\\' && i + 1 < len {
                                 i += 1;
                             }
                             i += 1;
                         }
+                        // Skip the closing quote if we found it
+                        if i < len {
+                            i += 1;
+                        }
+                        continue; // already advanced past the quoted string
                     }
-                    if depth > 0 {
+                    if depth > 0 && i < len {
                         i += 1;
                     }
                 }
-                let args_end = i;
+                let args_end = i.min(len);
                 let args = &value[args_start..args_end];
                 let full_len = if i < len {
                     i += 1; // skip )

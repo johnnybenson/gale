@@ -112,33 +112,49 @@ impl Rule for StylisticBlockOpeningBraceSpaceBefore {
                     && (bytes[brace_pos - 1] == b' ' || bytes[brace_pos - 1] == b'\t');
                 let has_newline_before = brace_pos > 0 && bytes[brace_pos - 1] == b'\n';
 
-                let should_have_space = match option {
-                    "always" => true,
-                    "never" => false,
-                    "always-single-line" => is_single_line,
-                    "always-multi-line" => !is_single_line,
-                    _ => {
-                        i += 1;
-                        continue;
+                // For "always-single-line" and "always-multi-line", we only
+                // check blocks of the matching type and ignore the others.
+                // "always" means require space everywhere; "never" means forbid it.
+                match option {
+                    "always" => {
+                        if !has_space_before && !has_newline_before {
+                            diagnostics.push(
+                                Diagnostic::new(self.name(), "Expected single space before \"{\"")
+                                    .severity(self.default_severity())
+                                    .span(Span::new(brace_pos.saturating_sub(1), 1)),
+                            );
+                        }
                     }
-                };
-
-                if should_have_space {
-                    if !has_space_before && !has_newline_before {
-                        diagnostics.push(
-                            Diagnostic::new(self.name(), "Expected a space before \"{\"")
-                                .severity(self.default_severity())
-                                .span(Span::new(brace_pos, 1)),
-                        );
+                    "never" => {
+                        if has_space_before {
+                            diagnostics.push(
+                                Diagnostic::new(self.name(), "Unexpected space before \"{\"")
+                                    .severity(self.default_severity())
+                                    .span(Span::new(brace_pos, 1)),
+                            );
+                        }
                     }
-                } else {
-                    if has_space_before {
-                        diagnostics.push(
-                            Diagnostic::new(self.name(), "Unexpected space before \"{\"")
-                                .severity(self.default_severity())
-                                .span(Span::new(brace_pos, 1)),
-                        );
+                    "always-single-line" => {
+                        // Only check single-line blocks; multi-line blocks are ignored.
+                        if is_single_line && !has_space_before && !has_newline_before {
+                            diagnostics.push(
+                                Diagnostic::new(self.name(), "Expected single space before \"{\"")
+                                    .severity(self.default_severity())
+                                    .span(Span::new(brace_pos.saturating_sub(1), 1)),
+                            );
+                        }
                     }
+                    "always-multi-line" => {
+                        // Only check multi-line blocks; single-line blocks are ignored.
+                        if !is_single_line && !has_space_before && !has_newline_before {
+                            diagnostics.push(
+                                Diagnostic::new(self.name(), "Expected single space before \"{\"")
+                                    .severity(self.default_severity())
+                                    .span(Span::new(brace_pos.saturating_sub(1), 1)),
+                            );
+                        }
+                    }
+                    _ => {}
                 }
             }
 
@@ -179,7 +195,7 @@ mod tests {
         let d =
             StylisticBlockOpeningBraceSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("Expected a space"));
+        assert!(d[0].message.contains("Expected single space"));
     }
 
     #[test]
@@ -226,5 +242,25 @@ mod tests {
         let d =
             StylisticBlockOpeningBraceSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
         assert_eq!(d.len(), 1);
+    }
+
+    #[test]
+    fn always_multi_line_allows_space_for_single_line() {
+        // Single-line blocks should be completely ignored in "always-multi-line" mode,
+        // even if they have a space before the brace.
+        let opt = serde_json::json!("always-multi-line");
+        let source = "a { color: red; }";
+        let d =
+            StylisticBlockOpeningBraceSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
+        assert!(d.is_empty(), "Should not flag single-line block with space in always-multi-line mode");
+    }
+
+    #[test]
+    fn always_multi_line_ignores_empty_single_line_block() {
+        let opt = serde_json::json!("always-multi-line");
+        let source = "@mixin foo() {}";
+        let d =
+            StylisticBlockOpeningBraceSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
+        assert!(d.is_empty(), "Should not flag empty single-line block in always-multi-line mode");
     }
 }

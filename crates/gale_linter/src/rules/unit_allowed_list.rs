@@ -429,7 +429,9 @@ impl Rule for UnitAllowedList {
             CssNode::AtRule(at_rule) => {
                 if !at_rule.params.is_empty() {
                     let at_name = at_rule.name.to_ascii_lowercase();
-                    if at_name != "font-face" {
+                    // Stylelint only checks units in @media at-rule params,
+                    // not in other at-rules like @include, @container, etc.
+                    if at_name == "media" {
                         let params_offset =
                             find_params_offset(ctx.source, at_rule.span.offset, &at_rule.name);
                         let occurrences = extract_units_with_context(&at_rule.params);

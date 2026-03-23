@@ -38,6 +38,24 @@ impl Rule for ScssCommentNoLoud {
             return vec![];
         }
 
+        // Skip stylelint/gale disable/enable control comments — these are not
+        // regular loud comments but tooling directives that must use /* */ syntax.
+        let trimmed = comment.text.trim();
+        // Strip the leading /* and trailing */ if present, then check the inner text
+        let inner = trimmed
+            .strip_prefix("/*")
+            .unwrap_or(trimmed)
+            .strip_suffix("*/")
+            .unwrap_or(trimmed)
+            .trim();
+        if inner.starts_with("stylelint-disable")
+            || inner.starts_with("stylelint-enable")
+            || inner.starts_with("gale-disable")
+            || inner.starts_with("gale-enable")
+        {
+            return vec![];
+        }
+
         vec![
             Diagnostic::new(
                 self.name(),

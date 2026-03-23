@@ -46,11 +46,23 @@ impl Rule for StylisticSelectorListCommaNewlineAfter {
         };
 
         let bytes = sel_source.as_bytes();
+        let len = bytes.len();
         let mut paren_depth = 0i32;
         let mut in_interpolation = 0i32;
-        for (i, &b) in bytes.iter().enumerate() {
+        let mut i = 0;
+        while i < len {
+            let b = bytes[i];
+
+            // Skip SCSS line comments entirely (from `//` to end of line)
+            if b == b'/' && i + 1 < len && bytes[i + 1] == b'/' {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                continue;
+            }
+
             // Track SCSS interpolation #{...}
-            if b == b'#' && i + 1 < bytes.len() && bytes[i + 1] == b'{' {
+            if b == b'#' && i + 1 < len && bytes[i + 1] == b'{' {
                 in_interpolation += 1;
             }
             if b == b'{' && i > 0 && bytes[i - 1] != b'#' {
@@ -70,6 +82,20 @@ impl Rule for StylisticSelectorListCommaNewlineAfter {
             // Only check commas at the top level of the selector
             // (not inside interpolation or function calls)
             if b == b',' && paren_depth == 0 && in_interpolation == 0 {
+                // Stylelint (PostCSS) can't parse selectors where a
+                // comma-separated part contains SCSS interpolation.  Skip
+                // commas that are immediately followed (after optional
+                // whitespace) by `#{` to avoid false positives.
+                {
+                    let mut skip = i + 1;
+                    while skip < len && (bytes[skip] == b' ' || bytes[skip] == b'\t') {
+                        skip += 1;
+                    }
+                    if skip + 1 < len && bytes[skip] == b'#' && bytes[skip + 1] == b'{' {
+                        i += 1;
+                        continue;
+                    }
+                }
                 let after_comma = i + 1;
                 let next_char = if after_comma < bytes.len() {
                     Some(bytes[after_comma] as char)
@@ -77,24 +103,54 @@ impl Rule for StylisticSelectorListCommaNewlineAfter {
                     None
                 };
 
-                // SCSS line comment after comma counts as having a newline
-                let has_scss_comment = after_comma + 1 < bytes.len()
-                    && {
-                        let mut skip = after_comma;
-                        while skip < bytes.len()
-                            && (bytes[skip] == b' ' || bytes[skip] == b'\t')
+                // Check for newline after comma, treating comments as transparent.
+                // After optional whitespace, if we find:
+                //   - `//` (SCSS line comment): treat as newline (comment runs to EOL)
+                //   - `/* ... */` followed by newline: treat as newline
+                //   - `\n` or `\r\n`: normal newline
+                let has_newline_after = {
+                    let mut skip = after_comma;
+                    while skip < bytes.len()
+                        && (bytes[skip] == b' ' || bytes[skip] == b'\t')
+                    {
+                        skip += 1;
+                    }
+                    if skip + 1 < bytes.len()
+                        && bytes[skip] == b'/'
+                        && bytes[skip + 1] == b'/'
+                    {
+                        // SCSS line comment — implicitly ends with newline
+                        true
+                    } else if skip + 1 < bytes.len()
+                        && bytes[skip] == b'/'
+                        && bytes[skip + 1] == b'*'
+                    {
+                        // Block comment — skip to end, then check for newline
+                        let mut j = skip + 2;
+                        while j + 1 < bytes.len()
+                            && !(bytes[j] == b'*' && bytes[j + 1] == b'/')
                         {
-                            skip += 1;
+                            j += 1;
                         }
-                        skip + 1 < bytes.len()
-                            && bytes[skip] == b'/'
-                            && bytes[skip + 1] == b'/'
-                    };
-                let has_newline_after = has_scss_comment
-                    || next_char == Some('\n')
-                    || (next_char == Some('\r')
-                        && after_comma + 1 < bytes.len()
-                        && bytes[after_comma + 1] == b'\n');
+                        if j + 1 < bytes.len() {
+                            j += 2; // skip past `*/`
+                        }
+                        // Skip whitespace after closing `*/`
+                        while j < bytes.len()
+                            && (bytes[j] == b' ' || bytes[j] == b'\t')
+                        {
+                            j += 1;
+                        }
+                        j < bytes.len()
+                            && (bytes[j] == b'\n'
+                                || bytes[j] == b'\r')
+                    } else {
+                        next_char == Some('\n')
+                            || (next_char == Some('\r')
+                                && after_comma + 1 < bytes.len()
+                                && bytes[after_comma + 1] == b'\n')
+                    }
+                };
 
                 let violation = match option {
                     "always" => !has_newline_after,
@@ -116,6 +172,7 @@ impl Rule for StylisticSelectorListCommaNewlineAfter {
                     );
                 }
             }
+            i += 1;
         }
         diags
     }
@@ -162,6 +219,24 @@ span: ParserSpan::new(0, sel.len()),
         let ctx = ctx_with_source(sel);
         let d = rule.check(&style_with_selector(sel), &ctx);
         assert!(d.is_empty());
+    }
+
+    #[test]
+    fn allows_scss_line_comment_after_comma() {
+        let rule = StylisticSelectorListCommaNewlineAfter;
+        let sel = "&[aria-disabled=\"true\"]:enabled, // This catches a situation\n&[aria-disabled=\"true\"]:active:enabled";
+        let ctx = ctx_with_source(sel);
+        let d = rule.check(&style_with_selector(sel), &ctx);
+        assert!(d.is_empty(), "Should not flag comma followed by SCSS line comment, got {} diagnostics", d.len());
+    }
+
+    #[test]
+    fn allows_block_comment_newline_after_comma() {
+        let rule = StylisticSelectorListCommaNewlineAfter;
+        let sel = "a, /* comment */\nb,\nc";
+        let ctx = ctx_with_source(sel);
+        let d = rule.check(&style_with_selector(sel), &ctx);
+        assert!(d.is_empty(), "Should not flag comma followed by block comment then newline, got {} diagnostics", d.len());
     }
 
     #[test]

@@ -4,7 +4,7 @@ use gale_diagnostics::{Diagnostic, Severity, Span};
 use crate::rule::{Rule, RuleContext};
 
 /// Deprecated CSS properties (sorted for binary search).
-static DEPRECATED_PROPERTIES: &[&str] = &["azimuth", "clip", "ime-mode", "text-rendering"];
+static DEPRECATED_PROPERTIES: &[&str] = &["azimuth", "clip", "ime-mode"];
 
 fn is_deprecated_property(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();

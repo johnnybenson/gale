@@ -54,7 +54,7 @@ impl Default for RuleRegistry {
 ///
 /// Stylelint 15+ moved stylistic rules to the `@stylistic/stylelint-plugin`
 /// package, but old configs still use the unprefixed names.
-fn resolve_deprecated_alias(name: &str) -> Option<&'static str> {
+pub fn resolve_deprecated_alias(name: &str) -> Option<&'static str> {
     match name {
         "at-rule-name-case" => Some("@stylistic/at-rule-name-case"),
         "at-rule-name-space-after" => Some("@stylistic/at-rule-name-space-after"),
@@ -76,6 +76,7 @@ fn resolve_deprecated_alias(name: &str) -> Option<&'static str> {
         "declaration-colon-newline-after" => Some("@stylistic/declaration-colon-newline-after"),
         "declaration-colon-space-after" => Some("@stylistic/declaration-colon-space-after"),
         "declaration-colon-space-before" => Some("@stylistic/declaration-colon-space-before"),
+        "function-comma-newline-after" => Some("@stylistic/function-comma-newline-after"),
         "function-comma-space-after" => Some("@stylistic/function-comma-space-after"),
         "function-comma-space-before" => Some("@stylistic/function-comma-space-before"),
         "function-max-empty-lines" => Some("@stylistic/function-max-empty-lines"),
@@ -93,6 +94,7 @@ fn resolve_deprecated_alias(name: &str) -> Option<&'static str> {
         "media-query-list-comma-newline-after" => Some("@stylistic/media-query-list-comma-newline-after"),
         "media-query-list-comma-space-after" => Some("@stylistic/media-query-list-comma-space-after"),
         "media-query-list-comma-space-before" => Some("@stylistic/media-query-list-comma-space-before"),
+        "no-empty-first-line" => Some("@stylistic/no-empty-first-line"),
         "no-eol-whitespace" => Some("@stylistic/no-eol-whitespace"),
         "no-extra-semicolons" => Some("@stylistic/no-extra-semicolons"),
         "no-missing-end-of-source-newline" => Some("@stylistic/no-missing-end-of-source-newline"),
@@ -121,6 +123,9 @@ fn resolve_deprecated_alias(name: &str) -> Option<&'static str> {
         "value-list-comma-space-after" => Some("@stylistic/value-list-comma-space-after"),
         "value-list-comma-space-before" => Some("@stylistic/value-list-comma-space-before"),
         "value-list-max-empty-lines" => Some("@stylistic/value-list-max-empty-lines"),
+        // SCSS deprecated aliases
+        "scss/at-import-partial-extension-blacklist" => Some("scss/at-import-partial-extension-disallowed-list"),
+        "scss/at-import-no-partial-leading-underscore" => Some("scss/load-no-partial-leading-underscore"),
         _ => None,
     }
 }

@@ -48,11 +48,16 @@ impl Config {
 
         let ignore_list: Vec<String> = secondary
             .and_then(|v| v.get("ignore"))
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect()
+            .map(|v| {
+                if let Some(arr) = v.as_array() {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect()
+                } else if let Some(s) = v.as_str() {
+                    vec![s.to_string()]
+                } else {
+                    vec![]
+                }
             })
             .unwrap_or_default();
 
@@ -150,7 +155,7 @@ impl Rule for SelectorMaxType {
                     Diagnostic::new(
                         self.name(),
                         format!(
-                            "Expected selector \"{sel}\" to have no more than {max} type selector(s), found {count}",
+                            "Expected \"{sel}\" to have no more than {max} type selector",
                             max = config.max,
                         ),
                     )
@@ -371,10 +376,25 @@ fn is_ident_char(c: char) -> bool {
 /// - `#{...}` interpolation (SCSS, replaced with empty string)
 /// - `@{...}` interpolation (Less, replaced with empty string)
 fn strip_preprocessor_constructs(selector: &str, syntax: gale_css_parser::Syntax) -> String {
-    // First strip line comments
+    // Strip line comments (both whole-line and inline `// ...` comments)
     let no_comments: String = selector
         .lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
+        .map(|line| {
+            // Find `//` that isn't inside a string
+            let mut in_single = false;
+            let mut in_double = false;
+            let bytes = line.as_bytes();
+            for i in 0..bytes.len() {
+                if bytes[i] == b'\'' && !in_double {
+                    in_single = !in_single;
+                } else if bytes[i] == b'"' && !in_single {
+                    in_double = !in_double;
+                } else if !in_single && !in_double && bytes[i] == b'/' && i + 1 < bytes.len() && bytes[i + 1] == b'/' {
+                    return &line[..i];
+                }
+            }
+            line
+        })
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -469,7 +489,7 @@ span: ParserSpan::new(0, 0),
     fn reports_too_many_type_selectors() {
         let d = SelectorMaxType.check(&style_with_selector("div span a ul"), &ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("found 4"));
+        assert!(d[0].message.contains("to have no more than 3 type selector"));
     }
 
     #[test]

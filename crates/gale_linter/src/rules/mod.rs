@@ -153,6 +153,7 @@ pub mod stylistic_at_rule_semicolon_newline_after;
 pub mod stylistic_at_rule_semicolon_space_before;
 pub mod stylistic_block_closing_brace_newline_after;
 pub mod stylistic_block_closing_brace_newline_before;
+pub mod stylistic_block_closing_brace_space_before;
 pub mod stylistic_block_opening_brace_newline_after;
 pub mod stylistic_block_opening_brace_space_after;
 pub mod stylistic_block_opening_brace_space_before;
@@ -167,6 +168,7 @@ pub mod stylistic_declaration_block_trailing_semicolon;
 pub mod stylistic_declaration_colon_newline_after;
 pub mod stylistic_declaration_colon_space_after;
 pub mod stylistic_declaration_colon_space_before;
+pub mod stylistic_function_comma_newline_after;
 pub mod stylistic_function_comma_space_after;
 pub mod stylistic_function_comma_space_before;
 pub mod stylistic_function_max_empty_lines;
@@ -177,12 +179,14 @@ pub mod stylistic_indentation;
 pub mod stylistic_max_empty_lines;
 pub mod stylistic_media_feature_colon_space_after;
 pub mod stylistic_media_feature_colon_space_before;
+pub mod stylistic_media_feature_name_case;
 pub mod stylistic_media_feature_parentheses_space_inside;
 pub mod stylistic_media_feature_range_operator_space_after;
 pub mod stylistic_media_feature_range_operator_space_before;
 pub mod stylistic_media_query_list_comma_newline_after;
 pub mod stylistic_media_query_list_comma_space_after;
 pub mod stylistic_media_query_list_comma_space_before;
+pub mod stylistic_no_empty_first_line;
 pub mod stylistic_no_eol_whitespace;
 pub mod stylistic_no_extra_semicolons;
 pub mod stylistic_no_missing_end_of_source_newline;
@@ -432,7 +436,11 @@ pub fn register_all(registry: &mut RuleRegistry) {
     ));
     registry.register(Box::new(no_irregular_whitespace::NoIrregularWhitespace));
     registry.register(Box::new(no_unknown_animations::NoUnknownAnimations));
-    registry.register(Box::new(number_leading_zero::NumberLeadingZero));
+    // NOTE: `number-leading-zero` is NOT registered here.  The deprecated
+    // name resolves via `resolve_deprecated_alias` to the canonical
+    // `@stylistic/number-leading-zero` rule which is registered below.
+    // Registering the standalone rule would shadow the alias and bypass
+    // the correct source-level implementation (causing wrong span offsets).
     registry.register(Box::new(order_order::OrderOrder));
     registry.register(Box::new(
         order_properties_alphabetical_order::OrderPropertiesAlphabeticalOrder,
@@ -704,6 +712,18 @@ pub fn register_all(registry: &mut RuleRegistry) {
     ));
     registry.register(Box::new(
         stylistic_block_opening_brace_space_after::StylisticBlockOpeningBraceSpaceAfter,
+    ));
+    registry.register(Box::new(
+        stylistic_block_closing_brace_space_before::StylisticBlockClosingBraceSpaceBefore,
+    ));
+    registry.register(Box::new(
+        stylistic_no_empty_first_line::StylisticNoEmptyFirstLine,
+    ));
+    registry.register(Box::new(
+        stylistic_media_feature_name_case::StylisticMediaFeatureNameCase,
+    ));
+    registry.register(Box::new(
+        stylistic_function_comma_newline_after::StylisticFunctionCommaNewlineAfter,
     ));
 
     // SCSS-specific rules

@@ -3,18 +3,18 @@ use gale_diagnostics::{Diagnostic, Severity, Span};
 
 use crate::rule::{Rule, RuleContext};
 
-/// Require or disallow a newline before the closing brace of blocks.
+/// Require or disallow a space before the closing brace of blocks.
 ///
-/// Equivalent to `@stylistic/block-closing-brace-newline-before`.
-pub struct StylisticBlockClosingBraceNewlineBefore;
+/// Equivalent to `@stylistic/block-closing-brace-space-before`.
+pub struct StylisticBlockClosingBraceSpaceBefore;
 
-impl Rule for StylisticBlockClosingBraceNewlineBefore {
+impl Rule for StylisticBlockClosingBraceSpaceBefore {
     fn name(&self) -> &'static str {
-        "@stylistic/block-closing-brace-newline-before"
+        "@stylistic/block-closing-brace-space-before"
     }
 
     fn description(&self) -> &'static str {
-        "Require or disallow a newline before the closing brace of blocks"
+        "Require or disallow a space before the closing brace of blocks"
     }
 
     fn default_severity(&self) -> Severity {
@@ -22,7 +22,7 @@ impl Rule for StylisticBlockClosingBraceNewlineBefore {
     }
 
     fn check_root(&self, _nodes: &[CssNode], context: &RuleContext) -> Vec<Diagnostic> {
-        let option = context.primary_option_str().unwrap_or("always-multi-line");
+        let option = context.primary_option_str().unwrap_or("always-single-line");
         let source = context.source;
         let bytes = source.as_bytes();
         let len = bytes.len();
@@ -40,11 +40,13 @@ impl Rule for StylisticBlockClosingBraceNewlineBefore {
                     }
                     i += 1;
                 }
-                i += 1;
+                if i < len {
+                    i += 1;
+                }
                 continue;
             }
 
-            // Skip comments
+            // Skip block comments
             if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
                 i += 2;
                 while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
@@ -85,41 +87,40 @@ impl Rule for StylisticBlockClosingBraceNewlineBefore {
             if bytes[i] == b'}' {
                 let brace_pos = i;
 
-                // Check what's immediately before the closing brace (skipping spaces/tabs)
-                let has_newline_before = if brace_pos > 0 {
-                    let mut j = brace_pos - 1;
-                    while j > 0 && (bytes[j] == b' ' || bytes[j] == b'\t') {
-                        j -= 1;
-                    }
-                    bytes[j] == b'\n' || bytes[j] == b'\r'
-                } else {
-                    false
-                };
+                // Check the character immediately before the closing brace
+                let has_space_before = brace_pos > 0
+                    && (bytes[brace_pos - 1] == b' ' || bytes[brace_pos - 1] == b'\t');
 
                 // Check if the block is single-line
                 let is_single_line = is_block_single_line(source, brace_pos);
 
                 let violation = match option {
-                    "always" => !has_newline_before,
-                    "never" => has_newline_before,
-                    "always-multi-line" => !is_single_line && !has_newline_before,
+                    "always" => !has_space_before,
+                    "never" => has_space_before,
+                    "always-single-line" => is_single_line && !has_space_before,
+                    "never-single-line" => is_single_line && has_space_before,
+                    "always-multi-line" => !is_single_line && !has_space_before,
+                    "never-multi-line" => !is_single_line && has_space_before,
                     _ => false,
                 };
 
                 if violation {
                     let msg = match option {
-                        "always" | "always-multi-line" => "Expected newline before \"}\"",
-                        "never" => "Unexpected newline before \"}\"",
+                        "always" | "always-single-line" | "always-multi-line" => {
+                            "Expected a space before \"}\""
+                        }
+                        "never" | "never-single-line" | "never-multi-line" => {
+                            "Unexpected space before \"}\""
+                        }
                         _ => {
                             i += 1;
                             continue;
                         }
                     };
-                    // Stylelint reports the character before the closing brace
                     diagnostics.push(
                         Diagnostic::new(self.name(), msg)
                             .severity(self.default_severity())
-                            .span(Span::new(brace_pos.saturating_sub(1), 1)),
+                            .span(Span::new(brace_pos, 1)),
                     );
                 }
             }
@@ -156,7 +157,7 @@ mod tests {
     use gale_css_parser::Syntax;
 
     fn check(source: &str, option: &str) -> Vec<Diagnostic> {
-        let rule = StylisticBlockClosingBraceNewlineBefore;
+        let rule = StylisticBlockClosingBraceSpaceBefore;
         let opts = serde_json::json!(option);
         let ctx = RuleContext {
             file_path: "test.css",
@@ -168,41 +169,58 @@ mod tests {
     }
 
     #[test]
-    fn always_accepts_newline_before_brace() {
-        let d = check("a {\n  color: red;\n}", "always");
+    fn always_single_line_accepts_space() {
+        let d = check("a { color: red; }", "always-single-line");
         assert!(d.is_empty());
     }
 
     #[test]
-    fn always_rejects_no_newline_before_brace() {
+    fn always_single_line_rejects_no_space() {
+        let d = check("a { color: red;}", "always-single-line");
+        assert_eq!(d.len(), 1);
+        assert!(d[0].message.contains("Expected a space"));
+    }
+
+    #[test]
+    fn never_single_line_accepts_no_space() {
+        let d = check("a { color: red;}", "never-single-line");
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn never_single_line_rejects_space() {
+        let d = check("a { color: red; }", "never-single-line");
+        assert_eq!(d.len(), 1);
+        assert!(d[0].message.contains("Unexpected space"));
+    }
+
+    #[test]
+    fn always_single_line_ignores_multiline() {
+        let d = check("a {\n  color: red;\n}", "always-single-line");
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn always_accepts_space_on_multiline() {
         let d = check("a { color: red; }", "always");
-        assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("Expected newline"));
+        assert!(d.is_empty());
     }
 
     #[test]
-    fn never_accepts_no_newline_before_brace() {
+    fn always_rejects_no_space() {
+        let d = check("a { color: red;}", "always");
+        assert_eq!(d.len(), 1);
+    }
+
+    #[test]
+    fn never_accepts_no_space() {
+        let d = check("a { color: red;}", "never");
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn never_rejects_space() {
         let d = check("a { color: red; }", "never");
-        assert!(d.is_empty());
-    }
-
-    #[test]
-    fn never_rejects_newline_before_brace() {
-        let d = check("a {\n  color: red;\n}", "never");
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("Unexpected newline"));
-    }
-
-    #[test]
-    fn always_multi_line_allows_single_line() {
-        let d = check("a { color: red; }", "always-multi-line");
-        assert!(d.is_empty());
-    }
-
-    #[test]
-    fn always_multi_line_rejects_missing_newline_in_multiline_block() {
-        let d = check("a {\n  color: red; }", "always-multi-line");
-        assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("Expected newline"));
     }
 }

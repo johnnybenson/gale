@@ -45,6 +45,33 @@ fn find_trailing_zeros(
     let mut i = 0;
 
     while i < len {
+        // Skip url() contents — they contain encoded strings, not CSS numbers
+        if i + 4 <= len && bytes[i..].starts_with(b"url(") {
+            i += 4;
+            let mut depth = 1;
+            while i < len && depth > 0 {
+                match bytes[i] {
+                    b'(' => depth += 1,
+                    b')' => depth -= 1,
+                    b'"' | b'\'' => {
+                        let q = bytes[i];
+                        i += 1;
+                        while i < len && bytes[i] != q {
+                            if bytes[i] == b'\\' && i + 1 < len {
+                                i += 1;
+                            }
+                            i += 1;
+                        }
+                    }
+                    _ => {}
+                }
+                if depth > 0 {
+                    i += 1;
+                }
+            }
+            continue;
+        }
+
         // Look for start of a number
         if bytes[i].is_ascii_digit()
             || (bytes[i] == b'.' && i + 1 < len && bytes[i + 1].is_ascii_digit())

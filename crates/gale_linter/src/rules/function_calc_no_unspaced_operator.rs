@@ -491,10 +491,10 @@ impl Rule for FunctionCalcNoUnspacedOperator {
                 for (offset, op, side) in &violations {
                     let msg = match side {
                         UnspacedSide::Before => {
-                            format!("Expected a space before the '{op}' operator in calc function")
+                            format!("Expected single space before \"{op}\" operator")
                         }
                         UnspacedSide::After => {
-                            format!("Expected a space after the '{op}' operator in calc function")
+                            format!("Expected single space after \"{op}\" operator")
                         }
                     };
 

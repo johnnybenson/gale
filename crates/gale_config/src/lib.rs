@@ -108,6 +108,19 @@ impl ResolvedOverride {
         // Check exclusions
         !self.exclude_matchers.iter().any(|m| m.is_match(path))
     }
+
+    /// Check whether a file path matches the override's `files` patterns.
+    pub fn matches_files(&self, file_path: &str) -> bool {
+        let path = Path::new(file_path);
+        self.matchers.iter().any(|m| m.is_match(path))
+    }
+
+    /// Check whether a file path is excluded by this override's `ignoreFiles`
+    /// patterns.
+    pub fn is_excluded(&self, file_path: &str) -> bool {
+        let path = Path::new(file_path);
+        self.exclude_matchers.iter().any(|m| m.is_match(path))
+    }
 }
 
 /// The fully-resolved configuration used by the linter at runtime.
@@ -172,6 +185,44 @@ impl GaleConfig {
     /// Returns `true` if any overrides are configured.
     pub fn has_overrides(&self) -> bool {
         !self.overrides.is_empty()
+    }
+
+    /// Returns `true` when a file matches an override's `files` patterns AND
+    /// that same override's `ignoreFiles` patterns.  Stylelint treats such
+    /// files as fully ignored (`"ignored": true`) — no linting at all.
+    ///
+    /// The check is performed against both the relative path (relative to the
+    /// config directory) and the raw file path, mirroring
+    /// [`rules_for_file`]'s matching logic.
+    pub fn is_file_ignored_by_override(&self, file_path: &str) -> bool {
+        if self.overrides.is_empty() {
+            return false;
+        }
+
+        let relative_path: std::borrow::Cow<'_, str> =
+            if let Some(ref config_dir) = self.config_dir {
+                let abs_file = if Path::new(file_path).is_absolute() {
+                    PathBuf::from(file_path)
+                } else {
+                    std::env::current_dir().unwrap_or_default().join(file_path)
+                };
+                match abs_file.strip_prefix(config_dir) {
+                    Ok(rel) => rel.to_string_lossy().into_owned().into(),
+                    Err(_) => file_path.into(),
+                }
+            } else {
+                file_path.into()
+            };
+
+        for ov in &self.overrides {
+            let matches_files =
+                ov.matches_files(&relative_path) || ov.matches_files(file_path);
+            let excluded = ov.is_excluded(&relative_path) || ov.is_excluded(file_path);
+            if matches_files && excluded {
+                return true;
+            }
+        }
+        false
     }
 }
 

@@ -103,6 +103,29 @@ impl Rule for StylisticFunctionParenthesesSpaceInside {
                     }
                 }
 
+                // Check if this is a SCSS module function call like map.has-key(), color.adjust()
+                let mut is_scss_module_fn = false;
+                {
+                    let mut p = i - 1;
+                    // Walk back over the function name part (after the dot)
+                    while p > 0
+                        && (bytes[p].is_ascii_alphanumeric()
+                            || bytes[p] == b'-'
+                            || bytes[p] == b'_')
+                    {
+                        p -= 1;
+                    }
+                    // If we hit a dot and there's a namespace before it, it's a SCSS module call
+                    if bytes[p] == b'.'
+                        && p > 0
+                        && (bytes[p - 1].is_ascii_alphanumeric()
+                            || bytes[p - 1] == b'-'
+                            || bytes[p - 1] == b'_')
+                    {
+                        is_scss_module_fn = true;
+                    }
+                }
+
                 // Check if this is an SCSS at-rule like @include mixin(), @if(), @each, @for, @while
                 let mut is_at_rule_paren = false;
                 {
@@ -159,8 +182,8 @@ impl Rule for StylisticFunctionParenthesesSpaceInside {
                 }
                 let close_paren = j;
 
-                // Skip pseudo-class functions and SCSS at-rule parens
-                if is_pseudo_fn || is_at_rule_paren {
+                // Skip pseudo-class functions, SCSS at-rule parens, and SCSS module function calls
+                if is_pseudo_fn || is_at_rule_paren || is_scss_module_fn {
                     i = close_paren + 1;
                     continue;
                 }
