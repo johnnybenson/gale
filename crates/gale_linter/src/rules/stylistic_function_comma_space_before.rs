@@ -144,9 +144,12 @@ impl Rule for StylisticFunctionCommaSpaceBefore {
 
                         if violation {
                             let msg = match option {
-                                "always" => "Expected a space before the comma in function",
-                                "never" => "Unexpected space before the comma in function",
-                                _ => "Expected a space before the comma in function",
+                                "always" => "Expected single space before \",\"",
+                                "never" => "Unexpected whitespace before \",\"",
+                                "always-single-line" => {
+                                    "Expected single space before \",\" in a single-line function"
+                                }
+                                _ => "Expected single space before \",\"",
                             };
                             diagnostics.push(
                                 Diagnostic::new(self.name(), msg)

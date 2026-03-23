@@ -221,12 +221,17 @@ fn find_unspaced_operators(
     let len = bytes.len();
     let mut results = Vec::new();
     let mut i = 0;
+    // Track the start of the last SCSS interpolation #{...} so we can report
+    // the interpolation start position instead of the operator position,
+    // matching Stylelint's PostCSS-SCSS behaviour.
+    let mut last_interp_start: Option<usize> = None;
 
     while i < len {
         let ch = bytes[i];
 
         // Skip SCSS interpolation #{...}
         if is_scss && ch == b'#' && i + 1 < len && bytes[i + 1] == b'{' {
+            last_interp_start = Some(i);
             let mut depth = 1;
             let mut j = i + 2;
             while j < len {
@@ -424,11 +429,39 @@ fn find_unspaced_operators(
             let has_valid_before = valid_whitespace_before(bytes, i);
             let has_valid_after = valid_whitespace_after(bytes, i, len);
 
+            // When SCSS interpolation precedes the operator on the same
+            // "operand" (i.e. `#{$var} + x`), Stylelint's PostCSS-SCSS
+            // parser collapses the interpolation into a single word token
+            // and reports the position of that token (the `#`) rather than
+            // the operator. Match that behaviour.
+            let report_offset = if is_scss {
+                if let Some(interp) = last_interp_start {
+                    // Only use the interpolation start if it's the operand
+                    // immediately before this operator (separated only by
+                    // optional `}` and whitespace).
+                    let mut p = i;
+                    while p > 0 && bytes[p - 1].is_ascii_whitespace() {
+                        p -= 1;
+                    }
+                    // Check if the token before whitespace ends with `}`
+                    // from the interpolation
+                    if p > 0 && bytes[p - 1] == b'}' {
+                        base_offset + interp
+                    } else {
+                        base_offset + i
+                    }
+                } else {
+                    base_offset + i
+                }
+            } else {
+                base_offset + i
+            };
+
             if !has_valid_before {
-                results.push((base_offset + i, op_char, UnspacedSide::Before));
+                results.push((report_offset, op_char, UnspacedSide::Before));
             }
             if !has_valid_after {
-                results.push((base_offset + i, op_char, UnspacedSide::After));
+                results.push((report_offset, op_char, UnspacedSide::After));
             }
         }
 

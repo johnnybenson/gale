@@ -94,14 +94,29 @@ impl Rule for StylisticFunctionCommaSpaceAfter {
                 // Check if this is a pseudo-class/element function like :not(), :is(), :where(), :has()
                 // by looking for a colon before the function name
                 let mut is_pseudo_fn = false;
+                // Check if this is url() — commas inside url() are not function argument separators
+                let mut is_url_fn = false;
                 {
                     let mut p = i - 1;
+                    let fn_end = p;
                     while p > 0
                         && (bytes[p].is_ascii_alphanumeric()
                             || bytes[p] == b'-'
                             || bytes[p] == b'_')
                     {
                         p -= 1;
+                    }
+                    let fn_start = if bytes[p].is_ascii_alphanumeric()
+                        || bytes[p] == b'-'
+                        || bytes[p] == b'_'
+                    {
+                        p
+                    } else {
+                        p + 1
+                    };
+                    let fn_name = &ctx.source[fn_start..=fn_end];
+                    if fn_name.eq_ignore_ascii_case("url") {
+                        is_url_fn = true;
                     }
                     if bytes[p] == b':' {
                         is_pseudo_fn = true;
@@ -188,8 +203,8 @@ impl Rule for StylisticFunctionCommaSpaceAfter {
                 }
                 let paren_end = j;
 
-                // Skip pseudo-class functions and SCSS at-rule parens
-                if is_pseudo_fn || is_at_rule_paren {
+                // Skip pseudo-class functions, SCSS at-rule parens, and url() functions
+                if is_pseudo_fn || is_at_rule_paren || is_url_fn {
                     i = paren_end + 1;
                     continue;
                 }
@@ -267,11 +282,14 @@ impl Rule for StylisticFunctionCommaSpaceAfter {
 
                         if violation {
                             let msg = match option {
-                                "always" | "always-single-line" => {
-                                    "Expected a space after the comma in function"
+                                "always" => {
+                                    "Expected single space after \",\""
                                 }
-                                "never" => "Unexpected space after the comma in function",
-                                _ => "Expected a space after the comma in function",
+                                "always-single-line" => {
+                                    "Expected single space after \",\" in a single-line function"
+                                }
+                                "never" => "Unexpected space after \",\"",
+                                _ => "Expected single space after \",\"",
                             };
                             diagnostics.push(
                                 Diagnostic::new(self.name(), msg)

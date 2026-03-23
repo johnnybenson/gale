@@ -174,9 +174,13 @@ fn handle_directive(
         }
     } else if let Some(rule_part) = rest.strip_prefix("enable") {
         // enable [rule-name, ...]
+        // Use the end of the enable comment (past `*/`) so that diagnostics
+        // whose span starts within the enable comment itself are still
+        // suppressed.  This matches Stylelint's behaviour where the enable
+        // comment line is considered part of the disabled region.
         let rule_names = parse_rule_names(rule_part);
         for rule_name in rule_names {
-            close_disable(open_disables, ranges, comment_start, &rule_name);
+            close_disable(open_disables, ranges, comment_end, &rule_name);
         }
     } else if let Some(rule_part) = rest.strip_prefix("disable") {
         // disable [rule-name, ...]

@@ -230,7 +230,7 @@ impl Rule for StylisticIndentation {
                             format!("Expected {indent_type} for indentation"),
                         )
                         .severity(self.default_severity())
-                        .span(Span::new(line_start, j - line_start)),
+                        .span(Span::new(j, 0)),
                     );
                 } else if actual_indent != expected {
                     let unit = if use_tab { "tab" } else { "space" };
@@ -241,7 +241,7 @@ impl Rule for StylisticIndentation {
                             format!("Expected indentation of {expected} {unit}{plural}",),
                         )
                         .severity(self.default_severity())
-                        .span(Span::new(line_start, j - line_start)),
+                        .span(Span::new(j, 0)),
                     );
                 }
 

@@ -84,7 +84,7 @@ def detect_package_manager(clone_dir: Path) -> str:
         return "yarn"
     if (clone_dir / "bun.lockb").exists() or (clone_dir / "bun.lock").exists():
         return "bun"
-    return "npm"
+    return "bun"
 
 
 def _get_current_node_version() -> str:
