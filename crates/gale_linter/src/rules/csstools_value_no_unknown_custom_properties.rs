@@ -115,11 +115,6 @@ fn check_declaration(
     rule: &CsstoolsValueNoUnknownCustomProperties,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    // Skip custom property definitions (--my-color: value).
-    if decl.property.starts_with("--") {
-        return;
-    }
-
     // Only process if the value contains `var(`.
     if !decl.value.contains("var(") && !decl.value.contains("VAR(") {
         return;
@@ -131,6 +126,10 @@ fn check_declaration(
     // Find all var() references in the value.
     let var_refs = find_var_refs_in_value(&decl.value, value_offset);
 
+    // The declaration source representation (from property start to value end).
+    // Used for word-based position lookup matching Stylelint's behavior.
+    let decl_source_start = decl.span.offset;
+
     for vr in &var_refs {
         if known_props.contains(&vr.name) {
             continue;
@@ -138,6 +137,17 @@ fn check_declaration(
         if vr.has_fallback {
             continue;
         }
+
+        // Stylelint uses PostCSS's `rangeBy({ word })` which finds the FIRST
+        // occurrence of the word in the declaration's source representation.
+        // We replicate this by searching for the property name from the
+        // declaration start in the source.
+        let name_offset = if let Some(idx) = source[decl_source_start..].find(&vr.name) {
+            decl_source_start + idx
+        } else {
+            vr.name_offset
+        };
+
         diagnostics.push(
             Diagnostic::new(
                 rule.name(),
@@ -147,7 +157,7 @@ fn check_declaration(
                 ),
             )
             .severity(rule.default_severity())
-            .span(Span::new(vr.name_offset, vr.name.len())),
+            .span(Span::new(name_offset, vr.name.len())),
         );
     }
 }
@@ -409,13 +419,16 @@ mod tests {
     use super::*;
     use gale_css_parser::Syntax;
 
-    fn make_context_with_source(source: &str) -> RuleContext {
-        RuleContext {
+    fn lint(source: &str) -> Vec<Diagnostic> {
+        let rule = CsstoolsValueNoUnknownCustomProperties;
+        let parsed = gale_css_parser::parse(source, Syntax::Css).unwrap();
+        let context = RuleContext {
             file_path: "test.css",
             source,
             syntax: Syntax::Css,
             options: None,
-        }
+        };
+        rule.check_root(&parsed.nodes, &context)
     }
 
     #[test]
@@ -429,10 +442,7 @@ mod tests {
 
     #[test]
     fn reports_unknown_custom_property() {
-        let rule = CsstoolsValueNoUnknownCustomProperties;
-        let source = ".a { color: var(--unknown); }";
-        let context = make_context_with_source(source);
-        let diags = rule.check_root(&[], &context);
+        let diags = lint(".a { color: var(--unknown); }");
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("--unknown"));
         assert!(diags[0].message.contains("color"));
@@ -440,39 +450,28 @@ mod tests {
 
     #[test]
     fn allows_defined_custom_property() {
-        let rule = CsstoolsValueNoUnknownCustomProperties;
-        let source = ":root { --my-color: red; } .a { color: var(--my-color); }";
-        let context = make_context_with_source(source);
-        let diags = rule.check_root(&[], &context);
+        let diags = lint(":root { --my-color: red; } .a { color: var(--my-color); }");
         assert!(diags.is_empty());
     }
 
     #[test]
     fn skips_unknown_with_fallback_reports_inner() {
-        let rule = CsstoolsValueNoUnknownCustomProperties;
-        let source = ".a { background: var(--overlay-bg, var(--unknown-fallback)); }";
-        let context = make_context_with_source(source);
-        let diags = rule.check_root(&[], &context);
+        let diags = lint(".a { background: var(--overlay-bg, var(--unknown-fallback)); }");
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("--unknown-fallback"));
     }
 
     #[test]
     fn known_with_fallback_visits_inner() {
-        let rule = CsstoolsValueNoUnknownCustomProperties;
-        let source = ":root { --known: red; } .a { color: var(--known, var(--unknown)); }";
-        let context = make_context_with_source(source);
-        let diags = rule.check_root(&[], &context);
+        let diags = lint(":root { --known: red; } .a { color: var(--known, var(--unknown)); }");
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("--unknown"));
     }
 
     #[test]
-    fn skips_custom_property_definitions() {
-        let rule = CsstoolsValueNoUnknownCustomProperties;
-        let source = ":root { --my-color: var(--base-color); }";
-        let context = make_context_with_source(source);
-        let diags = rule.check_root(&[], &context);
-        assert!(diags.is_empty());
+    fn checks_custom_property_definitions() {
+        let diags = lint(":root { --my-color: var(--base-color); }");
+        assert_eq!(diags.len(), 1);
+        assert!(diags[0].message.contains("--base-color"));
     }
 }

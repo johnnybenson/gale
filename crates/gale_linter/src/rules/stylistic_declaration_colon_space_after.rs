@@ -153,9 +153,11 @@ fn is_declaration_colon(bytes: &[u8], pos: usize) -> bool {
 
     // If the character immediately after the colon is an ASCII letter (no space),
     // check if the word after the colon is followed by selector-like characters
-    // (`{`, `,`, `(`, `.`, `#`, `[`, `:`, or whitespace then `{`/`,`) which indicates
+    // (`{`, `,`, `.`, `#`, `[`, `:`, or whitespace then `{`/`,`) which indicates
     // a pseudo-class (e.g. input:focus { }), OR if it's followed by `;`/`!`/`}`
     // which indicates a declaration value (e.g. color:red;).
+    // Note: `(` is NOT included because `color:var(...)` is a valid declaration,
+    // not a pseudo-class.
     if pos + 1 < bytes.len() && bytes[pos + 1].is_ascii_alphabetic() {
         // Scan forward past the word after the colon
         let mut f = pos + 1;
@@ -168,12 +170,14 @@ fn is_declaration_colon(bytes: &[u8], pos: usize) -> bool {
         while f < bytes.len() && (bytes[f] == b' ' || bytes[f] == b'\t') {
             f += 1;
         }
-        // If followed by `{`, `(`, `,`, `.`, `#`, `[`, `:`, `&`, or a combinator
-        // (`~`, `+`, `>`), it's a selector context
+        // If followed by `{`, `,`, `.`, `#`, `[`, `:`, `&`, or a combinator
+        // (`~`, `+`, `>`), it's a selector context.
+        // `(` is intentionally NOT included — values often start with functions
+        // like `var(`, `calc(`, etc.
         if f < bytes.len()
             && matches!(
                 bytes[f],
-                b'{' | b'(' | b',' | b'.' | b'#' | b'[' | b':' | b'&' | b'~' | b'+' | b'>'
+                b'{' | b',' | b'.' | b'#' | b'[' | b':' | b'&' | b'~' | b'+' | b'>'
             )
         {
             return false;

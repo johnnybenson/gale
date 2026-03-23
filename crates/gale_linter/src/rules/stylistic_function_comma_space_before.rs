@@ -160,7 +160,9 @@ impl Rule for StylisticFunctionCommaSpaceBefore {
                     }
                     k += 1;
                 }
-                i = paren_end + 1;
+                // Advance past the opening paren only — do NOT skip to paren_end.
+                // This lets nested function calls be individually detected and checked.
+                i = paren_start + 1;
                 continue;
             }
             i += 1;

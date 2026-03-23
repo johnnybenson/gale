@@ -51,10 +51,13 @@ impl Rule for StylisticIndentation {
         let mut line_start = 0;
         // Track the last meaningful (non-whitespace, non-comment) character
         // to detect multi-line value continuation lines.
-        // A line is a "continuation" if the previous meaningful char was not
-        // `;`, `{`, or `}` — meaning we're inside a multi-line value,
-        // multi-line @import, etc. Stylelint skips indentation checks on those.
         let mut last_meaningful_char: u8 = b';'; // start as if after a statement
+        // Track how many "value indent levels" deep we are. This increments
+        // when we see a newline after an opening paren `(`, and decrements
+        // when we see `)` as the first meaningful char on a new line.
+        // This matches Stylelint's behavior of only adding indentation for
+        // parens that span multiple lines, not same-line parens.
+        let mut value_indent_depth: i32 = 0;
 
         while i < len {
             // Skip strings
@@ -127,6 +130,7 @@ impl Rule for StylisticIndentation {
             if bytes[i] == b'{' {
                 brace_depth += 1;
                 last_meaningful_char = b'{';
+                value_indent_depth = 0; // reset on block boundary
                 i += 1;
                 continue;
             }
@@ -137,6 +141,7 @@ impl Rule for StylisticIndentation {
                     brace_depth = 0;
                 }
                 last_meaningful_char = b'}';
+                value_indent_depth = 0; // reset on block boundary
                 i += 1;
                 continue;
             }
@@ -160,24 +165,34 @@ impl Rule for StylisticIndentation {
 
             if bytes[i] == b';' {
                 last_meaningful_char = b';';
+                value_indent_depth = 0; // reset on statement terminator
                 i += 1;
                 continue;
             }
 
             if bytes[i] == b'\n' {
                 line_start = i + 1;
+
+                // If the last meaningful char before this newline was `(`,
+                // it means a paren was opened and the content continues on
+                // the next line. Increment value_indent_depth.
+                if last_meaningful_char == b'(' {
+                    value_indent_depth += 1;
+                }
+
                 i += 1;
 
                 // Determine if the next line is a continuation of a
-                // multi-line value. Continuation lines are skipped, matching
-                // Stylelint's behavior. A line is a continuation when:
-                //  - we are inside parentheses (paren_depth > 0), OR
-                //  - the last meaningful char before the newline was not a
-                //    statement terminator (`;`, `{`, `}`)
-                let is_continuation = paren_depth > 0
-                    || (last_meaningful_char != b';'
-                        && last_meaningful_char != b'{'
-                        && last_meaningful_char != b'}');
+                // multi-line value that should be skipped.
+                // Continuation lines inside parentheses within a rule block
+                // (brace_depth > 0) are checked for indentation. All other
+                // continuation lines (top-level SCSS maps, @import lists,
+                // multi-line values not in parens) are skipped.
+                let is_continuation = last_meaningful_char != b';'
+                    && last_meaningful_char != b'{'
+                    && last_meaningful_char != b'}';
+                let is_skippable_continuation = is_continuation
+                    && (paren_depth == 0 || brace_depth == 0);
 
                 // Now check the indentation of the next line
                 let expected_depth = brace_depth as usize;
@@ -206,18 +221,29 @@ impl Rule for StylisticIndentation {
                     continue;
                 }
 
-                // Skip continuation lines (multi-line values, @import lists, etc.)
-                if is_continuation {
+                // Skip continuation lines that should not be checked
+                if is_skippable_continuation {
                     continue;
                 }
 
-                // A closing brace should be at parent level
+                // If the first non-whitespace char on this line is `)`, it
+                // closes a value indent level.
+                if j < len && bytes[j] == b')' && value_indent_depth > 0 {
+                    value_indent_depth -= 1;
+                }
+
+                // Compute expected indentation
                 let expected = if j < len && bytes[j] == b'}' {
+                    // A closing brace should be at parent level
                     if expected_depth > 0 {
                         (expected_depth - 1) * indent_size
                     } else {
                         0
                     }
+                } else if value_indent_depth > 0 {
+                    // Inside multi-line parenthesized value:
+                    // expected = base_indent + value_indent_depth * indent_size
+                    expected_depth * indent_size + value_indent_depth as usize * indent_size
                 } else {
                     expected_depth * indent_size
                 };

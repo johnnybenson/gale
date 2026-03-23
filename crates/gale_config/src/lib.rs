@@ -3333,12 +3333,14 @@ const KNOWN_PLUGINS: &[&str] = &[
     "@stylistic/stylelint-plugin",
     "stylelint-no-unsupported-browser-features",
     "stylelint-declaration-block-no-ignored-properties",
+    "stylelint-value-no-unknown-custom-properties",
 ];
 
 /// Rule prefixes associated with known plugins.  Used to determine whether an
 /// unrecognised rule belongs to a known plugin (and thus should produce a
 /// "not yet supported" warning rather than being silently dropped).
-const KNOWN_PLUGIN_RULE_PREFIXES: &[&str] = &["scss/", "order/", "@stylistic/", "stylistic/"];
+const KNOWN_PLUGIN_RULE_PREFIXES: &[&str] =
+    &["scss/", "order/", "@stylistic/", "stylistic/", "csstools/"];
 
 /// Standalone rule names from known plugins (no prefix).
 const KNOWN_PLUGIN_STANDALONE_RULES: &[&str] = &[

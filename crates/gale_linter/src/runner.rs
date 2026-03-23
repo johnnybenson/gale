@@ -455,6 +455,7 @@ impl LintRunner {
             rule_options: HashMap::new(),
             rule_severities: HashMap::new(),
             report_needless_disables: false,
+            configured_rules: Vec::new(),
             default_severity: None,
         }
     }
@@ -471,6 +472,7 @@ impl LintRunner {
             rule_options,
             rule_severities: HashMap::new(),
             report_needless_disables: false,
+            configured_rules: Vec::new(),
             default_severity: None,
         }
     }
