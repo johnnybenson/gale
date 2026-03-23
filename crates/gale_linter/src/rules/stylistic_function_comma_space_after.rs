@@ -212,7 +212,9 @@ impl Rule for StylisticFunctionCommaSpaceAfter {
                 let func_content = &ctx.source[paren_start..paren_end.min(len)];
                 let is_single_line = !func_content.contains('\n');
 
-                // Scan for commas inside this function call
+                // Scan for commas inside this function call (depth 0 only —
+                // nested function calls will be picked up by the outer loop
+                // when we advance `i` to just past the opening paren).
                 let mut k = paren_start + 1;
                 let mut inner_depth = 0;
                 while k < paren_end {
@@ -300,7 +302,10 @@ impl Rule for StylisticFunctionCommaSpaceAfter {
                     }
                     k += 1;
                 }
-                i = paren_end + 1;
+                // Advance past the opening paren only — do NOT skip to paren_end.
+                // This lets nested function calls like `var(a, var(b,c))` be
+                // individually detected and checked by the outer loop.
+                i = paren_start + 1;
                 continue;
             }
             i += 1;

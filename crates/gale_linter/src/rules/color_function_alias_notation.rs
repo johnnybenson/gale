@@ -14,6 +14,22 @@ pub struct ColorFunctionAliasNotation;
 
 const ALIAS_FUNCTIONS: &[(&str, &str)] = &[("rgba(", "rgb"), ("hsla(", "hsl")];
 
+/// Find the byte offset in the source where the declaration value begins
+/// (after the property name, `:`, and any whitespace).
+fn find_value_offset(source: &str, decl_offset: usize, property_len: usize) -> usize {
+    let start = decl_offset + property_len;
+    if start >= source.len() {
+        return decl_offset;
+    }
+    let rest = &source[start..];
+    let mut off = 0;
+    let bytes = rest.as_bytes();
+    while off < bytes.len() && (bytes[off] == b':' || bytes[off].is_ascii_whitespace()) {
+        off += 1;
+    }
+    start + off
+}
+
 impl Rule for ColorFunctionAliasNotation {
     fn name(&self) -> &'static str {
         "color-function-alias-notation"
@@ -27,7 +43,7 @@ impl Rule for ColorFunctionAliasNotation {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let decls: Vec<&gale_css_parser::Declaration> = match node {
             CssNode::Style(rule) => rule.declarations.iter().collect(),
             CssNode::Declaration(decl) => vec![decl],
@@ -36,11 +52,15 @@ impl Rule for ColorFunctionAliasNotation {
         let mut diags = Vec::new();
         for decl in decls {
             let lower = decl.value.to_ascii_lowercase();
+            // Find where the value starts in the source (after "property: ")
+            let value_offset = find_value_offset(ctx.source, decl.span.offset, decl.property.len());
             for &(alias, modern) in ALIAS_FUNCTIONS {
                 let mut search_from = 0;
                 while let Some(pos) = lower[search_from..].find(alias) {
                     let abs_pos = search_from + pos;
                     let legacy = &alias[..alias.len() - 1]; // "rgba" or "hsla"
+                    let fn_offset = value_offset + abs_pos;
+                    let fn_len = legacy.len();
                     diags.push(
                         Diagnostic::new(
                             self.name(),
@@ -49,7 +69,7 @@ impl Rule for ColorFunctionAliasNotation {
                             ),
                         )
                         .severity(self.default_severity())
-                        .span(Span::new(decl.span.offset, decl.span.length)),
+                        .span(Span::new(fn_offset, fn_len)),
                     );
                     search_from = abs_pos + 1;
                 }

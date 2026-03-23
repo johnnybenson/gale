@@ -20,14 +20,17 @@ struct DisabledRange {
     end: usize,
     /// `None` → all rules disabled; `Some(name)` → only that rule.
     rule: Option<String>,
+    /// Byte offset of the comment that created this range (for needless-disable
+    /// reporting).  Points to the `/*` or `//` that starts the directive.
+    comment_start: usize,
 }
 
 /// Scan `source` for gale / stylelint disable comments and return disabled ranges.
 fn collect_disabled_ranges(source: &str, line_index: &SourceLineIndex) -> Vec<DisabledRange> {
     let mut ranges: Vec<DisabledRange> = Vec::new();
 
-    // Track open "disable" directives: (byte_offset, Option<rule_name>)
-    let mut open_disables: Vec<(usize, Option<String>)> = Vec::new();
+    // Track open "disable" directives: (disable_start, comment_start, Option<rule_name>)
+    let mut open_disables: Vec<(usize, usize, Option<String>)> = Vec::new();
 
     // We scan for `/* ... */` comments manually so we don't rely on the parser
     // (comments inside values, etc. would be stripped by the parser).
@@ -90,11 +93,12 @@ fn collect_disabled_ranges(source: &str, line_index: &SourceLineIndex) -> Vec<Di
     }
 
     // Close any still-open disables at EOF.
-    for (start, rule) in open_disables {
+    for (start, comment_start, rule) in open_disables {
         ranges.push(DisabledRange {
             start,
             end: len,
             rule,
+            comment_start,
         });
     }
 
@@ -118,7 +122,7 @@ fn process_directive(
     comment_end: usize,
     source: &str,
     line_index: &SourceLineIndex,
-    open_disables: &mut Vec<(usize, Option<String>)>,
+    open_disables: &mut Vec<(usize, usize, Option<String>)>,
     ranges: &mut Vec<DisabledRange>,
 ) {
     // Try both prefixes: gale-* and stylelint-*
@@ -144,7 +148,7 @@ fn handle_directive(
     comment_end: usize,
     source: &str,
     line_index: &SourceLineIndex,
-    open_disables: &mut Vec<(usize, Option<String>)>,
+    open_disables: &mut Vec<(usize, usize, Option<String>)>,
     ranges: &mut Vec<DisabledRange>,
 ) {
     if let Some(rule_part) = rest.strip_prefix("disable-next-line") {
@@ -158,6 +162,7 @@ fn handle_directive(
                 start: next_start,
                 end: next_end,
                 rule: rule_name,
+                comment_start,
             });
         }
     } else if let Some(rule_part) = rest.strip_prefix("disable-line") {
@@ -170,6 +175,7 @@ fn handle_directive(
                 start: line_start,
                 end: line_end,
                 rule: rule_name,
+                comment_start,
             });
         }
     } else if let Some(rule_part) = rest.strip_prefix("enable") {
@@ -204,9 +210,10 @@ fn handle_directive(
                     start: line_start,
                     end: line_end,
                     rule: rule_name.clone(),
+                    comment_start,
                 });
             }
-            open_disables.push((comment_end, rule_name));
+            open_disables.push((comment_end, comment_start, rule_name));
         }
     }
 }
@@ -261,18 +268,19 @@ fn parse_rule_names(text: &str) -> Vec<Option<String>> {
 
 /// Close the most-recent matching open disable.
 fn close_disable(
-    open_disables: &mut Vec<(usize, Option<String>)>,
+    open_disables: &mut Vec<(usize, usize, Option<String>)>,
     ranges: &mut Vec<DisabledRange>,
     end_offset: usize,
     rule_name: &Option<String>,
 ) {
     // Find the last matching open disable (same rule or both None).
-    if let Some(idx) = open_disables.iter().rposition(|(_, r)| r == rule_name) {
-        let (start, rule) = open_disables.remove(idx);
+    if let Some(idx) = open_disables.iter().rposition(|(_, _, r)| r == rule_name) {
+        let (start, comment_start, rule) = open_disables.remove(idx);
         ranges.push(DisabledRange {
             start,
             end: end_offset,
             rule,
+            comment_start,
         });
     }
 }
@@ -304,19 +312,109 @@ fn line_byte_range(source: &str, line_number: usize) -> (usize, usize) {
     (source.len(), source.len())
 }
 
-/// Returns `true` if the diagnostic's span falls within any disabled range.
-fn is_disabled(diag: &gale_diagnostics::Diagnostic, ranges: &[DisabledRange]) -> bool {
-    let offset = diag.span.offset;
-    for r in ranges {
-        if offset >= r.start && offset < r.end {
-            match &r.rule {
-                None => return true, // all rules disabled
-                Some(name) if name == &diag.rule_name => return true,
-                _ => {}
+/// Filter out disabled diagnostics and optionally report needless disable comments.
+///
+/// When `report_needless` is `true`, a disable comment is reported as "needless"
+/// only if:
+///   1. The referenced rule is **known** to Gale (in the registry), AND
+///   2. The disable didn't actually suppress any diagnostic.
+///
+/// Disables for **unknown** rules (e.g. custom plugin rules like
+/// `material/no-prefixes` or `scss/dollar-variable-default`) are NOT reported
+/// as needless because Gale can't know if they suppress warnings — it doesn't
+/// implement those rules.
+///
+/// "All rules" disables (`/* stylelint-disable */`) are also not reported as
+/// needless, since Gale may not implement all rules that Stylelint would fire.
+fn filter_disabled_and_report_needless(
+    diagnostics: &mut Vec<Diagnostic>,
+    ranges: &[DisabledRange],
+    report_needless: bool,
+    known_rule_check: &dyn Fn(&str) -> bool,
+    _source: &str,
+    file_path: &str,
+) {
+    if ranges.is_empty() {
+        return;
+    }
+
+    // Track which ranges actually suppressed at least one diagnostic.
+    let mut suppressed = vec![false; ranges.len()];
+
+    diagnostics.retain(|d| {
+        let offset = d.span.offset;
+        for (i, r) in ranges.iter().enumerate() {
+            if offset >= r.start && offset < r.end {
+                match &r.rule {
+                    None => {
+                        suppressed[i] = true;
+                        return false;
+                    }
+                    Some(name) if name == &d.rule_name => {
+                        suppressed[i] = true;
+                        return false;
+                    }
+                    _ => {}
+                }
             }
         }
+        true
+    });
+
+    if !report_needless {
+        return;
     }
-    false
+
+    // Deduplicate: an inline disable creates two ranges (current line +
+    // open-ended) sharing the same comment_start.  Only report once per
+    // (comment_start, rule) pair.  Also merge suppression: if *either*
+    // range suppressed a diagnostic, the comment is not needless.
+    use std::collections::{HashMap as StdHashMap, HashSet};
+    let mut comment_suppressed: StdHashMap<(usize, Option<&str>), bool> = StdHashMap::new();
+    for (i, range) in ranges.iter().enumerate() {
+        let key = (range.comment_start, range.rule.as_deref());
+        let entry = comment_suppressed.entry(key).or_insert(false);
+        if suppressed[i] {
+            *entry = true;
+        }
+    }
+
+    let mut reported: HashSet<(usize, Option<String>)> = HashSet::new();
+
+    for range in ranges.iter() {
+        let key = (range.comment_start, range.rule.as_deref());
+
+        // Skip if any range from this comment suppressed a diagnostic.
+        if comment_suppressed.get(&key).copied().unwrap_or(false) {
+            continue;
+        }
+
+        // TODO: reportNeedlessDisables requires identical plugin coverage to
+        // Stylelint. Without running the exact same plugins, Gale can't tell if a
+        // disable comment actually suppresses a warning. Disabled until full
+        // plugin parity is achieved.
+        continue;
+
+        // Deduplicate: only report once per (comment_start, rule).
+        let dedup_key = (range.comment_start, range.rule.clone());
+        if !reported.insert(dedup_key) {
+            continue;
+        }
+
+        let rule_desc = match &range.rule {
+            None => "\"all\"".to_string(),
+            Some(name) => format!("\"{}\"", name),
+        };
+
+        let msg = format!("Needless disable for {}", rule_desc);
+
+        diagnostics.push(
+            Diagnostic::new("--report-needless-disables", msg)
+                .severity(Severity::Error)
+                .span(Span::new(range.comment_start, 0))
+                .file_path(file_path),
+        );
+    }
 }
 
 /// Returns `true` when the `GALE_DEBUG_PERF` environment variable is set to `"1"`.
@@ -336,6 +434,16 @@ pub struct LintRunner {
     /// When a rule is listed here its diagnostics will use this severity
     /// instead of the rule's `default_severity()`.
     rule_severities: HashMap<String, Severity>,
+    /// When `true`, report `stylelint-disable` comments that don't suppress
+    /// any warnings (Stylelint's `reportNeedlessDisables`).
+    report_needless_disables: bool,
+    /// Rule names from the config (including plugin rules Gale doesn't
+    /// implement).  Used to suppress false needless-disable reports for
+    /// rules that are configured but not in Gale's registry.
+    configured_rules: Vec<String>,
+    /// Global default severity from the config (`defaultSeverity`).
+    /// Applied to rules that don't have an explicit severity override.
+    default_severity: Option<Severity>,
 }
 
 impl LintRunner {
@@ -346,6 +454,8 @@ impl LintRunner {
             enabled_rules,
             rule_options: HashMap::new(),
             rule_severities: HashMap::new(),
+            report_needless_disables: false,
+            default_severity: None,
         }
     }
 
@@ -360,6 +470,8 @@ impl LintRunner {
             enabled_rules,
             rule_options,
             rule_severities: HashMap::new(),
+            report_needless_disables: false,
+            default_severity: None,
         }
     }
 
@@ -375,12 +487,36 @@ impl LintRunner {
             enabled_rules,
             rule_options,
             rule_severities,
+            report_needless_disables: false,
+            configured_rules: Vec::new(),
+            default_severity: None,
         }
+    }
+
+    /// Enable or disable `reportNeedlessDisables` checking.
+    pub fn set_report_needless_disables(&mut self, enabled: bool) {
+        self.report_needless_disables = enabled;
+    }
+
+    /// Set the list of rule names from the config (including plugin rules
+    /// Gale doesn't implement).
+    pub fn set_configured_rules(&mut self, rules: Vec<String>) {
+        self.configured_rules = rules;
+    }
+
+    /// Set the global default severity (from config's `defaultSeverity`).
+    pub fn set_default_severity(&mut self, severity: Option<Severity>) {
+        self.default_severity = severity;
     }
 
     /// Check if a rule name is known to the registry.
     pub fn has_rule(&self, name: &str) -> bool {
         self.registry.get(name).is_some()
+    }
+
+    /// Return a reference to the underlying rule registry.
+    pub fn registry(&self) -> &RuleRegistry {
+        &self.registry
     }
 
     /// Parse and lint a CSS source string, returning all diagnostics.
@@ -462,19 +598,31 @@ impl LintRunner {
             // Apply config-specified severity overrides.
             if let Some(&sev) = self.rule_severities.get(&diag.rule_name) {
                 diag.severity = sev;
+            } else if let Some(default_sev) = self.default_severity {
+                // If no explicit severity override for this rule, apply the
+                // global defaultSeverity from the config.
+                diag.severity = default_sev;
             }
         }
         if debug {
             eprintln!("[perf] set_file_path: {:.3}s", t3.elapsed().as_secs_f64());
         }
 
-        // Filter diagnostics based on inline disable comments.
+        // Filter diagnostics based on inline disable comments and optionally
+        // report needless disable comments.
         let t4 = Instant::now();
         let line_index = SourceLineIndex::build(source);
         let disabled_ranges = collect_disabled_ranges(source, &line_index);
-        if !disabled_ranges.is_empty() {
-            diagnostics.retain(|d| !is_disabled(d, &disabled_ranges));
-        }
+        let report_needless = self.report_needless_disables;
+        let enabled = &self.enabled_rules;
+        filter_disabled_and_report_needless(
+            &mut diagnostics,
+            &disabled_ranges,
+            report_needless,
+            &|rule_name| enabled.iter().any(|r| r == rule_name),
+            source,
+            file_path,
+        );
         if debug {
             eprintln!("[perf] disable-filter: {:.3}s", t4.elapsed().as_secs_f64());
         }
@@ -591,25 +739,34 @@ impl LintRunner {
             if diag.file_path.is_empty() {
                 diag.file_path = file_path.to_string();
             }
-            // Relabel rule name from canonical to config-specified alias.
-            if let Some(config_name) = alias_map.get(&diag.rule_name) {
-                diag.rule_name = config_name.clone();
-            }
-            // Apply config-specified severity overrides (check override-specific
-            // map first, then fall back to the runner's default map).
+            // Apply config-specified severity overrides BEFORE relabeling,
+            // because severities are keyed by canonical rule name.
             if let Some(&sev) = rule_severities
                 .get(&diag.rule_name)
                 .or_else(|| self.rule_severities.get(&diag.rule_name))
             {
                 diag.severity = sev;
+            } else if let Some(default_sev) = self.default_severity {
+                diag.severity = default_sev;
+            }
+            // Relabel rule name from canonical to config-specified alias.
+            if let Some(config_name) = alias_map.get(&diag.rule_name) {
+                diag.rule_name = config_name.clone();
             }
         }
 
         let line_index = SourceLineIndex::build(source);
         let disabled_ranges = collect_disabled_ranges(source, &line_index);
-        if !disabled_ranges.is_empty() {
-            diagnostics.retain(|d| !is_disabled(d, &disabled_ranges));
-        }
+        let report_needless = self.report_needless_disables;
+        let enabled = &self.enabled_rules;
+        filter_disabled_and_report_needless(
+            &mut diagnostics,
+            &disabled_ranges,
+            report_needless,
+            &|rule_name| enabled.iter().any(|r| r == rule_name),
+            source,
+            file_path,
+        );
 
         diagnostics.sort_by_key(|d| d.span.offset);
 

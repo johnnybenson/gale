@@ -21,6 +21,7 @@ pub mod color_named;
 pub mod color_no_hex;
 pub mod color_no_invalid_hex;
 pub mod comment_empty_line_before;
+pub mod csstools_value_no_unknown_custom_properties;
 pub mod comment_no_empty;
 pub mod comment_pattern;
 pub mod comment_whitespace_inside;
@@ -299,6 +300,9 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(color_no_hex::ColorNoHex));
     registry.register(Box::new(color_no_invalid_hex::ColorNoInvalidHex));
     registry.register(Box::new(comment_empty_line_before::CommentEmptyLineBefore));
+    registry.register(Box::new(
+        csstools_value_no_unknown_custom_properties::CsstoolsValueNoUnknownCustomProperties,
+    ));
     registry.register(Box::new(comment_no_empty::CommentNoEmpty));
     registry.register(Box::new(comment_pattern::CommentPattern));
     registry.register(Box::new(comment_whitespace_inside::CommentWhitespaceInside));

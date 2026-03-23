@@ -135,6 +135,13 @@ pub struct GaleConfig {
     pub config_dir: Option<PathBuf>,
     /// Plugin names declared in the config file (extracted from the `plugins` field).
     pub plugins: Vec<String>,
+    /// When `true`, report `stylelint-disable` comments that don't actually
+    /// suppress any warnings (Stylelint's `reportNeedlessDisables` option).
+    pub report_needless_disables: bool,
+    /// The default severity for rules that don't specify their own severity.
+    /// Corresponds to Stylelint's `defaultSeverity` option.  When `None`, rules
+    /// use their built-in default severity.
+    pub default_severity: Option<Severity>,
 }
 
 impl GaleConfig {
@@ -235,6 +242,8 @@ impl Default for GaleConfig {
             overrides: Vec::new(),
             config_dir: None,
             plugins: Vec::new(),
+            report_needless_disables: false,
+            default_severity: None,
         }
     }
 }
@@ -284,6 +293,15 @@ pub struct ConfigFile {
     /// accept the field so configs with plugins don't fail to parse.
     #[serde(default)]
     pub plugins: Option<serde_json::Value>,
+    /// Stylelint's `reportNeedlessDisables` option.  When `true`, report
+    /// `stylelint-disable` comments that don't suppress any warnings.
+    #[serde(default)]
+    pub report_needless_disables: Option<serde_json::Value>,
+    /// Stylelint's `defaultSeverity` option.  When set, rules that don't
+    /// specify their own severity will use this value instead of their
+    /// built-in default.
+    #[serde(default)]
+    pub default_severity: Option<String>,
 }
 
 /// A single override entry as it appears in the config file.
@@ -339,10 +357,12 @@ impl RuleConfigValue {
             RuleConfigValue::Null(_) => RuleConfig {
                 severity: Some(Severity::Off),
                 options: None,
+
             },
             RuleConfigValue::Bool(b) => RuleConfig {
                 severity: Some(if *b { Severity::Error } else { Severity::Off }),
                 options: None,
+
             },
             RuleConfigValue::Number(n) => {
                 // Numeric value — store as the primary option.
@@ -352,6 +372,7 @@ impl RuleConfigValue {
                 RuleConfig {
                     severity: Some(Severity::Error),
                     options: Some(serde_json::Value::Number(n.clone())),
+    
                 }
             }
             RuleConfigValue::Severity(s) => {
@@ -359,6 +380,7 @@ impl RuleConfigValue {
                     RuleConfig {
                         severity: Some(parse_severity(s)),
                         options: None,
+        
                     }
                 } else {
                     // Not a known severity — treat as a primary option value.
@@ -368,6 +390,7 @@ impl RuleConfigValue {
                     RuleConfig {
                         severity: Some(Severity::Error),
                         options: Some(serde_json::Value::String(s.clone())),
+        
                     }
                 }
             }
@@ -387,18 +410,40 @@ impl RuleConfigValue {
 
                 if is_severity_str {
                     // First element is a severity: ["error", { options }]
-                    let severity = first.and_then(|v| v.as_str()).map(parse_severity);
+                    let mut severity = first.and_then(|v| v.as_str()).map(parse_severity);
                     let options = items.get(1).cloned();
+                    // Stylelint allows secondary options to override severity:
+                    // e.g. [true, { severity: "warning" }]
+                    if let Some(serde_json::Value::Object(ref obj)) =
+                        options
+                    {
+                        if let Some(serde_json::Value::String(s)) = obj.get("severity") {
+                            if is_severity_string(s) {
+                                severity = Some(parse_severity(s));
+                            }
+                        }
+                    }
                     RuleConfig { severity, options }
                 } else if is_bool {
                     // First element is a boolean: [true, { options }]
                     let enabled = first.and_then(|v| v.as_bool()).unwrap_or(true);
-                    let severity = Some(if enabled {
+                    let mut severity = Some(if enabled {
                         Severity::Error
                     } else {
                         Severity::Off
                     });
                     let options = items.get(1).cloned();
+                    // Stylelint allows secondary options to override severity:
+                    // e.g. [true, { severity: "warning" }]
+                    if let Some(serde_json::Value::Object(ref obj)) =
+                        options
+                    {
+                        if let Some(serde_json::Value::String(s)) = obj.get("severity") {
+                            if is_severity_string(s) {
+                                severity = Some(parse_severity(s));
+                            }
+                        }
+                    }
                     RuleConfig { severity, options }
                 } else {
                     // First element is a primary option (e.g. "always", 4):
@@ -419,6 +464,7 @@ impl RuleConfigValue {
                 RuleConfig {
                     severity: Some(Severity::Error),
                     options: Some(serde_json::Value::Object(map.clone())),
+    
                 }
             }
         }
@@ -438,6 +484,40 @@ fn parse_severity(s: &str) -> Severity {
         "error" => Severity::Error,
         "warning" | "warn" => Severity::Warning,
         _ => Severity::Off,
+    }
+}
+
+/// Check whether a raw `RuleConfigValue` explicitly sets a severity level.
+///
+/// Returns `true` for values like `"error"`, `"warning"`, `["error", { ... }]`,
+/// or `[true, { severity: "warning" }]`.  Returns `false` for `true`, `"without-alpha"`,
+/// `["always", { ... }]` (no explicit severity in secondary), etc.
+fn has_explicit_severity_in_value(v: &RuleConfigValue) -> bool {
+    match v {
+        RuleConfigValue::Null(_) => true,
+        RuleConfigValue::Bool(false) => true,
+        RuleConfigValue::Bool(true) => false,
+        RuleConfigValue::Number(_) => false,
+        RuleConfigValue::Severity(s) => is_severity_string(s),
+        RuleConfigValue::Array(items) => {
+            // Check if first element is a severity string.
+            let first_is_severity = items
+                .first()
+                .and_then(|v| v.as_str())
+                .map(is_severity_string)
+                .unwrap_or(false);
+            if first_is_severity {
+                return true;
+            }
+            // Check secondary options for { severity: "..." }.
+            if let Some(serde_json::Value::Object(obj)) = items.get(1) {
+                if let Some(serde_json::Value::String(s)) = obj.get("severity") {
+                    return is_severity_string(s);
+                }
+            }
+            false
+        }
+        RuleConfigValue::Object(_) => false,
     }
 }
 
@@ -2068,6 +2148,8 @@ fn replace_regexp_literals(s: &str) -> String {
                 for pc in pattern.chars() {
                     if pc == '"' {
                         result.push('\\');
+                    } else if pc == '\\' {
+                        result.push('\\');
                     }
                     result.push(pc);
                 }
@@ -3330,14 +3412,44 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
     rules.retain(|_, rc| rc.severity != Some(Severity::Off));
 
     // 2. Overlay user rules on top — user always wins.
-    for (name, value) in raw.rules.unwrap_or_default() {
+    let raw_rules = raw.rules.unwrap_or_default();
+    for (name, value) in &raw_rules {
         let resolved = value.resolve();
         // If the user set a rule to Off, remove it from the map entirely
         // so the linter doesn't run it at all.
         if resolved.severity == Some(Severity::Off) {
-            rules.remove(&name);
+            rules.remove(name);
         } else {
-            rules.insert(name, resolved);
+            rules.insert(name.clone(), resolved);
+        }
+    }
+
+    // 2b. Apply `defaultSeverity` if set.
+    // In Stylelint, `defaultSeverity` replaces the implicit "error" default
+    // for rules that don't specify their own severity.  We apply it to all
+    // rules whose resolved severity is Error and whose raw config value did
+    // not explicitly contain "error"/"warning"/"off" as a severity keyword.
+    let default_sev_str = raw.default_severity.as_deref();
+    if let Some(ds) = default_sev_str {
+        let default_sev = match ds {
+            "warning" => Some(Severity::Warning),
+            "error" => Some(Severity::Error),
+            _ => None,
+        };
+        if let Some(sev) = default_sev {
+            // Apply to ALL rules (both extended and user-defined).
+            // Skip rules whose raw config explicitly sets a severity keyword.
+            for (name, rc) in rules.iter_mut() {
+                if rc.severity == Some(Severity::Error) {
+                    // Check if this rule's raw value explicitly specifies severity.
+                    let has_explicit_severity = raw_rules.get(name).map_or(false, |v| {
+                        has_explicit_severity_in_value(v)
+                    });
+                    if !has_explicit_severity {
+                        rc.severity = Some(sev);
+                    }
+                }
+            }
         }
     }
 
@@ -3410,6 +3522,26 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
         .map(extract_plugin_names)
         .unwrap_or_default();
 
+    // 5. Parse reportNeedlessDisables — accepts `true`, `false`, or an array
+    //    (Stylelint also supports per-rule arrays, but we only support the
+    //    boolean form for now).
+    let report_needless_disables = raw
+        .report_needless_disables
+        .as_ref()
+        .map(|v| match v {
+            serde_json::Value::Bool(b) => *b,
+            // Treat any non-false value (e.g. an array of rules) as enabled.
+            _ => true,
+        })
+        .unwrap_or(false);
+
+    // 6. Parse defaultSeverity.
+    let default_severity = raw.default_severity.as_deref().and_then(|s| match s {
+        "warning" => Some(Severity::Warning),
+        "error" => Some(Severity::Error),
+        _ => None,
+    });
+
     GaleConfig {
         rules,
         ignore_patterns,
@@ -3417,6 +3549,8 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
         overrides,
         config_dir: Some(base_dir.to_path_buf()),
         plugins,
+        report_needless_disables,
+        default_severity,
     }
 }
 

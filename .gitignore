@@ -21,3 +21,4 @@ tests/differential/results/
 dist/
 .claude/
 __pycache__/
+tests/differential/repos/

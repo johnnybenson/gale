@@ -651,12 +651,18 @@ pub fn run() -> Result<()> {
         })
         .collect();
 
-    let runner = LintRunner::with_options_and_severities(
+    let mut runner = LintRunner::with_options_and_severities(
         registry,
         enabled_rules.clone(),
         rule_options,
         rule_severities,
     );
+    runner.set_report_needless_disables(config.report_needless_disables);
+    runner.set_default_severity(config.default_severity.map(|s| match s {
+        gale_config::Severity::Error => gale_diagnostics::Severity::Error,
+        gale_config::Severity::Warning => gale_diagnostics::Severity::Warning,
+        gale_config::Severity::Off => gale_diagnostics::Severity::Warning, // shouldn't happen
+    }));
     let has_overrides = config.has_overrides();
 
     /// Pre-computed lint parameters for a resolved config.
@@ -694,23 +700,37 @@ pub fn run() -> Result<()> {
             .rules
             .iter()
             .filter_map(|(name, cfg)| {
-                cfg.options
-                    .as_ref()
-                    .map(|opts| (name.clone(), opts.clone()))
+                cfg.options.as_ref().map(|opts| {
+                    // Resolve to canonical name if this is a deprecated alias
+                    let canonical = runner
+                        .registry()
+                        .get(name)
+                        .map(|r| r.name().to_string())
+                        .unwrap_or_else(|| name.clone());
+                    (canonical, opts.clone())
+                })
             })
             .collect();
         let rule_severities: std::collections::HashMap<String, gale_diagnostics::Severity> = config
             .rules
             .iter()
             .filter_map(|(name, cfg)| {
-                cfg.severity.as_ref().and_then(|s| match s {
-                    gale_config::Severity::Error => {
-                        Some((name.clone(), gale_diagnostics::Severity::Error))
+                cfg.severity.as_ref().and_then(|s| {
+                    // Resolve to canonical name if this is a deprecated alias
+                    let canonical = runner
+                        .registry()
+                        .get(name)
+                        .map(|r| r.name().to_string())
+                        .unwrap_or_else(|| name.clone());
+                    match s {
+                        gale_config::Severity::Error => {
+                            Some((canonical, gale_diagnostics::Severity::Error))
+                        }
+                        gale_config::Severity::Warning => {
+                            Some((canonical, gale_diagnostics::Severity::Warning))
+                        }
+                        gale_config::Severity::Off => None,
                     }
-                    gale_config::Severity::Warning => {
-                        Some((name.clone(), gale_diagnostics::Severity::Warning))
-                    }
-                    gale_config::Severity::Off => None,
                 })
             })
             .collect();

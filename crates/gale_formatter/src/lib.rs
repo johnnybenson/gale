@@ -139,12 +139,15 @@ impl Formatter for JsonFormatter {
                     .iter()
                     .map(|diag| {
                         let (line, column) = line_index.offset_to_location(diag.span.offset);
+                        // Stylelint appends " (rule-name)" to every message text.
+                        // We must replicate this for byte-for-byte identical JSON output.
+                        let text = format!("{} ({})", diag.message, diag.rule_name);
                         JsonWarning {
                             line,
                             column,
                             rule: diag.rule_name.clone(),
                             severity: diag.severity.to_string(),
-                            text: diag.message.clone(),
+                            text,
                         }
                     })
                     .collect();
