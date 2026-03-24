@@ -1396,6 +1396,54 @@ fn resolve_import_path(file_dir: &Path, rel_path: &str) -> Option<PathBuf> {
     None
 }
 
+/// Resolve an npm package import by walking up the directory tree looking for
+/// `node_modules/<package>/`.  Tries the package's `main` field, then
+/// `index.js`, then `index.cjs`.
+fn resolve_npm_package_path(file_dir: &Path, package: &str) -> Option<PathBuf> {
+    let mut dir = file_dir.to_path_buf();
+    loop {
+        let candidate = dir.join("node_modules").join(package);
+        if candidate.is_dir() {
+            // Try package.json "main" field
+            let pkg_json = candidate.join("package.json");
+            if pkg_json.is_file() {
+                if let Ok(contents) = std::fs::read_to_string(&pkg_json) {
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&contents) {
+                        if let Some(main) = parsed.get("main").and_then(|v| v.as_str()) {
+                            let main_path = candidate.join(main);
+                            if main_path.is_file() {
+                                return Some(main_path);
+                            }
+                        }
+                    }
+                }
+            }
+            // Try index.js, index.cjs
+            for name in &["index.js", "index.cjs", "index.mjs"] {
+                let idx = candidate.join(name);
+                if idx.is_file() {
+                    return Some(idx);
+                }
+            }
+            // If the package path itself is a file (e.g. single-file package)
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+        // Also try as a file directly (e.g. scoped package with subpath)
+        let candidate_file = dir.join("node_modules").join(package);
+        for ext in &["", ".js", ".cjs", ".json"] {
+            let with_ext = PathBuf::from(format!("{}{}", candidate_file.display(), ext));
+            if with_ext.is_file() {
+                return Some(with_ext);
+            }
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
 /// Extract the default export value from a JS source file.
 ///
 /// Handles:
@@ -1533,14 +1581,18 @@ fn resolve_js_imports(source: &str, file_dir: Option<&Path>) -> String {
     let mut result = source.to_string();
 
     for (var_name, rel_path) in &imports {
-        // Only resolve relative imports (not npm packages)
-        if !rel_path.starts_with("./") && !rel_path.starts_with("../") {
-            continue;
-        }
-
-        let import_path = match resolve_import_path(file_dir, rel_path) {
-            Some(p) => p,
-            None => continue,
+        let import_path = if rel_path.starts_with("./") || rel_path.starts_with("../") {
+            // Relative import
+            match resolve_import_path(file_dir, rel_path) {
+                Some(p) => p,
+                None => continue,
+            }
+        } else {
+            // npm package import — resolve from node_modules
+            match resolve_npm_package_path(file_dir, rel_path) {
+                Some(p) => p,
+                None => continue,
+            }
         };
 
         let imported_source = match std::fs::read_to_string(&import_path) {

@@ -613,7 +613,7 @@ pub fn run() -> Result<()> {
     // Config may use deprecated aliases (e.g. "function-comma-space-after")
     // but the runner looks up options by canonical name
     // (e.g. "@stylistic/function-comma-space-after").
-    let rule_options: std::collections::HashMap<String, serde_json::Value> = config
+    let mut rule_options: std::collections::HashMap<String, serde_json::Value> = config
         .rules
         .iter()
         .filter_map(|(name, cfg)| {
@@ -627,6 +627,27 @@ pub fn run() -> Result<()> {
             })
         })
         .collect();
+
+    // Detect Stylelint version and inject compatibility options.
+    // Older Stylelint versions (< 15) have a smaller known-units list that
+    // doesn't include dynamic viewport units (dvh, dvw, etc.) or container
+    // query units (cqw, cqh, etc.).  When running against repos that use an
+    // older Stylelint, inject these as "additional unknown units" so Gale's
+    // `unit-no-unknown` rule reports them consistently.
+    if enabled_rules.iter().any(|r| r == "unit-no-unknown") {
+        let detect_cwd = std::env::current_dir().unwrap_or_default();
+        if let Some(extra) = detect_legacy_unknown_units(&detect_cwd) {
+            let entry = rule_options
+                .entry("unit-no-unknown".to_string())
+                .or_insert_with(|| serde_json::json!({}));
+            if let Some(obj) = entry.as_object_mut() {
+                obj.insert(
+                    "__additionalUnknownUnits".to_string(),
+                    serde_json::json!(extra),
+                );
+            }
+        }
+    }
 
     // Extract per-rule severity overrides from the config, keyed by canonical name.
     let rule_severities: std::collections::HashMap<String, gale_diagnostics::Severity> = config
@@ -696,7 +717,7 @@ pub fn run() -> Result<()> {
             .filter(|(name, _)| runner.has_rule(name))
             .map(|(name, _)| name.clone())
             .collect();
-        let rule_options: std::collections::HashMap<String, serde_json::Value> = config
+        let mut rule_options: std::collections::HashMap<String, serde_json::Value> = config
             .rules
             .iter()
             .filter_map(|(name, cfg)| {
@@ -711,6 +732,21 @@ pub fn run() -> Result<()> {
                 })
             })
             .collect();
+        // Inject legacy unknown units for older Stylelint versions.
+        if enabled_rules.iter().any(|r| r == "unit-no-unknown") {
+            let detect_cwd = std::env::current_dir().unwrap_or_default();
+            if let Some(extra) = detect_legacy_unknown_units(&detect_cwd) {
+                let entry = rule_options
+                    .entry("unit-no-unknown".to_string())
+                    .or_insert_with(|| serde_json::json!({}));
+                if let Some(obj) = entry.as_object_mut() {
+                    obj.insert(
+                        "__additionalUnknownUnits".to_string(),
+                        serde_json::json!(extra),
+                    );
+                }
+            }
+        }
         let rule_severities: std::collections::HashMap<String, gale_diagnostics::Severity> = config
             .rules
             .iter()
@@ -1105,6 +1141,50 @@ pub fn run() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Detect whether the project uses an older Stylelint version (< 15) that
+/// doesn't recognize certain modern CSS units (dynamic viewport units,
+/// container query units, etc.).
+///
+/// Returns `Some(units)` with the list of units to treat as unknown, or
+/// `None` if Stylelint is >= 15 or not installed.
+fn detect_legacy_unknown_units(cwd: &Path) -> Option<Vec<String>> {
+    // Walk up from cwd to find node_modules/stylelint/package.json.
+    let mut dir = cwd.to_path_buf();
+    loop {
+        let pkg = dir
+            .join("node_modules")
+            .join("stylelint")
+            .join("package.json");
+        if pkg.exists() {
+            let contents = std::fs::read_to_string(&pkg).ok()?;
+            let parsed: serde_json::Value = serde_json::from_str(&contents).ok()?;
+            let version_str = parsed.get("version")?.as_str()?;
+            let major: u32 = version_str.split('.').next()?.parse().ok()?;
+            if major < 15 {
+                // Stylelint < 15 doesn't know dynamic viewport units, container
+                // query units, or several other modern CSS units.
+                return Some(
+                    vec![
+                        "dvh", "dvw", "dvb", "dvi", "dvmax", "dvmin",
+                        "lvh", "lvw", "lvb", "lvi", "lvmax", "lvmin",
+                        "svh", "svw", "svb", "svi", "svmax", "svmin",
+                        "cqw", "cqh", "cqi", "cqb", "cqmin", "cqmax",
+                        "cap", "ic", "rcap", "rch", "rex", "ric",
+                        "vb", "vi",
+                    ]
+                    .into_iter()
+                    .map(|s| s.to_string())
+                    .collect(),
+                );
+            }
+            return None;
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
 }
 
 #[cfg(test)]

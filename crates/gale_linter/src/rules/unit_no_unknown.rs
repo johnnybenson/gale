@@ -283,12 +283,17 @@ fn parse_string_list(val: &serde_json::Value) -> Vec<String> {
 struct Options {
     ignore_units: Vec<String>,
     ignore_functions: Vec<String>,
+    /// Units that Gale normally considers known but should be treated as unknown.
+    /// Used for Stylelint version compatibility: older Stylelint versions had a
+    /// smaller known-units list (e.g. Stylelint 13 didn't know `dvh`).
+    additional_unknown_units: Vec<String>,
 }
 
 fn parse_options(ctx: &RuleContext) -> Options {
     let secondary = ctx.secondary_options();
     let mut ignore_units = Vec::new();
     let mut ignore_functions = Vec::new();
+    let mut additional_unknown_units = Vec::new();
 
     if let Some(sec) = secondary {
         if let Some(v) = sec.get("ignoreUnits") {
@@ -297,11 +302,16 @@ fn parse_options(ctx: &RuleContext) -> Options {
         if let Some(v) = sec.get("ignoreFunctions") {
             ignore_functions = parse_string_list(v);
         }
+        // Internal option injected by the CLI for Stylelint version compat.
+        if let Some(v) = sec.get("__additionalUnknownUnits") {
+            additional_unknown_units = parse_string_list(v);
+        }
     }
 
     Options {
         ignore_units,
         ignore_functions,
+        additional_unknown_units,
     }
 }
 
@@ -482,11 +492,19 @@ fn check_value(
         let unit_lower = occ.unit.to_ascii_lowercase();
 
         if is_known_unit(&unit_lower) {
+            // Check if this unit is forced-unknown for Stylelint version compat.
+            let forced_unknown = opts
+                .additional_unknown_units
+                .iter()
+                .any(|u| u.eq_ignore_ascii_case(&unit_lower));
+
             if unit_lower == "x" {
-                if is_x_unit_valid_in_context(occ.function.as_deref(), in_media_resolution) {
+                if !forced_unknown
+                    && is_x_unit_valid_in_context(occ.function.as_deref(), in_media_resolution)
+                {
                     continue;
                 }
-            } else {
+            } else if !forced_unknown {
                 continue;
             }
         }

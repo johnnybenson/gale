@@ -330,7 +330,7 @@ fn filter_disabled_and_report_needless(
     diagnostics: &mut Vec<Diagnostic>,
     ranges: &[DisabledRange],
     report_needless: bool,
-    known_rule_check: &dyn Fn(&str) -> bool,
+    _known_rule_check: &dyn Fn(&str) -> bool,
     _source: &str,
     file_path: &str,
 ) {
@@ -397,10 +397,21 @@ fn filter_disabled_and_report_needless(
             continue;
         }
 
-        // TODO: reportNeedlessDisables causes false positives when Gale's
-        // detection differs from Stylelint's for known rules. Disabled until
-        // every rule achieves byte-for-byte identical detection.
-        continue;
+        // Only report needless for rules where Gale has a **no-op stub**
+        // implementation — i.e. a rule that is registered but intentionally
+        // never produces diagnostics.  For all other rules, Gale's detection
+        // might differ from Stylelint's, so a disable that appears to suppress
+        // nothing in Gale might legitimately suppress warnings in Stylelint.
+        //
+        // No-op stubs exist for plugin rules that Gale can't execute (e.g.
+        // Angular's `material/no-prefixes`): the rule is "known" but always
+        // returns empty diagnostics.  Since it never fires, any inline disable
+        // for it is genuinely needless.
+        if let Some(ref rule_name) = range.rule {
+            if !is_noop_stub_rule(rule_name) {
+                continue;
+            }
+        }
 
         // Deduplicate: only report once per (comment_start, rule).
         let dedup_key = (range.comment_start, range.rule.clone());
@@ -422,6 +433,25 @@ fn filter_disabled_and_report_needless(
                 .file_path(file_path),
         );
     }
+}
+
+/// Rules that are registered as **no-op stubs** — they never produce any
+/// diagnostics.  These exist for third-party plugin rules that Gale can't
+/// execute natively.  Because they never fire, any inline disable comment
+/// referencing them is genuinely needless.
+///
+/// All other registered rules *might* produce different diagnostics than
+/// Stylelint, so we can't safely call their disables "needless".
+fn is_noop_stub_rule(name: &str) -> bool {
+    // Only include rules where BOTH Gale AND Stylelint produce zero warnings
+    // in practice.  Plugin rules that Gale stubs as no-ops BUT Stylelint
+    // actually fires (like scss/dollar-variable-no-missing-interpolation)
+    // must NOT be listed here, because their disables suppress real
+    // Stylelint warnings and are therefore not needless.
+    matches!(
+        name,
+        "material/no-prefixes"
+    )
 }
 
 /// Returns `true` when the `GALE_DEBUG_PERF` environment variable is set to `"1"`.
