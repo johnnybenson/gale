@@ -123,6 +123,8 @@ pub fn resolve_deprecated_alias(name: &str) -> Option<&'static str> {
         "value-list-comma-space-after" => Some("@stylistic/value-list-comma-space-after"),
         "value-list-comma-space-before" => Some("@stylistic/value-list-comma-space-before"),
         "value-list-max-empty-lines" => Some("@stylistic/value-list-max-empty-lines"),
+        // Spectrum Tools aliases (functionally identical to csstools equivalents)
+        "spectrum-tools/no-unknown-custom-properties" => Some("csstools/value-no-unknown-custom-properties"),
         // SCSS deprecated aliases
         "scss/at-import-partial-extension-blacklist" => Some("scss/at-import-partial-extension-disallowed-list"),
         "scss/at-import-no-partial-leading-underscore" => Some("scss/load-no-partial-leading-underscore"),
