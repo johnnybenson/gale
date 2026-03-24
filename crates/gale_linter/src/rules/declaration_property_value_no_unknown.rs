@@ -69,10 +69,21 @@ impl Rule for DeclarationPropertyValueNoUnknown {
     }
 
     fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
-        let CssNode::Declaration(decl) = node else {
-            return vec![];
+        let decls: Vec<&gale_css_parser::Declaration> = match node {
+            CssNode::Style(rule) => rule.declarations.iter().collect(),
+            CssNode::Declaration(decl) => vec![decl],
+            _ => return vec![],
         };
+        let mut all_diags = Vec::new();
+        for decl in decls {
+            all_diags.extend(self.check_decl(decl));
+        }
+        all_diags
+    }
+}
 
+impl DeclarationPropertyValueNoUnknown {
+    fn check_decl(&self, decl: &gale_css_parser::Declaration) -> Vec<Diagnostic> {
         let property = decl.property.to_ascii_lowercase();
 
         // Skip custom properties
@@ -112,6 +123,9 @@ impl Rule for DeclarationPropertyValueNoUnknown {
             "display" => Some(DISPLAY_KEYWORDS),
             "position" => Some(POSITION_KEYWORDS),
             "float" => Some(FLOAT_KEYWORDS),
+            "text-decoration-skip" => {
+                Some(&["none", "auto", "ink", "spaces", "edges", "box-decoration"])
+            }
             _ => None,
         };
 
@@ -125,13 +139,13 @@ impl Rule for DeclarationPropertyValueNoUnknown {
         let tokens: Vec<&str> = value_clean.split_whitespace().collect();
 
         // For properties that only accept single keywords
-        if property == "position" || property == "float" {
+        if property == "position" || property == "float" || property == "text-decoration-skip" {
             if tokens.len() != 1 {
                 return vec![
                     Diagnostic::new(
                         self.name(),
                         format!(
-                            "Unexpected value \"{}\" for property \"{}\"",
+                            "Unexpected unknown value \"{}\" for property \"{}\"",
                             decl.value.trim(),
                             decl.property
                         ),
@@ -141,17 +155,18 @@ impl Rule for DeclarationPropertyValueNoUnknown {
                 ];
             }
             if !keywords.contains(&tokens[0]) {
+                let val_off = decl.span.offset + decl.property.len() + 2;
                 return vec![
                     Diagnostic::new(
                         self.name(),
                         format!(
-                            "Unexpected value \"{}\" for property \"{}\"",
+                            "Unexpected unknown value \"{}\" for property \"{}\"",
                             decl.value.trim(),
                             decl.property
                         ),
                     )
                     .severity(self.default_severity())
-                    .span(Span::new(decl.span.offset, decl.span.length)),
+                    .span(Span::new(val_off, decl.value.trim().len())),
                 ];
             }
             return vec![];
@@ -165,13 +180,20 @@ impl Rule for DeclarationPropertyValueNoUnknown {
                 Diagnostic::new(
                     self.name(),
                     format!(
-                        "Unexpected value \"{}\" for property \"{}\"",
+                        "Unexpected unknown value \"{}\" for property \"{}\"",
                         decl.value.trim(),
                         decl.property
                     ),
                 )
                 .severity(self.default_severity())
-                .span(Span::new(decl.span.offset, decl.span.length)),
+                .span({
+                    // Point to the value, not the whole declaration.
+                    // Find ": " after the property name within the span.
+                    let val_offset = decl.span.offset + decl.property.len();
+                    // Skip colon and whitespace
+                    let val_offset = val_offset + 2; // ": "
+                    Span::new(val_offset, decl.value.trim().len())
+                }),
             ];
         }
 

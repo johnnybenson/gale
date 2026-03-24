@@ -350,7 +350,26 @@ fn filter_disabled_and_report_needless(
                         suppressed[i] = true;
                         return false;
                     }
-                    _ => {}
+                    Some(name) => {
+                        // Check if the disable references a deprecated alias
+                        // that resolves to this diagnostic's canonical rule name.
+                        if let Some(canonical) = crate::registry::resolve_deprecated_alias(name) {
+                            if canonical == d.rule_name {
+                                suppressed[i] = true;
+                                return false;
+                            }
+                        }
+                        // Also check reverse: diagnostic's rule might be an alias
+                        // of the disable's rule.
+                        if let Some(canonical) =
+                            crate::registry::resolve_deprecated_alias(&d.rule_name)
+                        {
+                            if canonical == name.as_str() || name == &d.rule_name {
+                                suppressed[i] = true;
+                                return false;
+                            }
+                        }
+                    }
                 }
             }
         }
