@@ -172,8 +172,6 @@ fn is_declaration_colon(bytes: &[u8], pos: usize) -> bool {
         }
         // If followed by `{`, `,`, `.`, `#`, `[`, `:`, `&`, or a combinator
         // (`~`, `+`, `>`), it's a selector context.
-        // `(` is intentionally NOT included — values often start with functions
-        // like `var(`, `calc(`, etc.
         if f < bytes.len()
             && matches!(
                 bytes[f],
@@ -181,6 +179,28 @@ fn is_declaration_colon(bytes: &[u8], pos: usize) -> bool {
             )
         {
             return false;
+        }
+        // `(` after an identifier means pseudo-class function (`:not(`, `:has(`)
+        // UNLESS the identifier is a known CSS value function (`var(`, `calc(`).
+        if f < bytes.len() && bytes[f] == b'(' {
+            let word = std::str::from_utf8(&bytes[pos + 1..f]).unwrap_or("");
+            let word_lower = word.trim().to_ascii_lowercase();
+            let is_css_fn = matches!(
+                word_lower.as_str(),
+                "var" | "calc" | "min" | "max" | "clamp" | "env"
+                    | "rgb" | "rgba" | "hsl" | "hsla" | "hwb" | "lab" | "lch"
+                    | "oklch" | "oklab" | "color" | "color-mix"
+                    | "linear-gradient" | "radial-gradient" | "conic-gradient"
+                    | "url" | "counter" | "counters" | "attr"
+                    | "translate" | "rotate" | "scale" | "skew"
+                    | "matrix" | "perspective" | "cubic-bezier" | "steps"
+                    | "image-set" | "cross-fade" | "paint" | "format"
+                    | "local" | "minmax" | "repeat" | "fit-content"
+                    | "inset" | "circle" | "ellipse" | "polygon" | "path"
+            );
+            if !is_css_fn {
+                return false; // pseudo-class function like :not(), :has()
+            }
         }
     }
 
