@@ -203,9 +203,9 @@ mod tests {
                     important: false,
                 },
             ],
-span: ParserSpan::new(0, 42),
+            span: ParserSpan::new(0, 42),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("border"));
@@ -231,9 +231,9 @@ span: ParserSpan::new(0, 42),
                     important: false,
                 },
             ],
-span: ParserSpan::new(0, 38),
+            span: ParserSpan::new(0, 38),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert!(diags.is_empty());
     }
@@ -257,9 +257,9 @@ span: ParserSpan::new(0, 38),
                     important: false,
                 },
             ],
-span: ParserSpan::new(0, 46),
+            span: ParserSpan::new(0, 46),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("font"));

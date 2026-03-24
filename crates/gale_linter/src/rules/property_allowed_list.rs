@@ -83,9 +83,9 @@ mod tests {
                 span: ParserSpan::new(0, 10),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

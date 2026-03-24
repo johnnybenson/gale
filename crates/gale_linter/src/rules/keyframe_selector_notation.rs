@@ -29,7 +29,7 @@ impl Rule for KeyframeSelectorNotation {
         let CssNode::AtRule(at_rule) = node else {
             return vec![];
         };
-        if at_rule.name.to_ascii_lowercase() != "keyframes" {
+        if !at_rule.name.eq_ignore_ascii_case("keyframes") {
             return vec![];
         }
 
@@ -120,9 +120,9 @@ mod tests {
                         span: ParserSpan::new(0, 0),
                         important: false,
                     }],
-span: ParserSpan::new(0, 0),
+                    span: ParserSpan::new(0, 0),
                     ..Default::default()
-})
+                })
             })
             .collect();
         CssNode::AtRule(CssAtRule {

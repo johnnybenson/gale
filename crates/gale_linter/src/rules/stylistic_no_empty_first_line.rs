@@ -28,15 +28,17 @@ impl Rule for StylisticNoEmptyFirstLine {
 
         // Check if the source starts with an empty first line.
         // An empty first line means the source starts with \r\n or \n.
-        let starts_empty = ctx.source.starts_with('\n')
-            || ctx.source.starts_with("\r\n");
+        let starts_empty = ctx.source.starts_with('\n') || ctx.source.starts_with("\r\n");
 
         if starts_empty {
             // Find the length of the leading empty whitespace to remove
             let mut end = 0;
             let bytes = ctx.source.as_bytes();
             while end < bytes.len()
-                && (bytes[end] == b'\n' || bytes[end] == b'\r' || bytes[end] == b' ' || bytes[end] == b'\t')
+                && (bytes[end] == b'\n'
+                    || bytes[end] == b'\r'
+                    || bytes[end] == b' '
+                    || bytes[end] == b'\t')
             {
                 if bytes[end] == b'\n' {
                     end += 1;

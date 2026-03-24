@@ -113,12 +113,12 @@ impl Options {
             serde_json::Value::Array(arr) => arr.get(1),
             _ => None,
         };
-        if let Some(sec) = secondary {
-            if let Some(ignore) = sec.get("ignore").and_then(|v| v.as_array()) {
-                for item in ignore {
-                    if item.as_str() == Some("four-into-three-edge-values") {
-                        opts.ignore_four_into_three = true;
-                    }
+        if let Some(sec) = secondary
+            && let Some(ignore) = sec.get("ignore").and_then(|v| v.as_array())
+        {
+            for item in ignore {
+                if item.as_str() == Some("four-into-three-edge-values") {
+                    opts.ignore_four_into_three = true;
                 }
             }
         }
@@ -568,9 +568,9 @@ mod tests {
                 span: ParserSpan::new(prop_start, decl_end - prop_start + 1),
                 important: false,
             }],
-span: ParserSpan::new(0, source.len()),
+            span: ParserSpan::new(0, source.len()),
             ..Default::default()
-});
+        });
 
         // Leak the source string so we get a 'static lifetime for tests.
         let source_leaked: &'static str = Box::leak(source.to_string().into_boxed_str());

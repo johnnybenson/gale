@@ -87,10 +87,10 @@ impl Options {
                 }
             }
             serde_json::Value::Array(arr) => {
-                if let Some(s) = arr.first().and_then(|v| v.as_str()) {
-                    if s == "never" {
-                        opts.primary = PrimaryOption::Never;
-                    }
+                if let Some(s) = arr.first().and_then(|v| v.as_str())
+                    && s == "never"
+                {
+                    opts.primary = PrimaryOption::Never;
                 }
                 if let Some(secondary) = arr.get(1) {
                     parse_secondary(&mut opts, secondary);
@@ -272,7 +272,6 @@ fn check_at_rule_nodes(
             let current_blockless = is_blockless_source(at_rule, ctx.source);
             let current_name = at_rule.name.to_ascii_lowercase();
 
-
             let prev = prev_non_comment(nodes, i);
 
             let is_blockless_after_same_name_blockless = current_blockless
@@ -442,14 +441,12 @@ fn find_line_comment_start(line: &str) -> Option<usize> {
             if ch == b'"' && (i == 0 || bytes[i - 1] != b'\\') {
                 in_double_quote = false;
             }
-        } else {
-            if ch == b'\'' {
-                in_single_quote = true;
-            } else if ch == b'"' {
-                in_double_quote = true;
-            } else if ch == b'/' && i + 1 < len && bytes[i + 1] == b'/' {
-                return Some(i);
-            }
+        } else if ch == b'\'' {
+            in_single_quote = true;
+        } else if ch == b'"' {
+            in_double_quote = true;
+        } else if ch == b'/' && i + 1 < len && bytes[i + 1] == b'/' {
+            return Some(i);
         }
         i += 1;
     }
@@ -547,9 +544,9 @@ mod tests {
             CssNode::Style(StyleRule {
                 selector: "a".to_string(),
                 declarations: vec![],
-span: ParserSpan::new(0, 17),
+                span: ParserSpan::new(0, 17),
                 ..Default::default()
-}),
+            }),
             CssNode::AtRule(ParserAtRule {
                 name: "media".to_string(),
                 params: "screen".to_string(),
@@ -570,9 +567,9 @@ span: ParserSpan::new(0, 17),
             CssNode::Style(StyleRule {
                 selector: "a".to_string(),
                 declarations: vec![],
-span: ParserSpan::new(0, 17),
+                span: ParserSpan::new(0, 17),
                 ..Default::default()
-}),
+            }),
             CssNode::AtRule(ParserAtRule {
                 name: "media".to_string(),
                 params: "screen".to_string(),
@@ -601,7 +598,8 @@ span: ParserSpan::new(0, 17),
     fn allows_grouped_imports_with_except_blockless() {
         let src = "@import \"a.css\";\n@import \"b.css\";";
         let second_offset = src.rfind("@import").unwrap();
-        let opts = serde_json::json!(["always", { "except": ["blockless-after-same-name-blockless"] }]);
+        let opts =
+            serde_json::json!(["always", { "except": ["blockless-after-same-name-blockless"] }]);
         let ctx = RuleContext {
             file_path: "t.css",
             source: src,

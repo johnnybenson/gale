@@ -93,10 +93,7 @@ impl Rule for ScssDollarVariableEmptyLineBefore {
             if trimmed.ends_with(',') {
                 // Check if this is a parameter (common in @include, @use with)
                 // by looking for an unclosed `(` in previous lines.
-                let byte_offset: usize = lines[..line_idx]
-                    .iter()
-                    .map(|l| l.len() + 1)
-                    .sum();
+                let byte_offset: usize = lines[..line_idx].iter().map(|l| l.len() + 1).sum();
                 let before = &source[..byte_offset];
                 let open_parens = before.chars().filter(|&c| c == '(').count();
                 let close_parens = before.chars().filter(|&c| c == ')').count();

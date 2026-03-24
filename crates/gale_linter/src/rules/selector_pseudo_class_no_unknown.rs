@@ -567,13 +567,13 @@ fn parse_ignore_list(options: Option<&serde_json::Value>) -> Vec<String> {
         serde_json::Value::Object(o) => o,
         serde_json::Value::Array(arr) => {
             for item in arr {
-                if let serde_json::Value::Object(o) = item {
-                    if let Some(serde_json::Value::Array(names)) = o.get("ignorePseudoClasses") {
-                        return names
-                            .iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect();
-                    }
+                if let serde_json::Value::Object(o) = item
+                    && let Some(serde_json::Value::Array(names)) = o.get("ignorePseudoClasses")
+                {
+                    return names
+                        .iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect();
                 }
             }
             return vec![];
@@ -596,18 +596,15 @@ fn is_ignored(name: &str, ignore_list: &[String]) -> bool {
             if re.is_match(name) {
                 return true;
             }
-        } else {
-            if pattern == name {
-                return true;
-            }
+        } else if pattern == name {
+            return true;
         }
     }
     false
 }
 
 fn parse_regex_pattern(s: &str) -> Option<Regex> {
-    if s.starts_with('/') {
-        let rest = &s[1..];
+    if let Some(rest) = s.strip_prefix('/') {
         if let Some(end) = rest.rfind('/') {
             let pattern = &rest[..end];
             let flags = &rest[end + 1..];
@@ -648,9 +645,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

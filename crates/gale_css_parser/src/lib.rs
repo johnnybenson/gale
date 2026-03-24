@@ -77,7 +77,7 @@ pub struct Declaration {
 }
 
 /// A CSS style rule (selector + declarations + optional nested children).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct StyleRule {
     pub selector: String,
     pub declarations: Vec<Declaration>,
@@ -88,18 +88,6 @@ pub struct StyleRule {
     /// rather than leaking out as siblings.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub nested_at_rules: Vec<CssNode>,
-}
-
-impl Default for StyleRule {
-    fn default() -> Self {
-        Self {
-            selector: String::new(),
-            declarations: Vec::new(),
-            span: Span::default(),
-            children: Vec::new(),
-            nested_at_rules: Vec::new(),
-        }
-    }
 }
 
 /// A CSS at-rule (`@media`, `@keyframes`, etc.).
@@ -1168,10 +1156,7 @@ fn convert_raffia_block_statements(
 /// scoped to the style rule.  This prevents SCSS at-rule content blocks from
 /// leaking to sibling scope and causing false positives in rules like
 /// `no-invalid-position-declaration`.
-fn convert_raffia_qualified_rule(
-    qr: &raffia::ast::QualifiedRule<'_>,
-    source: &str,
-) -> StyleRule {
+fn convert_raffia_qualified_rule(qr: &raffia::ast::QualifiedRule<'_>, source: &str) -> StyleRule {
     let selector = source_slice(source, &qr.selector.span);
 
     let mut declarations = Vec::new();
@@ -1905,5 +1890,4 @@ mod tests {
             panic!("expected Style node");
         }
     }
-
 }

@@ -136,7 +136,8 @@ impl Rule for StylisticDeclarationColonNewlineAfter {
                     && bytes[after_colon] != b'\t'
                     && bytes[after_colon] != b'\n'
                     && bytes[after_colon] != b'\r'
-                    && bytes[after_colon] != b':'  // :: pseudo-element
+                    && bytes[after_colon] != b':'
+                // :: pseudo-element
                 {
                     // If the char after colon is alphabetic, this is a pseudo-class.
                     // CSS declarations always have whitespace after the colon.

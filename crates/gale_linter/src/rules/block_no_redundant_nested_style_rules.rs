@@ -76,7 +76,7 @@ mod tests {
             children,
             span: ParserSpan::new(0, 50),
             ..Default::default()
-})
+        })
     }
 
     fn child_rule(selector: &str) -> StyleRule {

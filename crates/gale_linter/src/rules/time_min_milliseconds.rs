@@ -330,10 +330,7 @@ impl Rule for TimeMinMilliseconds {
             let (value_text, value_offset) = if !ctx.source.is_empty() {
                 let vo = find_value_offset(ctx.source, decl.span.offset, decl.property.len());
                 let rest = &ctx.source[vo..];
-                let end = rest
-                    .find(|c: char| c == ';' || c == '}')
-                    .map(|i| i)
-                    .unwrap_or(rest.len());
+                let end = rest.find([';', '}']).unwrap_or(rest.len());
                 (ctx.source[vo..vo + end].trim_end().to_string(), vo)
             } else {
                 let vo = decl.span.offset + decl.property.len() + 2;
@@ -400,9 +397,9 @@ mod tests {
                 span: ParserSpan::new(0, prop.len() + val.len() + 2),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

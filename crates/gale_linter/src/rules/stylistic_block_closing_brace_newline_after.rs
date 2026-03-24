@@ -201,7 +201,9 @@ impl Rule for StylisticBlockClosingBraceNewlineAfter {
 /// Check if the next non-whitespace content after a position is `@else` (SCSS).
 fn is_next_else(bytes: &[u8], pos: usize) -> bool {
     let mut j = pos;
-    while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\n' || bytes[j] == b'\r') {
+    while j < bytes.len()
+        && (bytes[j] == b' ' || bytes[j] == b'\t' || bytes[j] == b'\n' || bytes[j] == b'\r')
+    {
         j += 1;
     }
     // Check for @else

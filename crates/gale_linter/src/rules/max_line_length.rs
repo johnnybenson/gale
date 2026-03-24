@@ -105,11 +105,12 @@ fn build_ignore_patterns(context: &RuleContext) -> Vec<Regex> {
             // Stylelint accepts patterns wrapped in slashes like "/https?://.*/".
             // Strip the surrounding slashes to get the raw regex.
             let trimmed = s.trim();
-            let regex_str = if trimmed.starts_with('/') && trimmed.ends_with('/') && trimmed.len() > 1 {
-                &trimmed[1..trimmed.len() - 1]
-            } else {
-                trimmed
-            };
+            let regex_str =
+                if trimmed.starts_with('/') && trimmed.ends_with('/') && trimmed.len() > 1 {
+                    &trimmed[1..trimmed.len() - 1]
+                } else {
+                    trimmed
+                };
             Regex::new(regex_str).ok()
         })
         .collect()

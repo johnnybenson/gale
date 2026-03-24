@@ -16,15 +16,15 @@ const VENDOR_PREFIXES: &[&str] = &["-webkit-", "-moz-", "-ms-", "-o-"];
 /// Note: box, element, fill-available, flexbox, and inline-box are NOT
 /// flagged by Stylelint even though they have vendor-prefixed variants.
 const KNOWN_PREFIXABLE_VALUES: &[&str] = &[
-    "calc",       // -webkit-calc()
-    "cross-fade", // -webkit-cross-fade()
+    "calc",        // -webkit-calc()
+    "cross-fade",  // -webkit-cross-fade()
     "fit-content", // -webkit-fit-content
-    "flex",       // display: -webkit-flex
-    "grab",       // cursor: -webkit-grab
-    "grabbing",   // cursor: -webkit-grabbing
-    "image-set",  // -webkit-image-set()
+    "flex",        // display: -webkit-flex
+    "grab",        // cursor: -webkit-grab
+    "grabbing",    // cursor: -webkit-grabbing
+    "image-set",   // -webkit-image-set()
     "inline-flex", // display: -webkit-inline-flex
-    "isolate",    // unicode-bidi: -moz-isolate
+    "isolate",     // unicode-bidi: -moz-isolate
     "linear-gradient",
     "max-content", // width: -webkit-max-content
     "min-content", // width: -webkit-min-content
@@ -187,9 +187,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]
@@ -254,9 +254,9 @@ span: ParserSpan::new(0, 0),
                 span: ParserSpan::new(4, 22),
                 important: false,
             }],
-span: ParserSpan::new(0, source.len()),
+            span: ParserSpan::new(0, source.len()),
             ..Default::default()
-});
+        });
         let d = ValueNoVendorPrefix.check(&node, &ctx);
         assert_eq!(d.len(), 1);
         assert!(d[0].fix.is_some());
@@ -290,9 +290,9 @@ span: ParserSpan::new(0, source.len()),
                 span: ParserSpan::new(decl_offset, decl_text.len()),
                 important: false,
             }],
-span: ParserSpan::new(0, source.len()),
+            span: ParserSpan::new(0, source.len()),
             ..Default::default()
-});
+        });
         let d = ValueNoVendorPrefix.check(&node, &ctx);
         assert_eq!(d.len(), 1);
 

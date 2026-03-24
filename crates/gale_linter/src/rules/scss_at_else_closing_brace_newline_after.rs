@@ -58,21 +58,19 @@ impl Rule for ScssAtElseClosingBraceNewlineAfter {
                             k += 1;
                         }
 
-                        match option {
-                            "always-last-in-chain" => {
-                                if k < len && bytes[k] != b'\n' && bytes[k] != b'\r' {
-                                    diagnostics.push(
-                                        Diagnostic::new(
-                                            self.name(),
-                                            "Expected newline after closing brace of @else"
-                                                .to_string(),
-                                        )
-                                        .severity(self.default_severity())
-                                        .span(Span::new(close_brace, 1)),
-                                    );
-                                }
-                            }
-                            _ => {}
+                        if option == "always-last-in-chain"
+                            && k < len
+                            && bytes[k] != b'\n'
+                            && bytes[k] != b'\r'
+                        {
+                            diagnostics.push(
+                                Diagnostic::new(
+                                    self.name(),
+                                    "Expected newline after closing brace of @else".to_string(),
+                                )
+                                .severity(self.default_severity())
+                                .span(Span::new(close_brace, 1)),
+                            );
                         }
 
                         i = after;

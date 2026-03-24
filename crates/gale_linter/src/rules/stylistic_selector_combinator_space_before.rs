@@ -8,7 +8,7 @@ use crate::rule::{Rule, RuleContext};
 /// Equivalent to Stylelint's `@stylistic/selector-combinator-space-before` rule.
 pub struct StylisticSelectorCombinatorSpaceBefore;
 
-const COMBINATORS: &[u8] = &[b'>', b'~', b'+'];
+const COMBINATORS: &[u8] = b">~+";
 
 impl Rule for StylisticSelectorCombinatorSpaceBefore {
     fn name(&self) -> &'static str {

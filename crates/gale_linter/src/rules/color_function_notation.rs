@@ -73,9 +73,7 @@ impl Rule for ColorFunctionNotation {
                         let args = &decl.value[args_start..args_start + close];
                         if args.contains(',') {
                             // Skip if ignore: ["with-var-inside"] and args contain var(
-                            if ignore_with_var
-                                && args.to_ascii_lowercase().contains("var(")
-                            {
+                            if ignore_with_var && args.to_ascii_lowercase().contains("var(") {
                                 search_from = abs_pos + 1;
                                 continue;
                             }
@@ -123,9 +121,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

@@ -99,29 +99,29 @@ fn check_declaration(
     }
 
     // Check alpha-accepting properties (opacity, shape-image-threshold, flood-opacity)
-    if is_alpha_property(&prop_lower) {
-        if let Some(issue_offset) = check_property_alpha(search_area, effective_primary) {
-            let abs_offset = if decl_end <= ctx.source.len() && decl_start < decl_end {
-                decl_start + issue_offset
-            } else {
-                decl_start
-            };
-            let msg = match effective_primary {
-                PrimaryOption::Percentage => format!(
-                    "Expected percentage notation for alpha value of \"{}\"",
-                    decl.property
-                ),
-                PrimaryOption::Number => format!(
-                    "Expected number notation for alpha value of \"{}\"",
-                    decl.property
-                ),
-            };
-            diags.push(
-                Diagnostic::new(rule.name(), msg)
-                    .severity(rule.default_severity())
-                    .span(Span::new(abs_offset, 1)),
-            );
-        }
+    if is_alpha_property(&prop_lower)
+        && let Some(issue_offset) = check_property_alpha(search_area, effective_primary)
+    {
+        let abs_offset = if decl_end <= ctx.source.len() && decl_start < decl_end {
+            decl_start + issue_offset
+        } else {
+            decl_start
+        };
+        let msg = match effective_primary {
+            PrimaryOption::Percentage => format!(
+                "Expected percentage notation for alpha value of \"{}\"",
+                decl.property
+            ),
+            PrimaryOption::Number => format!(
+                "Expected number notation for alpha value of \"{}\"",
+                decl.property
+            ),
+        };
+        diags.push(
+            Diagnostic::new(rule.name(), msg)
+                .severity(rule.default_severity())
+                .span(Span::new(abs_offset, 1)),
+        );
     }
 }
 
@@ -418,14 +418,13 @@ impl Options {
                 if let Some(primary_str) = arr.first().and_then(|v| v.as_str()) {
                     opts.primary = parse_primary(primary_str);
                 }
-                if let Some(secondary) = arr.get(1) {
-                    if let Some(props) =
+                if let Some(secondary) = arr.get(1)
+                    && let Some(props) =
                         secondary.get("exceptProperties").and_then(|v| v.as_array())
-                    {
-                        for item in props {
-                            if let Some(s) = item.as_str() {
-                                opts.except_properties.push(s.to_string());
-                            }
+                {
+                    for item in props {
+                        if let Some(s) = item.as_str() {
+                            opts.except_properties.push(s.to_string());
                         }
                     }
                 }
@@ -476,9 +475,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

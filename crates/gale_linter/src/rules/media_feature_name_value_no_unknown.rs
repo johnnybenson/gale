@@ -124,19 +124,19 @@ impl Rule for MediaFeatureNameValueNoUnknown {
             let feature_lower = feature.to_ascii_lowercase();
             let value_lower = value.to_ascii_lowercase();
 
-            if let Some(valid_values) = known_values_for_feature(&feature_lower) {
-                if !valid_values.contains(&value_lower.as_str()) {
-                    diags.push(
-                        Diagnostic::new(
-                            self.name(),
-                            format!(
-                                "Unexpected unknown value \"{value}\" for media feature \"{feature}\""
-                            ),
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(at.span.offset, at.span.length)),
-                    );
-                }
+            if let Some(valid_values) = known_values_for_feature(&feature_lower)
+                && !valid_values.contains(&value_lower.as_str())
+            {
+                diags.push(
+                    Diagnostic::new(
+                        self.name(),
+                        format!(
+                            "Unexpected unknown value \"{value}\" for media feature \"{feature}\""
+                        ),
+                    )
+                    .severity(self.default_severity())
+                    .span(Span::new(at.span.offset, at.span.length)),
+                );
             }
         }
         diags

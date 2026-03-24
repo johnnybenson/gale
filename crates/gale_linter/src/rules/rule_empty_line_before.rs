@@ -619,9 +619,9 @@ mod tests {
                     span: ParserSpan::new(4, 10),
                     important: false,
                 }],
-span: ParserSpan::new(0, 17),
+                span: ParserSpan::new(0, 17),
                 ..Default::default()
-}),
+            }),
             CssNode::Style(StyleRule {
                 selector: "b".to_string(),
                 declarations: vec![Declaration {
@@ -630,9 +630,9 @@ span: ParserSpan::new(0, 17),
                     span: ParserSpan::new(b_offset + 4, 11),
                     important: false,
                 }],
-span: ParserSpan::new(b_offset, 18),
+                span: ParserSpan::new(b_offset, 18),
                 ..Default::default()
-}),
+            }),
         ];
         let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx(src));
         assert_eq!(d.len(), 1);
@@ -652,9 +652,9 @@ span: ParserSpan::new(b_offset, 18),
                     span: ParserSpan::new(4, 10),
                     important: false,
                 }],
-span: ParserSpan::new(0, 17),
+                span: ParserSpan::new(0, 17),
                 ..Default::default()
-}),
+            }),
             CssNode::Style(StyleRule {
                 selector: "b".to_string(),
                 declarations: vec![Declaration {
@@ -663,9 +663,9 @@ span: ParserSpan::new(0, 17),
                     span: ParserSpan::new(b_offset + 4, 11),
                     important: false,
                 }],
-span: ParserSpan::new(b_offset, 18),
+                span: ParserSpan::new(b_offset, 18),
                 ..Default::default()
-}),
+            }),
         ];
         let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx(src));
         assert!(d.is_empty());
@@ -693,9 +693,9 @@ span: ParserSpan::new(b_offset, 18),
                 ..Default::default()
             }],
             span: ParserSpan::new(0, src.len()),
-        
+
             nested_at_rules: Vec::new(),
-})];
+        })];
         let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx_with_options(src, &opts));
         assert!(
             d.is_empty(),
@@ -715,9 +715,9 @@ span: ParserSpan::new(b_offset, 18),
             CssNode::Style(StyleRule {
                 selector: "a".to_string(),
                 declarations: vec![],
-span: ParserSpan::new(0, 17),
+                span: ParserSpan::new(0, 17),
                 ..Default::default()
-}),
+            }),
             CssNode::Comment(gale_css_parser::Comment {
                 is_line: true,
                 text: " comment".to_string(),
@@ -726,9 +726,9 @@ span: ParserSpan::new(0, 17),
             CssNode::Style(StyleRule {
                 selector: "b".to_string(),
                 declarations: vec![],
-span: ParserSpan::new(b_offset, 18),
+                span: ParserSpan::new(b_offset, 18),
                 ..Default::default()
-}),
+            }),
         ];
         let ctx = RuleContext {
             file_path: "t.scss",
@@ -758,9 +758,9 @@ span: ParserSpan::new(b_offset, 18),
             CssNode::Style(StyleRule {
                 selector: "b".to_string(),
                 declarations: vec![],
-span: ParserSpan::new(b_offset, 18),
+                span: ParserSpan::new(b_offset, 18),
                 ..Default::default()
-}),
+            }),
         ];
         let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx_with_options(src, &opts));
         assert!(d.is_empty(), "ignore after-comment should skip the check");
@@ -785,9 +785,9 @@ span: ParserSpan::new(b_offset, 18),
             CssNode::Style(StyleRule {
                 selector: "b".to_string(),
                 declarations: vec![],
-span: ParserSpan::new(b_offset, 18),
+                span: ParserSpan::new(b_offset, 18),
                 ..Default::default()
-}),
+            }),
         ];
         let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx_with_options(src, &opts));
         assert!(
@@ -807,16 +807,16 @@ span: ParserSpan::new(b_offset, 18),
             CssNode::Style(StyleRule {
                 selector: "a".to_string(),
                 declarations: vec![],
-span: ParserSpan::new(0, 17),
+                span: ParserSpan::new(0, 17),
                 ..Default::default()
-}),
+            }),
             // No Comment node in AST — rely on source-based detection
             CssNode::Style(StyleRule {
                 selector: "b".to_string(),
                 declarations: vec![],
-span: ParserSpan::new(b_offset, 18),
+                span: ParserSpan::new(b_offset, 18),
                 ..Default::default()
-}),
+            }),
         ];
         let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx_with_options(src, &opts));
         assert!(
@@ -849,9 +849,9 @@ span: ParserSpan::new(b_offset, 18),
                 ..Default::default()
             }],
             span: ParserSpan::new(0, src.len()),
-        
+
             nested_at_rules: Vec::new(),
-})];
+        })];
         let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx_with_options(src, &opts));
         assert!(
             !d.is_empty(),
@@ -881,9 +881,9 @@ span: ParserSpan::new(b_offset, 18),
                 ..Default::default()
             }],
             span: ParserSpan::new(0, src.len()),
-        
+
             nested_at_rules: Vec::new(),
-})];
+        })];
         let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx_with_options(src, &opts));
         assert!(
             !d.is_empty(),
@@ -931,15 +931,15 @@ span: ParserSpan::new(b_offset, 18),
             CssNode::Style(StyleRule {
                 selector: "a".to_string(),
                 declarations: vec![],
-span: ParserSpan::new(0, 17),
+                span: ParserSpan::new(0, 17),
                 ..Default::default()
-}),
+            }),
             CssNode::Style(StyleRule {
                 selector: "b".to_string(),
                 declarations: vec![],
-span: ParserSpan::new(b_offset, 18),
+                span: ParserSpan::new(b_offset, 18),
                 ..Default::default()
-}),
+            }),
         ];
         let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx_with_options(src, &opts));
         assert_eq!(d.len(), 1);

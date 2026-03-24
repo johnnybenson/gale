@@ -11,7 +11,6 @@
 /// Source-map accuracy is *not* preserved — byte offsets in the resulting SCSS
 /// will differ from the original Sass.  That is acceptable for an initial
 /// implementation (diagnostics may point to slightly wrong columns).
-
 pub fn convert_sass_to_scss(input: &str) -> String {
     let lines: Vec<&str> = input.lines().collect();
     let mut out = String::with_capacity(input.len() * 2);
@@ -83,8 +82,8 @@ pub fn convert_sass_to_scss(input: &str) -> String {
         }
 
         // Sass shorthand: `=mixin-name(...)` → `@mixin mixin-name(...)`
-        let line = if trimmed.starts_with('=') {
-            format!("@mixin {}", &trimmed[1..])
+        let line = if let Some(rest) = trimmed.strip_prefix('=') {
+            format!("@mixin {rest}")
         // Sass shorthand: `+mixin-name` → `@include mixin-name`
         } else if trimmed.starts_with('+') && !trimmed.starts_with("+-") {
             format!("@include {}", &trimmed[1..])

@@ -110,7 +110,7 @@ const CUSTOM_IDENT_PROPERTIES: &[&str] = &[
 fn is_custom_ident_property(prop: &str) -> bool {
     let lower = prop.to_ascii_lowercase();
     let stripped = strip_vendor_prefix(&lower);
-    CUSTOM_IDENT_PROPERTIES.iter().any(|p| *p == stripped)
+    CUSTOM_IDENT_PROPERTIES.contains(&stripped)
 }
 
 /// Properties where some positions are keywords and some are custom idents.
@@ -119,7 +119,7 @@ const MIXED_IDENT_PROPERTIES: &[&str] = &["animation", "font", "font-family", "l
 fn is_mixed_ident_property(prop: &str) -> bool {
     let lower = prop.to_ascii_lowercase();
     let stripped = strip_vendor_prefix(&lower);
-    MIXED_IDENT_PROPERTIES.iter().any(|p| *p == stripped)
+    MIXED_IDENT_PROPERTIES.contains(&stripped)
 }
 
 /// Generic font family names (these ARE keywords in font-family/font).
@@ -232,14 +232,13 @@ fn is_list_style_type_keyword(s: &str) -> bool {
 // ---------------------------------------------------------------------------
 
 fn strip_vendor_prefix(s: &str) -> &str {
-    if s.starts_with("-webkit-")
+    if (s.starts_with("-webkit-")
         || s.starts_with("-moz-")
         || s.starts_with("-ms-")
-        || s.starts_with("-o-")
+        || s.starts_with("-o-"))
+        && let Some(pos) = s[1..].find('-')
     {
-        if let Some(pos) = s[1..].find('-') {
-            return &s[pos + 2..];
-        }
+        return &s[pos + 2..];
     }
     s
 }
@@ -877,31 +876,29 @@ impl Rule for ValueKeywordCase {
                 }
 
                 // Other SVG camelCase keywords (optimizeSpeed, crispEdges, etc.)
-                if is_svg_camel_case_keyword(text) {
-                    if camel_case_svg && !expect_upper {
-                        // "lower" + camelCaseSvgKeywords: expected = camelCase canonical
-                        let canonical = SVG_CAMEL_CASE_KEYWORDS
-                            .iter()
-                            .find(|k| k.eq_ignore_ascii_case(text))
-                            .unwrap();
-                        if *text != **canonical {
-                            diags.push(
-                                Diagnostic::new(
-                                    self.name(),
-                                    format!("Expected \"{}\" to be \"{}\"", text, canonical),
-                                )
-                                .severity(self.default_severity())
-                                .span(Span::new(abs_offset, text.len()))
-                                .fix(Fix::new(
-                                    format!("Convert to \"{}\"", canonical),
-                                    vec![Edit::new(Span::new(abs_offset, text.len()), *canonical)],
-                                )),
-                            );
-                        }
-                        continue;
+                if is_svg_camel_case_keyword(text) && camel_case_svg && !expect_upper {
+                    // "lower" + camelCaseSvgKeywords: expected = camelCase canonical
+                    let canonical = SVG_CAMEL_CASE_KEYWORDS
+                        .iter()
+                        .find(|k| k.eq_ignore_ascii_case(text))
+                        .unwrap();
+                    if *text != **canonical {
+                        diags.push(
+                            Diagnostic::new(
+                                self.name(),
+                                format!("Expected \"{}\" to be \"{}\"", text, canonical),
+                            )
+                            .severity(self.default_severity())
+                            .span(Span::new(abs_offset, text.len()))
+                            .fix(Fix::new(
+                                format!("Convert to \"{}\"", canonical),
+                                vec![Edit::new(Span::new(abs_offset, text.len()), *canonical)],
+                            )),
+                        );
                     }
-                    // "upper" mode or camelCaseSvgKeywords:false -- treat like normal keyword
+                    continue;
                 }
+                // "upper" mode or camelCaseSvgKeywords:false -- treat like normal keyword
 
                 // Property-context filtering
                 if token.kind == TokenKind::Ident && !should_check_keyword(text, prop, &tokens, idx)
@@ -977,9 +974,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

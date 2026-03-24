@@ -107,10 +107,7 @@ impl Rule for StylisticBlockOpeningBraceNewlineAfter {
                 }
                 // If next non-whitespace is a comment, skip it, then check for newline
                 let mut check_pos = after;
-                if check_pos + 1 < len
-                    && bytes[check_pos] == b'/'
-                    && bytes[check_pos + 1] == b'*'
-                {
+                if check_pos + 1 < len && bytes[check_pos] == b'/' && bytes[check_pos + 1] == b'*' {
                     // Skip block comment /* ... */
                     check_pos += 2;
                     while check_pos + 1 < len
@@ -122,8 +119,7 @@ impl Rule for StylisticBlockOpeningBraceNewlineAfter {
                         check_pos += 2; // skip */
                     }
                     // Skip trailing spaces/tabs after the comment
-                    while check_pos < len
-                        && (bytes[check_pos] == b' ' || bytes[check_pos] == b'\t')
+                    while check_pos < len && (bytes[check_pos] == b' ' || bytes[check_pos] == b'\t')
                     {
                         check_pos += 1;
                     }
@@ -133,9 +129,7 @@ impl Rule for StylisticBlockOpeningBraceNewlineAfter {
                         || (bytes[check_pos] == b'\r'
                             && check_pos + 1 < len
                             && bytes[check_pos + 1] == b'\n'))
-                    || (after + 1 < len
-                        && bytes[after] == b'/'
-                        && bytes[after + 1] == b'/');
+                    || (after + 1 < len && bytes[after] == b'/' && bytes[after + 1] == b'/');
 
                 let should_check = match option {
                     "always" => true,

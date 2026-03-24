@@ -211,7 +211,7 @@ impl FontWeightNotation {
             // Find end of value (semicolon or closing brace)
             let rest = &ctx.source[vo..];
             let end = rest
-                .find(|c: char| c == ';' || c == '}')
+                .find([';', '}'])
                 .map(|i| vo + i)
                 .unwrap_or(vo + rest.len());
             let raw = ctx.source[vo..end].trim().to_string();
@@ -366,7 +366,7 @@ impl FontWeightNotation {
         let mut size_idx = None;
         for (i, t) in tokens.iter().enumerate() {
             let lower = t.to_ascii_lowercase();
-            if (lower
+            if lower
                 .chars()
                 .next()
                 .map(|c| c.is_ascii_digit() || c == '.')
@@ -380,7 +380,7 @@ impl FontWeightNotation {
                     || lower.ends_with("vh")
                     || lower.ends_with("ex")
                     || lower.ends_with("ch")
-                    || lower.contains('/')))
+                    || lower.contains('/'))
             {
                 size_idx = Some(i);
                 break;
@@ -541,9 +541,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

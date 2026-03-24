@@ -88,12 +88,15 @@ mod tests {
     fn ctx_with_pattern(pattern: &str) -> (serde_json::Value, RuleContext<'static>) {
         // Leak the string so we get 'static lifetime for tests
         let opts = serde_json::json!(pattern);
-        (opts, RuleContext {
-            file_path: "t.css",
-            source: "",
-            syntax: Syntax::Css,
-            options: None,
-        })
+        (
+            opts,
+            RuleContext {
+                file_path: "t.css",
+                source: "",
+                syntax: Syntax::Css,
+                options: None,
+            },
+        )
     }
 
     fn make_decl() -> Declaration {

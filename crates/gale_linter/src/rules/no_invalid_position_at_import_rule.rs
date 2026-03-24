@@ -108,9 +108,9 @@ mod tests {
             CssNode::Style(StyleRule {
                 selector: "a".to_string(),
                 declarations: vec![],
-span: ParserSpan::new(0, 5),
+                span: ParserSpan::new(0, 5),
                 ..Default::default()
-}),
+            }),
             CssNode::AtRule(AtRule {
                 name: "import".to_string(),
                 params: "url.css".to_string(),
@@ -142,9 +142,9 @@ span: ParserSpan::new(0, 5),
             CssNode::Style(StyleRule {
                 selector: "a".to_string(),
                 declarations: vec![],
-span: ParserSpan::new(25, 5),
+                span: ParserSpan::new(25, 5),
                 ..Default::default()
-}),
+            }),
         ];
         let context = RuleContext {
             file_path: "test.css",
@@ -198,9 +198,9 @@ span: ParserSpan::new(25, 5),
             CssNode::Style(StyleRule {
                 selector: "a".to_string(),
                 declarations: vec![],
-span: ParserSpan::new(0, 5),
+                span: ParserSpan::new(0, 5),
                 ..Default::default()
-}),
+            }),
             CssNode::AtRule(AtRule {
                 name: "use".to_string(),
                 params: "'sass:math'".to_string(),
@@ -225,9 +225,9 @@ span: ParserSpan::new(0, 5),
             CssNode::Style(StyleRule {
                 selector: "a".to_string(),
                 declarations: vec![],
-span: ParserSpan::new(0, 5),
+                span: ParserSpan::new(0, 5),
                 ..Default::default()
-}),
+            }),
             CssNode::AtRule(AtRule {
                 name: "import".to_string(),
                 params: "url.css".to_string(),

@@ -253,11 +253,7 @@ fn parse_rule_names(text: &str) -> Vec<Option<String>> {
         t.split(',')
             .map(|part| {
                 let p = part.trim();
-                if p.is_empty() {
-                    None
-                } else {
-                    Some(resolve(p))
-                }
+                if p.is_empty() { None } else { Some(resolve(p)) }
             })
             .filter(|n| n.is_some()) // filter out empty parts
             .collect()
@@ -407,10 +403,10 @@ fn filter_disabled_and_report_needless(
         // Angular's `material/no-prefixes`): the rule is "known" but always
         // returns empty diagnostics.  Since it never fires, any inline disable
         // for it is genuinely needless.
-        if let Some(ref rule_name) = range.rule {
-            if !is_noop_stub_rule(rule_name) {
-                continue;
-            }
+        if let Some(ref rule_name) = range.rule
+            && !is_noop_stub_rule(rule_name)
+        {
+            continue;
         }
 
         // Deduplicate: only report once per (comment_start, rule).
@@ -448,10 +444,7 @@ fn is_noop_stub_rule(name: &str) -> bool {
     // actually fires (like scss/dollar-variable-no-missing-interpolation)
     // must NOT be listed here, because their disables suppress real
     // Stylelint warnings and are therefore not needless.
-    matches!(
-        name,
-        "material/no-prefixes"
-    )
+    matches!(name, "material/no-prefixes")
 }
 
 /// Returns `true` when the `GALE_DEBUG_PERF` environment variable is set to `"1"`.

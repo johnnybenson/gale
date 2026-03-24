@@ -99,9 +99,9 @@ mod tests {
                 span: ParserSpan::new(4, 36),
                 important: false,
             }],
-span: ParserSpan::new(0, 42),
+            span: ParserSpan::new(0, 42),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
         assert_eq!(
@@ -121,9 +121,9 @@ span: ParserSpan::new(0, 42),
                 span: ParserSpan::new(4, 41),
                 important: false,
             }],
-span: ParserSpan::new(0, 47),
+            span: ParserSpan::new(0, 47),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert!(diags.is_empty());
     }
@@ -139,9 +139,9 @@ span: ParserSpan::new(0, 47),
                 span: ParserSpan::new(4, 39),
                 important: false,
             }],
-span: ParserSpan::new(0, 45),
+            span: ParserSpan::new(0, 45),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
     }

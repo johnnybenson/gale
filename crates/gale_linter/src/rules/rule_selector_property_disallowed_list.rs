@@ -57,7 +57,7 @@ impl Rule for RuleSelectorPropertyDisallowedList {
             if matches {
                 for decl in &style_rule.declarations {
                     let prop_lower = decl.property.to_ascii_lowercase();
-                    if disallowed_props.iter().any(|d| *d == prop_lower) {
+                    if disallowed_props.contains(&prop_lower) {
                         diags.push(
                             Diagnostic::new(
                                 self.name(),
@@ -111,9 +111,9 @@ mod tests {
                 span: ParserSpan::new(0, 10),
                 important: false,
             }],
-span: ParserSpan::new(0, 30),
+            span: ParserSpan::new(0, 30),
             ..Default::default()
-})
+        })
     }
 
     #[test]

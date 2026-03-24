@@ -64,7 +64,7 @@ impl Rule for ContainerNamePattern {
                 diags
             }
             CssNode::AtRule(at) => {
-                if at.name.to_ascii_lowercase() != "container" {
+                if !at.name.eq_ignore_ascii_case("container") {
                     return vec![];
                 }
                 // @container <name> <query>
@@ -151,9 +151,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     fn container_at_rule(params: &str) -> CssNode {

@@ -99,10 +99,10 @@ impl Config {
                 }
                 IgnorePattern::Regex(re) => {
                     // Simple regex support: only `^prefix` patterns
-                    if let Some(prefix) = re.strip_prefix('^') {
-                        if type_name.starts_with(prefix) {
-                            return true;
-                        }
+                    if let Some(prefix) = re.strip_prefix('^')
+                        && type_name.starts_with(prefix)
+                    {
+                        return true;
                     }
                 }
             }
@@ -389,7 +389,12 @@ fn strip_preprocessor_constructs(selector: &str, syntax: gale_css_parser::Syntax
                     in_single = !in_single;
                 } else if bytes[i] == b'"' && !in_single {
                     in_double = !in_double;
-                } else if !in_single && !in_double && bytes[i] == b'/' && i + 1 < bytes.len() && bytes[i + 1] == b'/' {
+                } else if !in_single
+                    && !in_double
+                    && bytes[i] == b'/'
+                    && i + 1 < bytes.len()
+                    && bytes[i + 1] == b'/'
+                {
                     return &line[..i];
                 }
             }
@@ -480,16 +485,19 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]
     fn reports_too_many_type_selectors() {
         let d = SelectorMaxType.check(&style_with_selector("div span a ul"), &ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("to have no more than 3 type selector"));
+        assert!(
+            d[0].message
+                .contains("to have no more than 3 type selector")
+        );
     }
 
     #[test]

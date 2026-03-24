@@ -206,24 +206,23 @@ impl GaleConfig {
             return false;
         }
 
-        let relative_path: std::borrow::Cow<'_, str> =
-            if let Some(ref config_dir) = self.config_dir {
-                let abs_file = if Path::new(file_path).is_absolute() {
-                    PathBuf::from(file_path)
-                } else {
-                    std::env::current_dir().unwrap_or_default().join(file_path)
-                };
-                match abs_file.strip_prefix(config_dir) {
-                    Ok(rel) => rel.to_string_lossy().into_owned().into(),
-                    Err(_) => file_path.into(),
-                }
+        let relative_path: std::borrow::Cow<'_, str> = if let Some(ref config_dir) = self.config_dir
+        {
+            let abs_file = if Path::new(file_path).is_absolute() {
+                PathBuf::from(file_path)
             } else {
-                file_path.into()
+                std::env::current_dir().unwrap_or_default().join(file_path)
             };
+            match abs_file.strip_prefix(config_dir) {
+                Ok(rel) => rel.to_string_lossy().into_owned().into(),
+                Err(_) => file_path.into(),
+            }
+        } else {
+            file_path.into()
+        };
 
         for ov in &self.overrides {
-            let matches_files =
-                ov.matches_files(&relative_path) || ov.matches_files(file_path);
+            let matches_files = ov.matches_files(&relative_path) || ov.matches_files(file_path);
             let excluded = ov.is_excluded(&relative_path) || ov.is_excluded(file_path);
             if matches_files && excluded {
                 return true;
@@ -357,12 +356,10 @@ impl RuleConfigValue {
             RuleConfigValue::Null(_) => RuleConfig {
                 severity: Some(Severity::Off),
                 options: None,
-
             },
             RuleConfigValue::Bool(b) => RuleConfig {
                 severity: Some(if *b { Severity::Error } else { Severity::Off }),
                 options: None,
-
             },
             RuleConfigValue::Number(n) => {
                 // Numeric value — store as the primary option.
@@ -372,7 +369,6 @@ impl RuleConfigValue {
                 RuleConfig {
                     severity: Some(Severity::Error),
                     options: Some(serde_json::Value::Number(n.clone())),
-    
                 }
             }
             RuleConfigValue::Severity(s) => {
@@ -380,7 +376,6 @@ impl RuleConfigValue {
                     RuleConfig {
                         severity: Some(parse_severity(s)),
                         options: None,
-        
                     }
                 } else {
                     // Not a known severity — treat as a primary option value.
@@ -390,7 +385,6 @@ impl RuleConfigValue {
                     RuleConfig {
                         severity: Some(Severity::Error),
                         options: Some(serde_json::Value::String(s.clone())),
-        
                     }
                 }
             }
@@ -414,14 +408,11 @@ impl RuleConfigValue {
                     let options = items.get(1).cloned();
                     // Stylelint allows secondary options to override severity:
                     // e.g. [true, { severity: "warning" }]
-                    if let Some(serde_json::Value::Object(ref obj)) =
-                        options
+                    if let Some(serde_json::Value::Object(ref obj)) = options
+                        && let Some(serde_json::Value::String(s)) = obj.get("severity")
+                        && is_severity_string(s)
                     {
-                        if let Some(serde_json::Value::String(s)) = obj.get("severity") {
-                            if is_severity_string(s) {
-                                severity = Some(parse_severity(s));
-                            }
-                        }
+                        severity = Some(parse_severity(s));
                     }
                     RuleConfig { severity, options }
                 } else if is_bool {
@@ -435,14 +426,11 @@ impl RuleConfigValue {
                     let options = items.get(1).cloned();
                     // Stylelint allows secondary options to override severity:
                     // e.g. [true, { severity: "warning" }]
-                    if let Some(serde_json::Value::Object(ref obj)) =
-                        options
+                    if let Some(serde_json::Value::Object(ref obj)) = options
+                        && let Some(serde_json::Value::String(s)) = obj.get("severity")
+                        && is_severity_string(s)
                     {
-                        if let Some(serde_json::Value::String(s)) = obj.get("severity") {
-                            if is_severity_string(s) {
-                                severity = Some(parse_severity(s));
-                            }
-                        }
+                        severity = Some(parse_severity(s));
                     }
                     RuleConfig { severity, options }
                 } else {
@@ -464,7 +452,6 @@ impl RuleConfigValue {
                 RuleConfig {
                     severity: Some(Severity::Error),
                     options: Some(serde_json::Value::Object(map.clone())),
-    
                 }
             }
         }
@@ -510,10 +497,10 @@ fn has_explicit_severity_in_value(v: &RuleConfigValue) -> bool {
                 return true;
             }
             // Check secondary options for { severity: "..." }.
-            if let Some(serde_json::Value::Object(obj)) = items.get(1) {
-                if let Some(serde_json::Value::String(s)) = obj.get("severity") {
-                    return is_severity_string(s);
-                }
+            if let Some(serde_json::Value::Object(obj)) = items.get(1)
+                && let Some(serde_json::Value::String(s)) = obj.get("severity")
+            {
+                return is_severity_string(s);
             }
             false
         }
@@ -1162,14 +1149,12 @@ pub fn find_config(start_dir: &Path) -> Option<PathBuf> {
         }
         // Lowest priority: check for a `"stylelint"` field in package.json.
         let pkg_path = dir.join("package.json");
-        if pkg_path.is_file() {
-            if let Ok(content) = std::fs::read_to_string(&pkg_path) {
-                if let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content) {
-                    if pkg.get("stylelint").is_some() {
-                        return Some(pkg_path);
-                    }
-                }
-            }
+        if pkg_path.is_file()
+            && let Ok(content) = std::fs::read_to_string(&pkg_path)
+            && let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&content)
+            && pkg.get("stylelint").is_some()
+        {
+            return Some(pkg_path);
         }
         if !dir.pop() {
             return None;
@@ -1406,16 +1391,14 @@ fn resolve_npm_package_path(file_dir: &Path, package: &str) -> Option<PathBuf> {
         if candidate.is_dir() {
             // Try package.json "main" field
             let pkg_json = candidate.join("package.json");
-            if pkg_json.is_file() {
-                if let Ok(contents) = std::fs::read_to_string(&pkg_json) {
-                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&contents) {
-                        if let Some(main) = parsed.get("main").and_then(|v| v.as_str()) {
-                            let main_path = candidate.join(main);
-                            if main_path.is_file() {
-                                return Some(main_path);
-                            }
-                        }
-                    }
+            if pkg_json.is_file()
+                && let Ok(contents) = std::fs::read_to_string(&pkg_json)
+                && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&contents)
+                && let Some(main) = parsed.get("main").and_then(|v| v.as_str())
+            {
+                let main_path = candidate.join(main);
+                if main_path.is_file() {
+                    return Some(main_path);
                 }
             }
             // Try index.js, index.cjs
@@ -1507,9 +1490,7 @@ fn find_variable_value(source: &str, var_name: &str) -> Option<String> {
                 return extract_balanced(after_eq, '{', '}');
             }
             // Scalar value: read up to `;` or end of line.
-            let end = after_eq
-                .find(|c: char| c == ';' || c == '\n')
-                .unwrap_or(after_eq.len());
+            let end = after_eq.find([';', '\n']).unwrap_or(after_eq.len());
             let val = after_eq[..end].trim();
             if !val.is_empty() {
                 return Some(val.to_string());
@@ -1778,16 +1759,13 @@ fn substitute_scalar_vars(source: &str) -> String {
 fn parse_js_config(source: &str, file_dir: Option<&Path>) -> Result<ConfigFile, ConfigError> {
     // Handle re-export pattern: `module.exports = require("./relative")`
     // This is common in npm config packages where index.js delegates to another file.
-    if let Some(file_dir) = file_dir {
-        if let Some(reexport_path) = extract_reexport_require(source) {
-            if reexport_path.starts_with("./") || reexport_path.starts_with("../") {
-                if let Some(resolved) = resolve_import_path(file_dir, &reexport_path) {
-                    if let Ok(contents) = std::fs::read_to_string(&resolved) {
-                        return parse_js_config(&contents, resolved.parent());
-                    }
-                }
-            }
-        }
+    if let Some(file_dir) = file_dir
+        && let Some(reexport_path) = extract_reexport_require(source)
+        && (reexport_path.starts_with("./") || reexport_path.starts_with("../"))
+        && let Some(resolved) = resolve_import_path(file_dir, &reexport_path)
+        && let Ok(contents) = std::fs::read_to_string(&resolved)
+    {
+        return parse_js_config(&contents, resolved.parent());
     }
 
     // Pre-process: resolve relative imports and inline their exported values.
@@ -2198,9 +2176,7 @@ fn replace_regexp_literals(s: &str) -> String {
                 // Escape any double-quotes and backslashes for JSON.
                 result.push('"');
                 for pc in pattern.chars() {
-                    if pc == '"' {
-                        result.push('\\');
-                    } else if pc == '\\' {
+                    if pc == '"' || pc == '\\' {
                         result.push('\\');
                     }
                     result.push(pc);
@@ -3437,9 +3413,7 @@ pub fn is_known_plugin_rule(rule_name: &str) -> bool {
     KNOWN_PLUGIN_RULE_PREFIXES
         .iter()
         .any(|prefix| rule_name.starts_with(prefix))
-        || KNOWN_PLUGIN_STANDALONE_RULES
-            .iter()
-            .any(|r| *r == rule_name)
+        || KNOWN_PLUGIN_STANDALONE_RULES.contains(&rule_name)
 }
 
 /// Convert a raw [`ConfigFile`] into the resolved [`GaleConfig`].
@@ -3496,9 +3470,9 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
             for (name, rc) in rules.iter_mut() {
                 if rc.severity == Some(Severity::Error) {
                     // Check if this rule's raw value explicitly specifies severity.
-                    let has_explicit_severity = raw_rules.get(name).map_or(false, |v| {
-                        has_explicit_severity_in_value(v)
-                    });
+                    let has_explicit_severity = raw_rules
+                        .get(name)
+                        .is_some_and(has_explicit_severity_in_value);
                     if !has_explicit_severity {
                         rc.severity = Some(sev);
                     }
@@ -3555,7 +3529,11 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
         }
 
         let ignore_patterns = ov.ignore_files.unwrap_or_default();
-        Some(ResolvedOverride::new(file_patterns, ignore_patterns, ov_rules))
+        Some(ResolvedOverride::new(
+            file_patterns,
+            ignore_patterns,
+            ov_rules,
+        ))
     };
 
     // Combine: extended overrides first, then user overrides.

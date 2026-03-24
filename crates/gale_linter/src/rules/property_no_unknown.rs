@@ -202,9 +202,9 @@ mod tests {
                         important: false,
                     })
                     .collect(),
-span: Span::new(0, 0),
+                span: Span::new(0, 0),
                 ..Default::default()
-})
+            })
         }
     }
 }

@@ -190,23 +190,22 @@ impl Rule for OrderPropertiesOrder {
                 );
 
                 // 3. noEmptyLineBetween check (within same group)
-                if let Some(prev_group) = last_group_index {
-                    if info.group_index == prev_group && last_was_specified == Some(true) {
-                        if let Some(group_info) = config.groups.get(info.group_index) {
-                            if group_info.no_empty_line_between {
-                                let has_empty = has_empty_line_before(ctx.source, offset);
-                                if has_empty {
-                                    diagnostics.push(
-                                        Diagnostic::new(
-                                            self.name(),
-                                            format!("Unexpected empty line before \"{prop}\""),
-                                        )
-                                        .severity(self.default_severity())
-                                        .span(Span::new(offset, length)),
-                                    );
-                                }
-                            }
-                        }
+                if let Some(prev_group) = last_group_index
+                    && info.group_index == prev_group
+                    && last_was_specified == Some(true)
+                    && let Some(group_info) = config.groups.get(info.group_index)
+                    && group_info.no_empty_line_between
+                {
+                    let has_empty = has_empty_line_before(ctx.source, offset);
+                    if has_empty {
+                        diagnostics.push(
+                            Diagnostic::new(
+                                self.name(),
+                                format!("Unexpected empty line before \"{prop}\""),
+                            )
+                            .severity(self.default_severity())
+                            .span(Span::new(offset, length)),
+                        );
                     }
                 }
 
@@ -309,20 +308,20 @@ impl Rule for OrderPropertiesOrder {
                         last_was_specified = Some(false);
                     }
                     Unspecified::BottomAlphabetical => {
-                        if let Some(ref last_unspec) = last_unspecified_name {
-                            if prop_lower < *last_unspec {
-                                diagnostics.push(
-                                    Diagnostic::new(
-                                        self.name(),
-                                        format!(
-                                            "Expected \"{prop}\" to come before \"{}\"",
-                                            last_unspec
-                                        ),
-                                    )
-                                    .severity(self.default_severity())
-                                    .span(Span::new(offset, length)),
-                                );
-                            }
+                        if let Some(ref last_unspec) = last_unspecified_name
+                            && prop_lower < *last_unspec
+                        {
+                            diagnostics.push(
+                                Diagnostic::new(
+                                    self.name(),
+                                    format!(
+                                        "Expected \"{prop}\" to come before \"{}\"",
+                                        last_unspec
+                                    ),
+                                )
+                                .severity(self.default_severity())
+                                .span(Span::new(offset, length)),
+                            );
                         }
                         last_order_index = Some(usize::MAX);
                         last_property_name = Some(prop.to_string());
@@ -656,7 +655,7 @@ fn parse_config(ctx: &RuleContext) -> Option<Config> {
     let arr = match options {
         serde_json::Value::Array(arr) => {
             // Check if first element is an array (nested format)
-            if arr.first().map_or(false, |v| v.is_array()) {
+            if arr.first().is_some_and(|v| v.is_array()) {
                 arr.first().and_then(|v| v.as_array())?
             } else {
                 arr
@@ -817,9 +816,9 @@ mod tests {
                 make_decl("display", "block", 4, 14),
                 make_decl("position", "relative", 19, 19),
             ],
-span: ParserSpan::new(0, 40),
+            span: ParserSpan::new(0, 40),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_no_options());
         assert!(diags.is_empty());
     }
@@ -836,9 +835,9 @@ span: ParserSpan::new(0, 40),
                 make_decl("display", "block", 31, 14),
                 make_decl("width", "100%", 46, 12),
             ],
-span: ParserSpan::new(0, 60),
+            span: ParserSpan::new(0, 60),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -853,9 +852,9 @@ span: ParserSpan::new(0, 60),
                 make_decl("display", "block", 4, 14),
                 make_decl("position", "relative", 19, 19),
             ],
-span: ParserSpan::new(0, 40),
+            span: ParserSpan::new(0, 40),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("position"));
@@ -878,9 +877,9 @@ span: ParserSpan::new(0, 40),
                 make_decl("display", "flex", 31, 13),
                 make_decl("width", "100px", 45, 13),
             ],
-span: ParserSpan::new(0, 60),
+            span: ParserSpan::new(0, 60),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -899,9 +898,9 @@ span: ParserSpan::new(0, 60),
                 make_decl("width", "100px", 4, 13),
                 make_decl("position", "absolute", 18, 19),
             ],
-span: ParserSpan::new(0, 40),
+            span: ParserSpan::new(0, 40),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("position"));
@@ -922,9 +921,9 @@ span: ParserSpan::new(0, 40),
                 make_decl("display", "flex", 24, 13),
                 make_decl("color", "red", 38, 10),
             ],
-span: ParserSpan::new(0, 50),
+            span: ParserSpan::new(0, 50),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -940,9 +939,9 @@ span: ParserSpan::new(0, 50),
                 make_decl("unknown-prop", "foo", 24, 18),
                 make_decl("display", "block", 43, 14),
             ],
-span: ParserSpan::new(0, 60),
+            span: ParserSpan::new(0, 60),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -958,9 +957,9 @@ span: ParserSpan::new(0, 60),
                 make_decl("$my-var", "10px", 19, 14),
                 make_decl("position", "relative", 34, 19),
             ],
-span: ParserSpan::new(0, 55),
+            span: ParserSpan::new(0, 55),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
     }
@@ -976,9 +975,9 @@ span: ParserSpan::new(0, 55),
                 make_decl("--my-var", "10px", 24, 16),
                 make_decl("display", "block", 41, 14),
             ],
-span: ParserSpan::new(0, 60),
+            span: ParserSpan::new(0, 60),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -993,9 +992,9 @@ span: ParserSpan::new(0, 60),
                 make_decl("color", "pink", 4, 11),
                 make_decl("-webkit-font-smoothing", "antialiased", 16, 38),
             ],
-span: ParserSpan::new(0, 60),
+            span: ParserSpan::new(0, 60),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
     }
@@ -1010,9 +1009,9 @@ span: ParserSpan::new(0, 60),
                 make_decl("bottom", "0", 4, 9),
                 make_decl("height", "1px", 14, 12),
             ],
-span: ParserSpan::new(0, 30),
+            span: ParserSpan::new(0, 30),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
     }
@@ -1027,9 +1026,9 @@ span: ParserSpan::new(0, 30),
                 make_decl("height", "1px", 4, 12),
                 make_decl("top", "0", 17, 6),
             ],
-span: ParserSpan::new(0, 30),
+            span: ParserSpan::new(0, 30),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
     }
@@ -1062,9 +1061,9 @@ span: ParserSpan::new(0, 30),
                 make_decl("display", "block", 4, 14),
                 make_decl("animation-name", "fade", 19, 21),
             ],
-span: ParserSpan::new(0, 45),
+            span: ParserSpan::new(0, 45),
             ..Default::default()
-});
+        });
         // Correct order: display then animation-name (matches /^animation/).
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
@@ -1080,9 +1079,9 @@ span: ParserSpan::new(0, 45),
                 make_decl("display", "block", 4, 14),
                 make_decl("animation-name", "fade", 19, 21),
             ],
-span: ParserSpan::new(0, 45),
+            span: ParserSpan::new(0, 45),
             ..Default::default()
-});
+        });
         // Wrong order: display before animation-name, but /^animation/ should come first.
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);

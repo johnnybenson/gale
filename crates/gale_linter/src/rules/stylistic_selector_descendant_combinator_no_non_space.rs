@@ -165,10 +165,7 @@ impl Rule for StylisticSelectorDescendantCombinatorNoNonSpace {
                             "Expected single space for descendant combinator",
                         )
                         .severity(self.default_severity())
-                        .span(Span::new(
-                            rule.span.offset + ws_start,
-                            ws_len,
-                        )),
+                        .span(Span::new(rule.span.offset + ws_start, ws_len)),
                     );
                 }
                 continue;

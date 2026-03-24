@@ -85,19 +85,19 @@ fn check_url_schemes(
         }
 
         // Skip scheme-relative (//...) and relative URLs (no scheme)
-        if !content.starts_with("//") {
-            if let Some(scheme_end) = content.find("://") {
-                let scheme = &content[..scheme_end];
-                if !allowed.contains(&scheme.to_string()) {
-                    diags.push(
-                        Diagnostic::new(rule.name(), format!("Unexpected URL scheme \"{scheme}\""))
-                            .severity(rule.default_severity())
-                            .span(Span::new(
-                                base_offset + abs_start,
-                                content_end - abs_start + 1,
-                            )),
-                    );
-                }
+        if !content.starts_with("//")
+            && let Some(scheme_end) = content.find("://")
+        {
+            let scheme = &content[..scheme_end];
+            if !allowed.contains(&scheme.to_string()) {
+                diags.push(
+                    Diagnostic::new(rule.name(), format!("Unexpected URL scheme \"{scheme}\""))
+                        .severity(rule.default_severity())
+                        .span(Span::new(
+                            base_offset + abs_start,
+                            content_end - abs_start + 1,
+                        )),
+                );
             }
         }
 
@@ -129,9 +129,9 @@ mod tests {
                 span: ParserSpan::new(0, val.len()),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

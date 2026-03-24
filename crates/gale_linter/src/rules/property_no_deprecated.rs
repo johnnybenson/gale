@@ -79,9 +79,9 @@ mod tests {
                     important: false,
                 })
                 .collect(),
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

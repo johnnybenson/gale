@@ -56,10 +56,7 @@ impl Rule for MediaFeatureRangeNotation {
         // Skip media queries containing SCSS/Less variables, interpolation,
         // or SCSS math expressions — the actual values are unknown until
         // compilation, so range notation cannot be determined.
-        if at.params.contains('$')
-            || at.params.contains("#{")
-            || at.params.contains("@{")
-        {
+        if at.params.contains('$') || at.params.contains("#{") || at.params.contains("@{") {
             return vec![];
         }
         // In SCSS/Less, skip if params contain SCSS math operators (like `(124px + 300px)`)
@@ -120,10 +117,10 @@ fn parse_notation(options: Option<&serde_json::Value>) -> Notation {
             }
         }
         serde_json::Value::Array(arr) => {
-            if let Some(s) = arr.first().and_then(|v| v.as_str()) {
-                if s == "prefix" {
-                    return Notation::Prefix;
-                }
+            if let Some(s) = arr.first().and_then(|v| v.as_str())
+                && s == "prefix"
+            {
+                return Notation::Prefix;
             }
             Notation::Context
         }

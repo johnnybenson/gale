@@ -123,7 +123,7 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                     lower_prop: lower_prop.clone(),
                     value: decl.value.clone(),
                     important: decl.important,
-                    span: decl.span.clone(),
+                    span: decl.span,
                 });
                 continue;
             }
@@ -135,7 +135,7 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                     lower_prop: lower_prop.clone(),
                     value: decl.value.clone(),
                     important: decl.important,
-                    span: decl.span.clone(),
+                    span: decl.span,
                 });
                 continue;
             }
@@ -147,7 +147,7 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                     lower_prop: lower_prop.clone(),
                     value: decl.value.clone(),
                     important: decl.important,
-                    span: decl.span.clone(),
+                    span: decl.span,
                 });
                 continue;
             }
@@ -159,7 +159,7 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                     lower_prop: lower_prop.clone(),
                     value: decl.value.clone(),
                     important: decl.important,
-                    span: decl.span.clone(),
+                    span: decl.span,
                 });
                 continue;
             }
@@ -174,7 +174,7 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                     lower_prop: lower_prop.clone(),
                     value: decl.value.clone(),
                     important: decl.important,
-                    span: decl.span.clone(),
+                    span: decl.span,
                 });
                 continue;
             }
@@ -206,9 +206,9 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                     {
                         // Report
                         let (report_prop, report_span) = if duplicate_is_more_important {
-                            (prop.clone(), decl.span.clone())
+                            (prop.clone(), decl.span)
                         } else {
-                            (dup_decl.property.clone(), dup_decl.span.clone())
+                            (dup_decl.property.clone(), dup_decl.span)
                         };
 
                         if !duplicate_is_more_important {
@@ -230,7 +230,7 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                             lower_prop: lower_prop.clone(),
                             value: decl.value.clone(),
                             important: decl.important,
-                            span: decl.span.clone(),
+                            span: decl.span,
                         });
                         continue;
                     }
@@ -242,9 +242,9 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                         if syntaxes_are_equal {
                             // Same syntax means report
                             let (report_prop, report_span) = if duplicate_is_more_important {
-                                (prop.clone(), decl.span.clone())
+                                (prop.clone(), decl.span)
                             } else {
-                                (dup_decl.property.clone(), dup_decl.span.clone())
+                                (dup_decl.property.clone(), dup_decl.span)
                             };
 
                             if !duplicate_is_more_important {
@@ -265,7 +265,7 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                                 lower_prop: lower_prop.clone(),
                                 value: decl.value.clone(),
                                 important: decl.important,
-                                span: decl.span.clone(),
+                                span: decl.span,
                             });
                             continue;
                         }
@@ -278,7 +278,7 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                             lower_prop: lower_prop.clone(),
                             value: decl.value.clone(),
                             important: decl.important,
-                            span: decl.span.clone(),
+                            span: decl.span,
                         });
                         if !duplicate_is_more_important {
                             decl_map.insert(lower_prop.clone(), current_index);
@@ -288,9 +288,9 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
 
                     // Same value consecutive duplicate - report
                     let (report_prop, report_span) = if duplicate_is_more_important {
-                        (prop.clone(), decl.span.clone())
+                        (prop.clone(), decl.span)
                     } else {
-                        (dup_decl.property.clone(), dup_decl.span.clone())
+                        (dup_decl.property.clone(), dup_decl.span)
                     };
 
                     if !duplicate_is_more_important {
@@ -311,7 +311,7 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                         lower_prop: lower_prop.clone(),
                         value: decl.value.clone(),
                         important: decl.important,
-                        span: decl.span.clone(),
+                        span: decl.span,
                     });
                     continue;
                 }
@@ -323,7 +323,7 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                         lower_prop: lower_prop.clone(),
                         value: decl.value.clone(),
                         important: decl.important,
-                        span: decl.span.clone(),
+                        span: decl.span,
                     });
                     if !duplicate_is_more_important {
                         decl_map.insert(lower_prop.clone(), current_index);
@@ -333,9 +333,9 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
 
                 // Default: report all duplicates
                 let (report_prop, report_span) = if duplicate_is_more_important {
-                    (prop.clone(), decl.span.clone())
+                    (prop.clone(), decl.span)
                 } else {
-                    (dup_decl.property.clone(), dup_decl.span.clone())
+                    (dup_decl.property.clone(), dup_decl.span)
                 };
 
                 if !duplicate_is_more_important {
@@ -359,7 +359,7 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                 lower_prop: lower_prop.clone(),
                 value: decl.value.clone(),
                 important: decl.important,
-                span: decl.span.clone(),
+                span: decl.span,
             });
         }
 
@@ -525,7 +525,7 @@ fn tokenize_value(value: &str) -> Vec<ValueToken> {
         }
 
         // Operators (when standalone, not part of a number)
-        if (ch == '+' || ch == '*' || ch == '/') {
+        if ch == '+' || ch == '*' || ch == '/' {
             tokens.push(ValueToken::Operator(ch));
             i += 1;
             continue;
@@ -988,9 +988,9 @@ mod tests {
                     important: false,
                 },
             ],
-span: ParserSpan::new(0, 45),
+            span: ParserSpan::new(0, 45),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].message, "Unexpected duplicate \"color\"");
@@ -1015,9 +1015,9 @@ span: ParserSpan::new(0, 45),
                     important: false,
                 },
             ],
-span: ParserSpan::new(0, 30),
+            span: ParserSpan::new(0, 30),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert!(diags.is_empty());
     }
@@ -1041,9 +1041,9 @@ span: ParserSpan::new(0, 30),
                     important: false,
                 },
             ],
-span: ParserSpan::new(0, 30),
+            span: ParserSpan::new(0, 30),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
     }
@@ -1068,9 +1068,9 @@ span: ParserSpan::new(0, 30),
                     important: false,
                 },
             ],
-span: ParserSpan::new(0, 30),
+            span: ParserSpan::new(0, 30),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert_eq!(
             diags.len(),
@@ -1104,9 +1104,9 @@ span: ParserSpan::new(0, 30),
                     important: false,
                 },
             ],
-span: ParserSpan::new(0, 45),
+            span: ParserSpan::new(0, 45),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
     }
@@ -1159,9 +1159,9 @@ span: ParserSpan::new(0, 45),
                     important: false,
                 },
             ],
-span: ParserSpan::new(0, 30),
+            span: ParserSpan::new(0, 30),
             ..Default::default()
-});
+        });
         let opts = serde_json::json!({
             "ignore": "consecutive-duplicates-with-different-values"
         });

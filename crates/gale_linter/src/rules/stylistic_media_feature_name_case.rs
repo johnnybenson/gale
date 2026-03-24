@@ -133,7 +133,9 @@ impl Rule for StylisticMediaFeatureNameCase {
                         // Read the feature name
                         let feat_start = i;
                         while i < len
-                            && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
+                            && (bytes[i].is_ascii_alphanumeric()
+                                || bytes[i] == b'-'
+                                || bytes[i] == b'_')
                         {
                             i += 1;
                         }
@@ -195,10 +197,7 @@ impl Rule for StylisticMediaFeatureNameCase {
                             diagnostics.push(
                                 Diagnostic::new(
                                     self.name(),
-                                    format!(
-                                        "Expected \"{}\" to be \"{}\"",
-                                        feat_name, expected
-                                    ),
+                                    format!("Expected \"{}\" to be \"{}\"", feat_name, expected),
                                 )
                                 .severity(self.default_severity())
                                 .span(Span::new(feat_start, feat_end - feat_start)),

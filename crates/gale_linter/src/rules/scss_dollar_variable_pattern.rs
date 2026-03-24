@@ -222,10 +222,10 @@ fn extract_each_vars(params: &str, vars: &mut HashSet<String>) {
 
     for part in binding_part.split(',') {
         let trimmed = part.trim();
-        if let Some(name) = trimmed.strip_prefix('$') {
-            if !name.is_empty() {
-                vars.insert(name.to_string());
-            }
+        if let Some(name) = trimmed.strip_prefix('$')
+            && !name.is_empty()
+        {
+            vars.insert(name.to_string());
         }
     }
 }

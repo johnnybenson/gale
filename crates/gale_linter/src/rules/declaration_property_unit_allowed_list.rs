@@ -25,7 +25,9 @@ fn extract_units(value: &str) -> Vec<String> {
         // Skip SCSS variable references ($var or namespace.$var)
         if bytes[i] == b'$' {
             i += 1;
-            while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_') {
+            while i < len
+                && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
+            {
                 i += 1;
             }
             continue;
@@ -161,9 +163,9 @@ mod tests {
                 span: ParserSpan::new(0, 10),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

@@ -116,10 +116,8 @@ impl Rule for StylisticValueListCommaSpaceAfter {
                                 pre -= 1;
                             }
                             // It's a property if preceded by '{', ';', or start
-                            is_property = k == 0
-                                || bytes[pre] == b'{'
-                                || bytes[pre] == b';'
-                                || pre == 0;
+                            is_property =
+                                k == 0 || bytes[pre] == b'{' || bytes[pre] == b';' || pre == 0;
                         }
                     }
                     if is_property {

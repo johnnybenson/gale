@@ -188,28 +188,24 @@ fn count_id_selectors(selector: &str) -> usize {
     let mut count = 0;
     let mut i = 0;
     while i < chars.len() {
-        if chars[i] == '#' {
-            if let Some(&next) = chars.get(i + 1) {
-                if next == '{' {
-                    // SCSS interpolation #{...} — skip past the closing `}`
-                    i += 2;
-                    let mut depth = 1;
-                    while i < chars.len() && depth > 0 {
-                        if chars[i] == '{' {
-                            depth += 1;
-                        } else if chars[i] == '}' {
-                            depth -= 1;
-                        }
-                        i += 1;
+        if chars[i] == '#'
+            && let Some(&next) = chars.get(i + 1)
+        {
+            if next == '{' {
+                // SCSS interpolation #{...} — skip past the closing `}`
+                i += 2;
+                let mut depth = 1;
+                while i < chars.len() && depth > 0 {
+                    if chars[i] == '{' {
+                        depth += 1;
+                    } else if chars[i] == '}' {
+                        depth -= 1;
                     }
-                    continue;
-                } else if next.is_ascii_alphabetic()
-                    || next == '_'
-                    || next == '-'
-                    || !next.is_ascii()
-                {
-                    count += 1;
+                    i += 1;
                 }
+                continue;
+            } else if next.is_ascii_alphabetic() || next == '_' || next == '-' || !next.is_ascii() {
+                count += 1;
             }
         }
         i += 1;
@@ -240,9 +236,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

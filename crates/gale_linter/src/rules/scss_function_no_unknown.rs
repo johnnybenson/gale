@@ -277,10 +277,11 @@ impl Rule for ScssFunctionNoUnknown {
                 // We handle this by checking if the character before the function
                 // name in the value is `.`.
                 let func_start = decl.value.find(&format!("{}(", func_name));
-                if let Some(pos) = func_start {
-                    if pos > 0 && decl.value.as_bytes()[pos - 1] == b'.' {
-                        continue;
-                    }
+                if let Some(pos) = func_start
+                    && pos > 0
+                    && decl.value.as_bytes()[pos - 1] == b'.'
+                {
+                    continue;
                 }
 
                 if is_known_css_function(&func_name) {
@@ -339,9 +340,9 @@ mod tests {
                     important: false,
                 })
                 .collect(),
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

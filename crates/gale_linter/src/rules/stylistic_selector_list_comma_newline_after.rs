@@ -110,15 +110,10 @@ impl Rule for StylisticSelectorListCommaNewlineAfter {
                 //   - `\n` or `\r\n`: normal newline
                 let has_newline_after = {
                     let mut skip = after_comma;
-                    while skip < bytes.len()
-                        && (bytes[skip] == b' ' || bytes[skip] == b'\t')
-                    {
+                    while skip < bytes.len() && (bytes[skip] == b' ' || bytes[skip] == b'\t') {
                         skip += 1;
                     }
-                    if skip + 1 < bytes.len()
-                        && bytes[skip] == b'/'
-                        && bytes[skip + 1] == b'/'
-                    {
+                    if skip + 1 < bytes.len() && bytes[skip] == b'/' && bytes[skip + 1] == b'/' {
                         // SCSS line comment — implicitly ends with newline
                         true
                     } else if skip + 1 < bytes.len()
@@ -127,23 +122,17 @@ impl Rule for StylisticSelectorListCommaNewlineAfter {
                     {
                         // Block comment — skip to end, then check for newline
                         let mut j = skip + 2;
-                        while j + 1 < bytes.len()
-                            && !(bytes[j] == b'*' && bytes[j + 1] == b'/')
-                        {
+                        while j + 1 < bytes.len() && !(bytes[j] == b'*' && bytes[j + 1] == b'/') {
                             j += 1;
                         }
                         if j + 1 < bytes.len() {
                             j += 2; // skip past `*/`
                         }
                         // Skip whitespace after closing `*/`
-                        while j < bytes.len()
-                            && (bytes[j] == b' ' || bytes[j] == b'\t')
-                        {
+                        while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
                             j += 1;
                         }
-                        j < bytes.len()
-                            && (bytes[j] == b'\n'
-                                || bytes[j] == b'\r')
+                        j < bytes.len() && (bytes[j] == b'\n' || bytes[j] == b'\r')
                     } else {
                         next_char == Some('\n')
                             || (next_char == Some('\r')
@@ -196,9 +185,9 @@ mod tests {
         CssNode::Style(StyleRule {
             selector: sel.to_string(),
             declarations: vec![],
-span: ParserSpan::new(0, sel.len()),
+            span: ParserSpan::new(0, sel.len()),
             ..Default::default()
-})
+        })
     }
 
     #[test]
@@ -227,7 +216,11 @@ span: ParserSpan::new(0, sel.len()),
         let sel = "&[aria-disabled=\"true\"]:enabled, // This catches a situation\n&[aria-disabled=\"true\"]:active:enabled";
         let ctx = ctx_with_source(sel);
         let d = rule.check(&style_with_selector(sel), &ctx);
-        assert!(d.is_empty(), "Should not flag comma followed by SCSS line comment, got {} diagnostics", d.len());
+        assert!(
+            d.is_empty(),
+            "Should not flag comma followed by SCSS line comment, got {} diagnostics",
+            d.len()
+        );
     }
 
     #[test]
@@ -236,7 +229,11 @@ span: ParserSpan::new(0, sel.len()),
         let sel = "a, /* comment */\nb,\nc";
         let ctx = ctx_with_source(sel);
         let d = rule.check(&style_with_selector(sel), &ctx);
-        assert!(d.is_empty(), "Should not flag comma followed by block comment then newline, got {} diagnostics", d.len());
+        assert!(
+            d.is_empty(),
+            "Should not flag comma followed by block comment then newline, got {} diagnostics",
+            d.len()
+        );
     }
 
     #[test]

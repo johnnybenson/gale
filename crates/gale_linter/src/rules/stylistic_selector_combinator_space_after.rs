@@ -8,7 +8,7 @@ use crate::rule::{Rule, RuleContext};
 /// Equivalent to `@stylistic/selector-combinator-space-after`.
 pub struct StylisticSelectorCombinatorSpaceAfter;
 
-const COMBINATORS: &[u8] = &[b'>', b'~', b'+'];
+const COMBINATORS: &[u8] = b">~+";
 
 impl Rule for StylisticSelectorCombinatorSpaceAfter {
     fn name(&self) -> &'static str {
@@ -141,10 +141,7 @@ impl Rule for StylisticSelectorCombinatorSpaceAfter {
             if in_selector && paren_depth == 0 && COMBINATORS.contains(&bytes[i]) {
                 let comb_pos = i;
                 // `>=` and `<=` are SCSS comparison operators, not combinators
-                if bytes[i] == b'>'
-                    && comb_pos + 1 < len
-                    && bytes[comb_pos + 1] == b'='
-                {
+                if bytes[i] == b'>' && comb_pos + 1 < len && bytes[comb_pos + 1] == b'=' {
                     i += 2;
                     continue;
                 }

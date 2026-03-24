@@ -269,9 +269,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]
@@ -316,9 +316,9 @@ span: ParserSpan::new(0, 0),
                 span: ParserSpan::new(4, 24),
                 important: false,
             }],
-span: ParserSpan::new(0, source.len()),
+            span: ParserSpan::new(0, source.len()),
             ..Default::default()
-});
+        });
         let d = PropertyNoVendorPrefix.check(&node, &ctx);
         assert_eq!(d.len(), 1);
         assert!(d[0].fix.is_some());

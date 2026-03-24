@@ -99,10 +99,10 @@ impl Config {
                 IgnorePattern::Regex(re) => {
                     // Simple regex: prefix match with ^
                     let to_check = format!(":{pseudo_name}");
-                    if let Some(prefix) = re.strip_prefix('^') {
-                        if to_check.starts_with(prefix) || pseudo_name.starts_with(prefix) {
-                            return true;
-                        }
+                    if let Some(prefix) = re.strip_prefix('^')
+                        && (to_check.starts_with(prefix) || pseudo_name.starts_with(prefix))
+                    {
+                        return true;
                     }
                     // Simple contains check for non-anchored patterns
                     if to_check.contains(re.as_str()) || pseudo_name.contains(re.as_str()) {
@@ -472,11 +472,7 @@ fn compute_single_specificity(selector: &str, config: &Config) -> (usize, usize,
 fn find_of_clause(inner: &str) -> Option<usize> {
     // Look for " of " (case insensitive)
     let lower = inner.to_ascii_lowercase();
-    if let Some(pos) = lower.find(" of ") {
-        Some(pos + 4) // skip " of "
-    } else {
-        None
-    }
+    lower.find(" of ").map(|pos| pos + 4)
 }
 
 /// Strip SCSS/Less interpolation from a selector string.
@@ -565,9 +561,9 @@ mod tests {
         CssNode::Style(StyleRule {
             selector: sel.to_string(),
             declarations: vec![],
-span: ParserSpan::new(0, sel.len()),
+            span: ParserSpan::new(0, sel.len()),
             ..Default::default()
-})
+        })
     }
 
     #[test]

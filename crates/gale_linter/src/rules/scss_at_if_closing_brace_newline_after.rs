@@ -59,24 +59,18 @@ impl Rule for ScssAtIfClosingBraceNewlineAfter {
                         // Check what follows
                         let followed_by_else = j < len && source[j..].starts_with("@else");
 
-                        match option {
-                            "always-last-in-chain" => {
-                                if !followed_by_else {
-                                    // Must be followed by newline
-                                    if j < len && bytes[j] != b'\n' && bytes[j] != b'\r' {
-                                        diagnostics.push(
-                                            Diagnostic::new(
-                                                self.name(),
-                                                "Expected newline after closing brace of @if"
-                                                    .to_string(),
-                                            )
-                                            .severity(self.default_severity())
-                                            .span(Span::new(close_brace, 1)),
-                                        );
-                                    }
-                                }
+                        if option == "always-last-in-chain" && !followed_by_else {
+                            // Must be followed by newline
+                            if j < len && bytes[j] != b'\n' && bytes[j] != b'\r' {
+                                diagnostics.push(
+                                    Diagnostic::new(
+                                        self.name(),
+                                        "Expected newline after closing brace of @if".to_string(),
+                                    )
+                                    .severity(self.default_severity())
+                                    .span(Span::new(close_brace, 1)),
+                                );
                             }
-                            _ => {}
                         }
 
                         i = after;

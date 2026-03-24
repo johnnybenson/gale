@@ -36,7 +36,7 @@ impl Rule for LayerNamePattern {
             return vec![];
         };
 
-        if at.name.to_ascii_lowercase() != "layer" {
+        if !at.name.eq_ignore_ascii_case("layer") {
             return vec![];
         }
 

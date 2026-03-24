@@ -243,20 +243,19 @@ fn has_ignore_option(ctx: &RuleContext, value: &str) -> bool {
 
     // Try direct object access (for [true, {...}] or ["error", {...}] configs
     // where the config resolver stores just the secondary options object)
-    if let Some(arr) = opts.get("ignore").and_then(|v| v.as_array()) {
-        if arr.iter().any(|v| v.as_str() == Some(value)) {
-            return true;
-        }
+    if let Some(arr) = opts.get("ignore").and_then(|v| v.as_array())
+        && arr.iter().any(|v| v.as_str() == Some(value))
+    {
+        return true;
     }
 
     // Then try via secondary_options (for ["always", {...}] configs where
     // the entire array is stored as options)
-    if let Some(secondary) = ctx.secondary_options() {
-        if let Some(arr) = secondary.get("ignore").and_then(|v| v.as_array()) {
-            if arr.iter().any(|v| v.as_str() == Some(value)) {
-                return true;
-            }
-        }
+    if let Some(secondary) = ctx.secondary_options()
+        && let Some(arr) = secondary.get("ignore").and_then(|v| v.as_array())
+        && arr.iter().any(|v| v.as_str() == Some(value))
+    {
+        return true;
     }
 
     false
@@ -619,9 +618,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]
@@ -711,9 +710,9 @@ span: ParserSpan::new(0, 0),
                 ..Default::default()
             }],
             span: ParserSpan::new(0, 20),
-        
+
             nested_at_rules: Vec::new(),
-});
+        });
         let d = SelectorNoQualifyingType.check_root(&[parent], &ctx());
         assert_eq!(
             d.len(),
@@ -764,9 +763,9 @@ span: ParserSpan::new(0, 0),
                 ..Default::default()
             }],
             span: ParserSpan::new(0, 0),
-        
+
             nested_at_rules: Vec::new(),
-});
+        });
         let d = SelectorNoQualifyingType.check_root(&[parent], &scss_ctx);
         assert!(
             d.is_empty(),

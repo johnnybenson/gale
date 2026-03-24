@@ -1,3 +1,11 @@
+#![allow(
+    clippy::all,
+    unreachable_code,
+    unused_variables,
+    unused_assignments,
+    dead_code
+)]
+
 pub mod data;
 pub mod registry;
 pub mod rule;

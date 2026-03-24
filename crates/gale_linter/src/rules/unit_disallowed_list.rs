@@ -102,11 +102,11 @@ fn extract_units_with_context(value: &str) -> Vec<UnitOccurrence> {
         }
 
         // Skip inside url() and var()
-        if let Some(func) = func_stack.last() {
-            if func == "url" || func == "var" {
-                i += 1;
-                continue;
-            }
+        if let Some(func) = func_stack.last()
+            && (func == "url" || func == "var")
+        {
+            i += 1;
+            continue;
         }
 
         // Skip custom property names
@@ -324,20 +324,19 @@ fn parse_options(ctx: &RuleContext) -> DisallowedListOptions {
         if let Some(v) = sec.get("ignoreFunctions") {
             ignore_functions = parse_string_list(v);
         }
-        if let Some(v) = sec.get("ignoreProperties") {
-            if let Some(obj) = v.as_object() {
-                for (unit, patterns) in obj {
-                    ignore_properties
-                        .insert(unit.to_ascii_lowercase(), parse_string_list(patterns));
-                }
+        if let Some(v) = sec.get("ignoreProperties")
+            && let Some(obj) = v.as_object()
+        {
+            for (unit, patterns) in obj {
+                ignore_properties.insert(unit.to_ascii_lowercase(), parse_string_list(patterns));
             }
         }
-        if let Some(v) = sec.get("ignoreMediaFeatureNames") {
-            if let Some(obj) = v.as_object() {
-                for (unit, patterns) in obj {
-                    ignore_media_feature_names
-                        .insert(unit.to_ascii_lowercase(), parse_string_list(patterns));
-                }
+        if let Some(v) = sec.get("ignoreMediaFeatureNames")
+            && let Some(obj) = v.as_object()
+        {
+            for (unit, patterns) in obj {
+                ignore_media_feature_names
+                    .insert(unit.to_ascii_lowercase(), parse_string_list(patterns));
             }
         }
     }
@@ -594,19 +593,18 @@ fn check_value(
         }
 
         // Check ignoreFunctions
-        if let Some(ref func) = occ.function {
-            if function_is_ignored(func, &opts.ignore_functions) {
-                continue;
-            }
+        if let Some(ref func) = occ.function
+            && function_is_ignored(func, &opts.ignore_functions)
+        {
+            continue;
         }
 
         // Check ignoreProperties
-        if let Some(prop) = property {
-            if let Some(patterns) = opts.ignore_properties.get(&unit_lower) {
-                if property_matches_any(prop, patterns) {
-                    continue;
-                }
-            }
+        if let Some(prop) = property
+            && let Some(patterns) = opts.ignore_properties.get(&unit_lower)
+            && property_matches_any(prop, patterns)
+        {
+            continue;
         }
 
         // Point span to the number+unit in the source
@@ -637,10 +635,10 @@ fn check_at_rule_params(
             if !opts.units.contains(&unit_lower) {
                 continue;
             }
-            if let Some(ref func) = occ.function {
-                if function_is_ignored(func, &opts.ignore_functions) {
-                    continue;
-                }
+            if let Some(ref func) = occ.function
+                && function_is_ignored(func, &opts.ignore_functions)
+            {
+                continue;
             }
             let abs_offset = params_base_offset + occ.number_byte_offset;
             diags.push(
@@ -659,16 +657,16 @@ fn check_at_rule_params(
             if !opts.units.contains(&unit_lower) {
                 continue;
             }
-            if let Some(ref func) = occ.function {
-                if function_is_ignored(func, &opts.ignore_functions) {
-                    continue;
-                }
+            if let Some(ref func) = occ.function
+                && function_is_ignored(func, &opts.ignore_functions)
+            {
+                continue;
             }
             // Check ignoreMediaFeatureNames
-            if let Some(patterns) = opts.ignore_media_feature_names.get(&unit_lower) {
-                if property_matches_any(&feature.name, patterns) {
-                    continue;
-                }
+            if let Some(patterns) = opts.ignore_media_feature_names.get(&unit_lower)
+                && property_matches_any(&feature.name, patterns)
+            {
+                continue;
             }
             let abs_offset =
                 params_base_offset + feature.value_byte_offset + occ.number_byte_offset;
@@ -714,9 +712,9 @@ mod tests {
                 span: ParserSpan::new(0, 10),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

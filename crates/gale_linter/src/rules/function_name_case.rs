@@ -46,8 +46,7 @@ fn camel_case_canonical(name: &str) -> Option<&'static str> {
 
 /// Check if a string is a Stylelint-style regex pattern like `/pattern/` or `/pattern/i`.
 fn parse_regex_pattern(s: &str) -> Option<Regex> {
-    if s.starts_with('/') {
-        let rest = &s[1..];
+    if let Some(rest) = s.strip_prefix('/') {
         if let Some(end) = rest.rfind('/') {
             let pattern = &rest[..end];
             let flags = &rest[end + 1..];

@@ -325,7 +325,7 @@ struct BrowserTarget {
 }
 
 /// Standard mapping from browserslist names to MDN names.
-fn browserslist_to_mdn() -> &'static [(& 'static str, &'static str, &'static str)] {
+fn browserslist_to_mdn() -> &'static [(&'static str, &'static str, &'static str)] {
     &[
         ("chrome", "chrome", "Chrome"),
         ("and_chr", "chrome", "Android Chrome"),
@@ -442,8 +442,8 @@ fn resolve_browserslist(queries: &[String], file_path: &Path) -> Option<Vec<Brow
     // This matches the JS plugin's deduplication behavior.
     let mut deduped: Vec<BrowserTarget> = Vec::new();
     for (i, target) in targets.iter().enumerate() {
-        let is_last_of_group = i + 1 == targets.len()
-            || targets[i + 1].browserslist_id != target.browserslist_id;
+        let is_last_of_group =
+            i + 1 == targets.len() || targets[i + 1].browserslist_id != target.browserslist_id;
         if is_last_of_group {
             deduped.push(target.clone());
         }
@@ -553,8 +553,8 @@ fn resolve_browserslist_default(file_path: &Path) -> Option<Vec<BrowserTarget>> 
 
     let mut deduped: Vec<BrowserTarget> = Vec::new();
     for (i, target) in targets.iter().enumerate() {
-        let is_last_of_group = i + 1 == targets.len()
-            || targets[i + 1].browserslist_id != target.browserslist_id;
+        let is_last_of_group =
+            i + 1 == targets.len() || targets[i + 1].browserslist_id != target.browserslist_id;
         if is_last_of_group {
             deduped.push(target.clone());
         }
@@ -570,11 +570,7 @@ fn resolve_browserslist_default(file_path: &Path) -> Option<Vec<BrowserTarget>> 
 
 // ── Support checking ────────────────────────────────────────────────────
 
-fn is_supported(
-    entry: &CompatEntry,
-    target: &BrowserTarget,
-    opts: &BrowserCompatOptions,
-) -> bool {
+fn is_supported(entry: &CompatEntry, target: &BrowserTarget, opts: &BrowserCompatOptions) -> bool {
     let support_list = match entry.support.get(&target.mdn_id) {
         Some(list) => list,
         None => return true, // No data → assume supported
@@ -864,18 +860,18 @@ fn check_selectors(
                 // Try stripping vendor prefix from pseudo name
                 if let Some(stripped) = strip_vendor_prefix_pseudo(pseudo_name) {
                     let feature_id = format!("selectors.{}", stripped);
-                    if let Some(entry) = compat_data.get(&feature_id) {
-                        if !opts.allow_features.contains(&feature_id) {
-                            check_support_and_report(
-                                entry,
-                                &format!("\"{}\" {}", full_pseudo, pseudo_type),
-                                base_offset + colon_start,
-                                ctx,
-                                opts,
-                                targets,
-                                diagnostics,
-                            );
-                        }
+                    if let Some(entry) = compat_data.get(&feature_id)
+                        && !opts.allow_features.contains(&feature_id)
+                    {
+                        check_support_and_report(
+                            entry,
+                            &format!("\"{}\" {}", full_pseudo, pseudo_type),
+                            base_offset + colon_start,
+                            ctx,
+                            opts,
+                            targets,
+                            diagnostics,
+                        );
                     }
                 }
             }

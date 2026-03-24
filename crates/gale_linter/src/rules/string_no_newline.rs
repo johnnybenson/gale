@@ -179,9 +179,9 @@ mod tests {
                 span: ParserSpan::new(4, 20),
                 important: false,
             }],
-span: ParserSpan::new(0, 30),
+            span: ParserSpan::new(0, 30),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
         assert_eq!(diags[0].message, "Unexpected newline in string");
@@ -198,9 +198,9 @@ span: ParserSpan::new(0, 30),
                 span: ParserSpan::new(4, 20),
                 important: false,
             }],
-span: ParserSpan::new(0, 30),
+            span: ParserSpan::new(0, 30),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert!(diags.is_empty());
     }
@@ -216,9 +216,9 @@ span: ParserSpan::new(0, 30),
                 span: ParserSpan::new(4, 20),
                 important: false,
             }],
-span: ParserSpan::new(0, 30),
+            span: ParserSpan::new(0, 30),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert!(diags.is_empty());
     }

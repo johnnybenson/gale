@@ -284,7 +284,7 @@ fn check_source_level(source: &str, rule: &ScssOperatorNoUnspaced, diags: &mut V
                         if content
                             .bytes()
                             .next()
-                            .map_or(false, |c| c.is_ascii_digit() || c == b'$')
+                            .is_some_and(|c| c.is_ascii_digit() || c == b'$')
                         {
                             check_value_expr(content, us, rule, diags);
                         }
@@ -352,9 +352,7 @@ fn check_calc_multi_space(
         }
 
         // Detect calc(
-        if source[i..].len() >= 5
-            && source[i..i + 5].eq_ignore_ascii_case("calc(")
-        {
+        if source[i..].len() >= 5 && source[i..i + 5].eq_ignore_ascii_case("calc(") {
             let calc_start = i + 5;
             // Find matching )
             let mut depth = 1i32;
@@ -1633,9 +1631,9 @@ mod tests {
                 span: ParserSpan::new(4, value.len()),
                 important: false,
             }],
-span: ParserSpan::new(0, value.len() + 20),
+            span: ParserSpan::new(0, value.len() + 20),
             ..Default::default()
-})
+        })
     }
 
     #[test]

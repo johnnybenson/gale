@@ -133,9 +133,7 @@ impl Rule for DeclarationPropertyValueDisallowedList {
                 prop_end = j + 1;
                 // Walk back over the property name
                 while j < len
-                    && (bytes[j].is_ascii_alphanumeric()
-                        || bytes[j] == b'-'
-                        || bytes[j] == b'_')
+                    && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'-' || bytes[j] == b'_')
                 {
                     j = j.wrapping_sub(1);
                 }
@@ -147,7 +145,11 @@ impl Rule for DeclarationPropertyValueDisallowedList {
 
                 // Check if this is actually a property (preceded by whitespace, newline, { or ;)
                 // and not a pseudo-selector or part of a selector
-                let before_prop = if prop_start > 0 { bytes[prop_start - 1] } else { b'\n' };
+                let before_prop = if prop_start > 0 {
+                    bytes[prop_start - 1]
+                } else {
+                    b'\n'
+                };
                 let is_declaration = before_prop == b' '
                     || before_prop == b'\t'
                     || before_prop == b'\n'

@@ -211,9 +211,9 @@ mod tests {
                 span: ParserSpan::new(4, 20),
                 important: false,
             }],
-span: ParserSpan::new(0, 30),
+            span: ParserSpan::new(0, 30),
             ..Default::default()
-})];
+        })];
         let d = NoUnknownAnimations.check_root(&nodes, &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("fadeIn"));
@@ -236,9 +236,9 @@ span: ParserSpan::new(0, 30),
                     span: ParserSpan::new(50, 20),
                     important: false,
                 }],
-span: ParserSpan::new(45, 30),
+                span: ParserSpan::new(45, 30),
                 ..Default::default()
-}),
+            }),
         ];
         let d = NoUnknownAnimations.check_root(&nodes, &ctx());
         assert!(d.is_empty());
@@ -254,9 +254,9 @@ span: ParserSpan::new(45, 30),
                 span: ParserSpan::new(4, 25),
                 important: false,
             }],
-span: ParserSpan::new(0, 35),
+            span: ParserSpan::new(0, 35),
             ..Default::default()
-})];
+        })];
         let d = NoUnknownAnimations.check_root(&nodes, &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("slideUp"));

@@ -252,7 +252,10 @@ mod tests {
         let source = "a { color: red; }";
         let d =
             StylisticBlockOpeningBraceSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
-        assert!(d.is_empty(), "Should not flag single-line block with space in always-multi-line mode");
+        assert!(
+            d.is_empty(),
+            "Should not flag single-line block with space in always-multi-line mode"
+        );
     }
 
     #[test]
@@ -261,6 +264,9 @@ mod tests {
         let source = "@mixin foo() {}";
         let d =
             StylisticBlockOpeningBraceSpaceBefore.check_root(&[], &ctx_with_option(source, &opt));
-        assert!(d.is_empty(), "Should not flag empty single-line block in always-multi-line mode");
+        assert!(
+            d.is_empty(),
+            "Should not flag empty single-line block in always-multi-line mode"
+        );
     }
 }

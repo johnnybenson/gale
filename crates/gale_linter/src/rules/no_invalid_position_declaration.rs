@@ -157,9 +157,9 @@ mod tests {
                     span: ParserSpan::new(0, 0),
                     important: false,
                 }],
-span: ParserSpan::new(0, 0),
+                span: ParserSpan::new(0, 0),
                 ..Default::default()
-})],
+            })],
         });
         let d = NoInvalidPositionDeclaration.check_root(&[node], &ctx());
         assert!(d.is_empty());

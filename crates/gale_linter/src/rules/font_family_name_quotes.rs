@@ -689,9 +689,9 @@ mod tests {
                 span: ParserSpan::new(4, value.len() + property.len() + 2),
                 important: false,
             }],
-span: ParserSpan::new(0, value.len() + property.len() + 20),
+            span: ParserSpan::new(0, value.len() + property.len() + 20),
             ..Default::default()
-})
+        })
     }
 
     #[test]
@@ -750,7 +750,11 @@ span: ParserSpan::new(0, value.len() + property.len() + 20),
         // `font: normal 30px/1 dashicons` — "dashicons" is a single-word family, no quoting needed
         let node = make_node("font", "normal 30px/1 dashicons");
         let diags = rule.check(&node, &make_context());
-        assert!(diags.is_empty(), "single-word font family in shorthand should not be flagged: {:?}", diags);
+        assert!(
+            diags.is_empty(),
+            "single-word font family in shorthand should not be flagged: {:?}",
+            diags
+        );
     }
 
     #[test]

@@ -59,7 +59,7 @@ impl Rule for StylisticNoEolWhitespace {
 
             if bytes[i] == b'\n' {
                 // Check for trailing whitespace before this newline
-                let mut trail_end = i;
+                let trail_end = i;
                 let mut trail_start = i;
                 while trail_start > 0
                     && (bytes[trail_start - 1] == b' ' || bytes[trail_start - 1] == b'\t')

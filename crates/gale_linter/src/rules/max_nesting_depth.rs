@@ -324,41 +324,41 @@ mod tests {
         let e = StyleRule {
             selector: ".e".to_string(),
             declarations: vec![make_decl()],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-};
+        };
         let d = StyleRule {
             selector: ".d".to_string(),
             declarations: vec![],
             children: vec![e],
             span: ParserSpan::new(0, 0),
-        
+
             nested_at_rules: Vec::new(),
-};
+        };
         let c = StyleRule {
             selector: ".c".to_string(),
             declarations: vec![],
             children: vec![d],
             span: ParserSpan::new(0, 0),
-        
+
             nested_at_rules: Vec::new(),
-};
+        };
         let b = StyleRule {
             selector: ".b".to_string(),
             declarations: vec![],
             children: vec![c],
             span: ParserSpan::new(0, 0),
-        
+
             nested_at_rules: Vec::new(),
-};
+        };
         let a = CssNode::Style(StyleRule {
             selector: ".a".to_string(),
             declarations: vec![],
             children: vec![b],
             span: ParserSpan::new(0, 0),
-        
+
             nested_at_rules: Vec::new(),
-});
+        });
         let mixin = CssNode::AtRule(CssAtRule {
             name: "mixin".to_string(),
             params: "my-mixin".to_string(),
@@ -388,17 +388,17 @@ span: ParserSpan::new(0, 0),
         let nested = StyleRule {
             selector: ".nested".to_string(),
             declarations: vec![make_decl()],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-};
+        };
         let top = CssNode::Style(StyleRule {
             selector: ".top".to_string(),
             declarations: vec![],
             children: vec![nested],
             span: ParserSpan::new(0, 0),
-        
+
             nested_at_rules: Vec::new(),
-});
+        });
 
         let diags = MaxNestingDepth.check_root(&[top], &ctx_with_opts);
         assert!(
@@ -425,9 +425,9 @@ span: ParserSpan::new(0, 0),
         let c = CssNode::Style(StyleRule {
             selector: ".c".to_string(),
             declarations: vec![make_decl()],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-});
+        });
         let media = CssNode::AtRule(CssAtRule {
             name: "media".to_string(),
             params: "(min-width: 768px)".to_string(),
@@ -437,15 +437,15 @@ span: ParserSpan::new(0, 0),
         let b = CssNode::Style(StyleRule {
             selector: ".b".to_string(),
             declarations: vec![],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-});
+        });
         let a = CssNode::Style(StyleRule {
             selector: ".a".to_string(),
             declarations: vec![],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-});
+        });
 
         // Since StyleRule can't hold CssNode children, simulate with
         // top-level nodes: @media containing .a > .b > .c
@@ -480,25 +480,25 @@ span: ParserSpan::new(0, 0),
         let b = StyleRule {
             selector: ".b".to_string(),
             declarations: vec![make_decl()],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-};
+        };
         let hover = StyleRule {
             selector: "&:hover".to_string(),
             declarations: vec![],
             children: vec![b],
             span: ParserSpan::new(0, 0),
-        
+
             nested_at_rules: Vec::new(),
-};
+        };
         let a = CssNode::Style(StyleRule {
             selector: ".a".to_string(),
             declarations: vec![],
             children: vec![hover],
             span: ParserSpan::new(0, 0),
-        
+
             nested_at_rules: Vec::new(),
-});
+        });
 
         let diags = MaxNestingDepth.check_root(&[a], &ctx_with_opts);
         assert!(

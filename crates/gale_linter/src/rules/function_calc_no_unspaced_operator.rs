@@ -122,12 +122,12 @@ fn skip_preprocessor_token(bytes: &[u8], pos: usize) -> Option<usize> {
             i += 1;
         }
         if i > pos + 1 {
-            if i < len && bytes[i] == b'(' {
-                if let Some((_, end)) =
+            if i < len
+                && bytes[i] == b'('
+                && let Some((_, end)) =
                     extract_paren_body(std::str::from_utf8(bytes).unwrap_or(""), i + 1)
-                {
-                    return Some(end);
-                }
+            {
+                return Some(end);
             }
             return Some(i);
         }
@@ -322,11 +322,12 @@ fn find_unspaced_operators(
         }
 
         // Handle SCSS/Less variables ($var-name, @var-name)
-        if is_scss && (ch == b'$' || ch == b'@') {
-            if let Some(end) = skip_preprocessor_token(bytes, i) {
-                i = end;
-                continue;
-            }
+        if is_scss
+            && (ch == b'$' || ch == b'@')
+            && let Some(end) = skip_preprocessor_token(bytes, i)
+        {
+            i = end;
+            continue;
         }
 
         // Handle parenthesized sub-expressions: (...)
@@ -345,11 +346,13 @@ fn find_unspaced_operators(
         // Check `+` and `-` operators
         if ch == b'+' || ch == b'-' {
             // Skip scientific notation: e.g., 1e+2, 1E-3
-            if i > 0 && (bytes[i - 1] == b'e' || bytes[i - 1] == b'E') {
-                if i > 1 && bytes[i - 2].is_ascii_digit() {
-                    i += 1;
-                    continue;
-                }
+            if i > 0
+                && (bytes[i - 1] == b'e' || bytes[i - 1] == b'E')
+                && i > 1
+                && bytes[i - 2].is_ascii_digit()
+            {
+                i += 1;
+                continue;
             }
 
             // Skip if at start of body (unary) or after only whitespace
@@ -381,10 +384,11 @@ fn find_unspaced_operators(
                 {
                     j += 1;
                 }
-                if j < len && bytes[j] == b'(' {
-                    if let Some((_, end)) = extract_paren_body(body, j + 1) {
-                        j = end;
-                    }
+                if j < len
+                    && bytes[j] == b'('
+                    && let Some((_, end)) = extract_paren_body(body, j + 1)
+                {
+                    j = end;
                 }
                 i = j;
                 continue;
@@ -393,14 +397,14 @@ fn find_unspaced_operators(
             // Skip trailing `-` at end of token (e.g., `2px-`, `2-`)
             if ch == b'-' {
                 let after = i + 1;
-                if after >= len
+                if (after >= len
                     || bytes[after] == b')'
-                    || (bytes[after] == b' ' && (after + 1 >= len || bytes[after + 1] == b')'))
+                    || (bytes[after] == b' ' && (after + 1 >= len || bytes[after + 1] == b')')))
+                    && i > 0
+                    && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'%')
                 {
-                    if i > 0 && (bytes[i - 1].is_ascii_alphanumeric() || bytes[i - 1] == b'%') {
-                        i += 1;
-                        continue;
-                    }
+                    i += 1;
+                    continue;
                 }
             }
 

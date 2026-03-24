@@ -94,7 +94,7 @@ fn strip_quotes(params: &str) -> String {
         s
     };
     // Strip trailing quote (find last quote)
-    if let Some(pos) = s.rfind(|c| c == '"' || c == '\'') {
+    if let Some(pos) = s.rfind(['"', '\'']) {
         s[..pos].to_string() + &s[pos + 1..]
     } else {
         s.to_string()

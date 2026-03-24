@@ -87,7 +87,7 @@ impl Rule for StylisticDeclarationBlockSemicolonSpaceAfter {
                 let semi_pos = i;
 
                 // Look at the character after the semicolon (skip whitespace for analysis)
-                let mut j = i + 1;
+                let j = i + 1;
 
                 // If next non-whitespace is `}`, skip (last declaration)
                 let mut peek = j;
@@ -119,12 +119,8 @@ impl Rule for StylisticDeclarationBlockSemicolonSpaceAfter {
 
                 if violation {
                     let msg = match option {
-                        "always" | "always-single-line" => {
-                            "Expected single space after \";\""
-                        }
-                        "never" | "never-single-line" => {
-                            "Unexpected whitespace after \";\""
-                        }
+                        "always" | "always-single-line" => "Expected single space after \";\"",
+                        "never" | "never-single-line" => "Unexpected whitespace after \";\"",
                         _ => unreachable!(),
                     };
                     diagnostics.push(

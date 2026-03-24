@@ -16,11 +16,11 @@ pub struct CsstoolsValueNoUnknownCustomProperties;
 
 /// Global cache: maps a canonical sorted key of import paths to the set of
 /// custom property names defined in those files.
-static IMPORT_CACHE: OnceLock<std::sync::Mutex<std::collections::HashMap<String, HashSet<String>>>> =
-    OnceLock::new();
+static IMPORT_CACHE: OnceLock<
+    std::sync::Mutex<std::collections::HashMap<String, HashSet<String>>>,
+> = OnceLock::new();
 
-fn import_cache(
-) -> &'static std::sync::Mutex<std::collections::HashMap<String, HashSet<String>>> {
+fn import_cache() -> &'static std::sync::Mutex<std::collections::HashMap<String, HashSet<String>>> {
     IMPORT_CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
 }
 
@@ -216,9 +216,7 @@ fn collect_definitions_from_source(source: &str, props: &mut HashSet<String>) {
                 let name_start = i;
                 let mut j = i + 2;
                 while j < len
-                    && (bytes[j].is_ascii_alphanumeric()
-                        || bytes[j] == b'-'
-                        || bytes[j] == b'_')
+                    && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'-' || bytes[j] == b'_')
                 {
                     j += 1;
                 }
@@ -278,10 +276,10 @@ fn load_imported_custom_properties(context: &RuleContext) -> HashSet<String> {
 
     for path_str in &paths {
         let resolved = resolve_import_path(path_str, node_modules.as_deref());
-        if let Some(resolved_path) = resolved {
-            if let Ok(contents) = std::fs::read_to_string(&resolved_path) {
-                collect_definitions_from_source(&contents, &mut props);
-            }
+        if let Some(resolved_path) = resolved
+            && let Ok(contents) = std::fs::read_to_string(&resolved_path)
+        {
+            collect_definitions_from_source(&contents, &mut props);
         }
     }
 
@@ -316,12 +314,13 @@ fn resolve_import_path(path_str: &str, node_modules: Option<&Path>) -> Option<st
         return Some(p.to_path_buf());
     }
 
-    if !path_str.starts_with('.') && !path_str.starts_with('/') {
-        if let Some(nm) = node_modules {
-            let resolved = nm.join(path_str);
-            if resolved.exists() {
-                return Some(resolved);
-            }
+    if !path_str.starts_with('.')
+        && !path_str.starts_with('/')
+        && let Some(nm) = node_modules
+    {
+        let resolved = nm.join(path_str);
+        if resolved.exists() {
+            return Some(resolved);
         }
     }
 

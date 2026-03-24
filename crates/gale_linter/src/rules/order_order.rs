@@ -215,9 +215,9 @@ mod tests {
                 make_decl("display", "block", 4, 14),
                 make_decl("--my-var", "10px", 19, 16),
             ],
-span: ParserSpan::new(0, 40),
+            span: ParserSpan::new(0, 40),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_no_options());
         assert!(diags.is_empty());
     }
@@ -232,9 +232,9 @@ span: ParserSpan::new(0, 40),
                 make_decl("--my-var", "10px", 4, 16),
                 make_decl("display", "block", 21, 14),
             ],
-span: ParserSpan::new(0, 40),
+            span: ParserSpan::new(0, 40),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -249,9 +249,9 @@ span: ParserSpan::new(0, 40),
                 make_decl("display", "block", 4, 14),
                 make_decl("--my-var", "10px", 19, 16),
             ],
-span: ParserSpan::new(0, 40),
+            span: ParserSpan::new(0, 40),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("custom properties"));
@@ -269,9 +269,9 @@ span: ParserSpan::new(0, 40),
                 make_decl("--color", "red", 19, 13),
                 make_decl("display", "block", 33, 14),
             ],
-span: ParserSpan::new(0, 50),
+            span: ParserSpan::new(0, 50),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -286,9 +286,9 @@ span: ParserSpan::new(0, 50),
                 make_decl("display", "block", 4, 14),
                 make_decl("$my-var", "10px", 19, 14),
             ],
-span: ParserSpan::new(0, 40),
+            span: ParserSpan::new(0, 40),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("dollar variables"));
@@ -308,9 +308,9 @@ span: ParserSpan::new(0, 40),
                 ..Default::default()
             }],
             span: ParserSpan::new(0, 50),
-        
+
             nested_at_rules: Vec::new(),
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -329,9 +329,9 @@ span: ParserSpan::new(0, 40),
                 ..Default::default()
             }],
             span: ParserSpan::new(0, 50),
-        
+
             nested_at_rules: Vec::new(),
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         // The declaration at offset 30 comes after the nested rule at offset 4 in source,
         // but in the expected order declarations should come before rules.
@@ -368,9 +368,9 @@ span: ParserSpan::new(0, 40),
                 ..Default::default()
             }],
             span: ParserSpan::new(0, 50),
-        
+
             nested_at_rules: Vec::new(),
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -388,9 +388,9 @@ span: ParserSpan::new(0, 40),
                 make_decl("--my-var", "10px", 19, 16),
                 make_decl("color", "red", 36, 10),
             ],
-span: ParserSpan::new(0, 50),
+            span: ParserSpan::new(0, 50),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }
@@ -418,9 +418,9 @@ span: ParserSpan::new(0, 50),
                 ..Default::default()
             }],
             span: ParserSpan::new(0, 70),
-        
+
             nested_at_rules: Vec::new(),
-});
+        });
         let diags = rule.check(&node, &ctx_with_options(&options));
         assert!(diags.is_empty());
     }

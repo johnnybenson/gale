@@ -57,9 +57,7 @@ impl Rule for ScssDeclarationNestedProperties {
             if bytes[i] == b':' {
                 // Check what's before the colon (should be a property-like identifier)
                 let mut before = i;
-                if before > 0 {
-                    before -= 1;
-                }
+                before = before.saturating_sub(1);
                 while before > 0 && (bytes[before] == b' ' || bytes[before] == b'\t') {
                     before -= 1;
                 }

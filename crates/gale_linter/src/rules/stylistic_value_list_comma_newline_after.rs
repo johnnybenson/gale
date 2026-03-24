@@ -31,7 +31,7 @@ impl Rule for StylisticValueListCommaNewlineAfter {
         let mut in_value = false;
         let mut paren_depth = 0;
         let mut value_start = 0;
-        let mut value_end = 0;
+        let value_end = 0;
 
         while i < len {
             // Skip strings
@@ -280,7 +280,11 @@ mod tests {
         let opt = serde_json::Value::String("always".to_string());
         let source = "a:hover, a:focus { color: red; }";
         let d = StylisticValueListCommaNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
-        assert!(d.is_empty(), "Should not flag selector commas, got: {:?}", d.len());
+        assert!(
+            d.is_empty(),
+            "Should not flag selector commas, got: {:?}",
+            d.len()
+        );
     }
 
     #[test]
@@ -288,7 +292,11 @@ mod tests {
         let opt = serde_json::Value::String("always".to_string());
         let source = "a { background: url(foo.png), // comment\n  url(bar.png); }";
         let d = StylisticValueListCommaNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
-        assert!(d.is_empty(), "Should not flag comma followed by SCSS line comment, got {} diagnostics", d.len());
+        assert!(
+            d.is_empty(),
+            "Should not flag comma followed by SCSS line comment, got {} diagnostics",
+            d.len()
+        );
     }
 
     #[test]
@@ -296,7 +304,11 @@ mod tests {
         let opt = serde_json::Value::String("always".to_string());
         let source = "a { background: url(foo.png), /* comment */\n  url(bar.png); }";
         let d = StylisticValueListCommaNewlineAfter.check_root(&[], &ctx_with_option(source, &opt));
-        assert!(d.is_empty(), "Should not flag comma followed by block comment then newline, got {} diagnostics", d.len());
+        assert!(
+            d.is_empty(),
+            "Should not flag comma followed by block comment then newline, got {} diagnostics",
+            d.len()
+        );
     }
 
     #[test]

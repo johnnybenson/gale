@@ -130,8 +130,7 @@ impl Rule for StylisticBlockOpeningBraceSpaceAfter {
                     j += 1;
                 }
                 let close_pos = j.saturating_sub(1);
-                let is_single_line =
-                    !ctx.source[brace_pos..close_pos.min(len)].contains('\n');
+                let is_single_line = !ctx.source[brace_pos..close_pos.min(len)].contains('\n');
 
                 let has_space = after < len && bytes[after] == b' ';
                 let has_newline = after < len && (bytes[after] == b'\n' || bytes[after] == b'\r');

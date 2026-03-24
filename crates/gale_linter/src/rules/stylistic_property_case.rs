@@ -103,9 +103,9 @@ mod tests {
                 span: ParserSpan::new(0, prop.len() + 6),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

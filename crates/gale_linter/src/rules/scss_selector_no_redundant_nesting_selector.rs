@@ -163,9 +163,9 @@ mod tests {
                 span: ParserSpan::new(5, 40),
                 ..Default::default()
             }],
-        
+
             nested_at_rules: Vec::new(),
-})
+        })
     }
 
     #[test]

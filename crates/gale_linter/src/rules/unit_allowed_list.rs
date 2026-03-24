@@ -93,11 +93,11 @@ fn extract_units_with_context(value: &str) -> Vec<UnitOccurrence> {
             continue;
         }
 
-        if let Some(func) = func_stack.last() {
-            if func == "url" || func == "var" {
-                i += 1;
-                continue;
-            }
+        if let Some(func) = func_stack.last()
+            && (func == "url" || func == "var")
+        {
+            i += 1;
+            continue;
         }
 
         if i + 1 < len && chars[i] == '-' && chars[i + 1] == '-' {
@@ -155,10 +155,7 @@ fn extract_units_with_context(value: &str) -> Vec<UnitOccurrence> {
             // If the digit is immediately preceded by a letter, underscore, or
             // is part of an identifier (e.g. `a11y`, `edge2edge`, `h2`), skip
             // the entire identifier — this is not a CSS numeric value.
-            if i > 0
-                && (chars[i - 1].is_ascii_alphabetic()
-                    || chars[i - 1] == '_')
-            {
+            if i > 0 && (chars[i - 1].is_ascii_alphabetic() || chars[i - 1] == '_') {
                 while i < len
                     && (chars[i].is_ascii_alphanumeric() || chars[i] == '-' || chars[i] == '_')
                 {
@@ -332,12 +329,11 @@ fn parse_options(ctx: &RuleContext) -> AllowedListOptions {
         if let Some(v) = sec.get("ignoreFunctions") {
             ignore_functions = parse_string_list(v);
         }
-        if let Some(v) = sec.get("ignoreProperties") {
-            if let Some(obj) = v.as_object() {
-                for (unit, patterns) in obj {
-                    ignore_properties
-                        .insert(unit.to_ascii_lowercase(), parse_string_list(patterns));
-                }
+        if let Some(v) = sec.get("ignoreProperties")
+            && let Some(obj) = v.as_object()
+        {
+            for (unit, patterns) in obj {
+                ignore_properties.insert(unit.to_ascii_lowercase(), parse_string_list(patterns));
             }
         }
     }
@@ -440,10 +436,10 @@ impl Rule for UnitAllowedList {
                             if opts.units.contains(&unit_lower) {
                                 continue;
                             }
-                            if let Some(ref func) = occ.function {
-                                if function_is_ignored(func, &opts.ignore_functions) {
-                                    continue;
-                                }
+                            if let Some(ref func) = occ.function
+                                && function_is_ignored(func, &opts.ignore_functions)
+                            {
+                                continue;
                             }
                             let abs_offset = params_offset + occ.number_byte_offset;
                             diags.push(
@@ -497,18 +493,17 @@ fn check_value(
             continue;
         }
 
-        if let Some(ref func) = occ.function {
-            if function_is_ignored(func, &opts.ignore_functions) {
-                continue;
-            }
+        if let Some(ref func) = occ.function
+            && function_is_ignored(func, &opts.ignore_functions)
+        {
+            continue;
         }
 
-        if let Some(prop) = property {
-            if let Some(patterns) = opts.ignore_properties.get(&unit_lower) {
-                if property_matches_any(prop, patterns) {
-                    continue;
-                }
-            }
+        if let Some(prop) = property
+            && let Some(patterns) = opts.ignore_properties.get(&unit_lower)
+            && property_matches_any(prop, patterns)
+        {
+            continue;
         }
 
         let abs_offset = value_base_offset + occ.number_byte_offset;
@@ -553,9 +548,9 @@ mod tests {
                 span: ParserSpan::new(0, 10),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

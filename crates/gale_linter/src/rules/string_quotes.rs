@@ -144,17 +144,15 @@ impl Rule for StringQuotes {
                 } else {
                     inner.replace('\'', "\\'")
                 };
-                let replacement = format!(
-                    "{}{}{}",
-                    good_quote as char, escaped, good_quote as char
-                );
+                let replacement =
+                    format!("{}{}{}", good_quote as char, escaped, good_quote as char);
 
                 diagnostics.push(
                     Diagnostic::new(self.name(), format!("Expected {good_name} quotes"))
                         .severity(self.default_severity())
                         .span(Span::new(start, span_len))
                         .fix(Fix::new(
-                            &format!("Replace with {good_name} quotes"),
+                            format!("Replace with {good_name} quotes"),
                             vec![Edit::new(Span::new(start, span_len), &replacement)],
                         )),
                 );
@@ -228,7 +226,10 @@ mod tests {
 
     #[test]
     fn skips_url_content() {
-        let d = check("a { background: url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>'); }", "single");
+        let d = check(
+            "a { background: url('data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>'); }",
+            "single",
+        );
         assert!(d.is_empty());
     }
 

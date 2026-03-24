@@ -200,7 +200,11 @@ mod tests {
             ..Default::default()
         });
         let d = rule.check(&node, &ctx);
-        assert!(d.is_empty(), "should not report when trailing ; exists, got: {:?}", d);
+        assert!(
+            d.is_empty(),
+            "should not report when trailing ; exists, got: {:?}",
+            d
+        );
     }
 
     #[test]

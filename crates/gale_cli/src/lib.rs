@@ -137,10 +137,10 @@ fn build_explicit_ignore_matcher(
     }
 
     // Load user-supplied ignore file.
-    if let Some(path) = user_ignore {
-        if path.is_file() {
-            builder.add(path);
-        }
+    if let Some(path) = user_ignore
+        && path.is_file()
+    {
+        builder.add(path);
     }
 
     builder.build().ok()
@@ -205,9 +205,7 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
             // pattern (before the first meta-character).  Fall back to "."
             // when the pattern starts with a meta-character (e.g. `**/*.css`).
             let walk_root = {
-                let first_meta = pattern
-                    .find(|c: char| c == '*' || c == '?' || c == '{' || c == '[')
-                    .unwrap_or(pattern.len());
+                let first_meta = pattern.find(['*', '?', '{', '[']).unwrap_or(pattern.len());
                 let prefix = &pattern[..first_meta];
                 let p = Path::new(prefix);
                 let parent = p
@@ -238,15 +236,14 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
                 builder.add_custom_ignore_filename(".galeignore");
                 builder.add_custom_ignore_filename(".stylelintignore");
 
-                if let Some(ignore_file) = opts.ignore_path {
-                    if ignore_file.exists() {
-                        if let Some(err) = builder.add_ignore(ignore_file) {
-                            eprintln!(
-                                "Warning: failed to load ignore file {}: {err}",
-                                ignore_file.display()
-                            );
-                        }
-                    }
+                if let Some(ignore_file) = opts.ignore_path
+                    && ignore_file.exists()
+                    && let Some(err) = builder.add_ignore(ignore_file)
+                {
+                    eprintln!(
+                        "Warning: failed to load ignore file {}: {err}",
+                        ignore_file.display()
+                    );
                 }
 
                 // Always exclude node_modules (Stylelint default behavior).
@@ -294,13 +291,12 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
 
                     // Respect .stylelintignore / .galeignore for explicitly
                     // matched files.
-                    if let Some(ref gi) = *explicit_ignore_ref {
-                        if gi
+                    if let Some(ref gi) = *explicit_ignore_ref
+                        && gi
                             .matched_path_or_any_parents(entry_path, false)
                             .is_ignore()
-                        {
-                            return ignore::WalkState::Continue;
-                        }
+                    {
+                        return ignore::WalkState::Continue;
                     }
 
                     // Check config ignore patterns.
@@ -1167,12 +1163,10 @@ fn detect_legacy_unknown_units(cwd: &Path) -> Option<Vec<String>> {
                 // query units, or several other modern CSS units.
                 return Some(
                     vec![
-                        "dvh", "dvw", "dvb", "dvi", "dvmax", "dvmin",
-                        "lvh", "lvw", "lvb", "lvi", "lvmax", "lvmin",
-                        "svh", "svw", "svb", "svi", "svmax", "svmin",
-                        "cqw", "cqh", "cqi", "cqb", "cqmin", "cqmax",
-                        "cap", "ic", "rcap", "rch", "rex", "ric",
-                        "vb", "vi",
+                        "dvh", "dvw", "dvb", "dvi", "dvmax", "dvmin", "lvh", "lvw", "lvb", "lvi",
+                        "lvmax", "lvmin", "svh", "svw", "svb", "svi", "svmax", "svmin", "cqw",
+                        "cqh", "cqi", "cqb", "cqmin", "cqmax", "cap", "ic", "rcap", "rch", "rex",
+                        "ric", "vb", "vi",
                     ]
                     .into_iter()
                     .map(|s| s.to_string())

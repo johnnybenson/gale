@@ -163,7 +163,11 @@ impl Rule for StylisticDeclarationBlockSemicolonNewlineAfter {
                     let mut k = semi_pos;
                     while k > 0 {
                         k -= 1;
-                        if bytes[k] == b' ' || bytes[k] == b'\t' || bytes[k] == b'\n' || bytes[k] == b'\r' {
+                        if bytes[k] == b' '
+                            || bytes[k] == b'\t'
+                            || bytes[k] == b'\n'
+                            || bytes[k] == b'\r'
+                        {
                             continue;
                         }
                         if bytes[k] == b'}' {
@@ -361,7 +365,9 @@ mod tests {
         assert!(
             d.is_empty(),
             "Should not flag semicolon after @include content block, got: {:?}",
-            d.iter().map(|d| (&d.message, d.span.offset)).collect::<Vec<_>>()
+            d.iter()
+                .map(|d| (&d.message, d.span.offset))
+                .collect::<Vec<_>>()
         );
     }
 

@@ -15,17 +15,17 @@ fn check_deprecated_keyword(property: &str, value: &str) -> Option<(&'static str
 
     match prop.as_str() {
         "overflow" | "overflow-x" | "overflow-y" => {
-            if tokens.iter().any(|t| *t == "overlay") {
+            if tokens.contains(&"overlay") {
                 return Some(("overlay", "auto"));
             }
         }
         "text-justify" => {
-            if tokens.iter().any(|t| *t == "distribute") {
+            if tokens.contains(&"distribute") {
                 return Some(("distribute", "inter-character"));
             }
         }
         "word-break" => {
-            if tokens.iter().any(|t| *t == "break-word") {
+            if tokens.contains(&"break-word") {
                 return Some(("break-word", "overflow-wrap: anywhere"));
             }
         }
@@ -123,9 +123,9 @@ mod tests {
                     important: false,
                 })
                 .collect(),
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

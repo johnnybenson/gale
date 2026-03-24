@@ -85,27 +85,28 @@ impl Rule for NestingSelectorNoMissingScopingRoot {
     fn check_root(&self, nodes: &[CssNode], _ctx: &RuleContext) -> Vec<Diagnostic> {
         let mut diags = Vec::new();
         for node in nodes {
-            if let CssNode::Style(rule) = node {
-                if selector_contains_nesting(&rule.selector) {
-                    diags.push(
-                        Diagnostic::new(
-                            self.name(),
-                            format!(
-                                "Unexpected nesting selector \"&\" without a scoping root in \"{}\"",
-                                rule.selector
-                            ),
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(rule.span.offset, rule.span.length)),
-                    );
-                }
+            if let CssNode::Style(rule) = node
+                && selector_contains_nesting(&rule.selector)
+            {
+                diags.push(
+                    Diagnostic::new(
+                        self.name(),
+                        format!(
+                            "Unexpected nesting selector \"&\" without a scoping root in \"{}\"",
+                            rule.selector
+                        ),
+                    )
+                    .severity(self.default_severity())
+                    .span(Span::new(rule.span.offset, rule.span.length)),
+                );
             }
             // Also check inside @-rule children (e.g. top-level styles inside @layer)
             if let CssNode::AtRule(at) = node {
                 for child in &at.children {
-                    if let CssNode::Style(rule) = child {
-                        if selector_contains_nesting(&rule.selector) {
-                            diags.push(
+                    if let CssNode::Style(rule) = child
+                        && selector_contains_nesting(&rule.selector)
+                    {
+                        diags.push(
                                 Diagnostic::new(
                                     self.name(),
                                     format!(
@@ -116,7 +117,6 @@ impl Rule for NestingSelectorNoMissingScopingRoot {
                                 .severity(self.default_severity())
                                 .span(Span::new(rule.span.offset, rule.span.length)),
                             );
-                        }
                     }
                 }
             }
@@ -148,9 +148,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     fn nested_style(parent_sel: &str, child_sel: &str) -> CssNode {

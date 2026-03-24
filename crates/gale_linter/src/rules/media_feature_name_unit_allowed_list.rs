@@ -35,7 +35,7 @@ impl Rule for MediaFeatureNameUnitAllowedList {
             return vec![];
         };
 
-        if at_rule.name.to_ascii_lowercase() != "media" {
+        if !at_rule.name.eq_ignore_ascii_case("media") {
             return vec![];
         }
 
@@ -58,7 +58,7 @@ impl Rule for MediaFeatureNameUnitAllowedList {
             if let Some(allowed_units) = allowed_map.get(base_feature) {
                 for unit in extract_units(&value) {
                     let unit_lower = unit.to_ascii_lowercase();
-                    if !allowed_units.iter().any(|a| *a == unit_lower) {
+                    if !allowed_units.contains(&unit_lower) {
                         diags.push(
                             Diagnostic::new(
                                 self.name(),

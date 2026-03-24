@@ -42,7 +42,7 @@ impl Rule for RuleNestingAtRuleRequiredList {
         for node in nodes {
             if let CssNode::AtRule(at_rule) = node {
                 let name_lower = at_rule.name.to_ascii_lowercase();
-                if required.iter().any(|r| *r == name_lower) {
+                if required.contains(&name_lower) {
                     diags.push(
                         Diagnostic::new(
                             self.name(),
@@ -95,9 +95,9 @@ mod tests {
                 span: ParserSpan::new(0, 10),
                 important: false,
             }],
-span: ParserSpan::new(0, 30),
+            span: ParserSpan::new(0, 30),
             ..Default::default()
-})
+        })
     }
 
     #[test]

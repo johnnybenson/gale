@@ -80,9 +80,7 @@ impl Rule for StylisticFunctionParenthesesNewlineInside {
                 };
 
                 // Check if function args span multiple lines
-                let is_multi_line = bytes[open_paren..=close_paren]
-                    .iter()
-                    .any(|&b| b == b'\n');
+                let is_multi_line = bytes[open_paren..=close_paren].contains(&b'\n');
 
                 if !is_multi_line {
                     i += 1;
@@ -100,31 +98,23 @@ impl Rule for StylisticFunctionParenthesesNewlineInside {
                         }
                         if j < len && bytes[j] != b'\n' {
                             diagnostics.push(
-                                Diagnostic::new(
-                                    self.name(),
-                                    "Expected newline after \"(\"",
-                                )
-                                .severity(self.default_severity())
-                                .span(Span::new(open_paren, 1)),
+                                Diagnostic::new(self.name(), "Expected newline after \"(\"")
+                                    .severity(self.default_severity())
+                                    .span(Span::new(open_paren, 1)),
                             );
                         }
 
                         // Before `)` should be a newline
                         if close_paren > 0 {
                             let mut k = close_paren - 1;
-                            while k > open_paren
-                                && (bytes[k] == b' ' || bytes[k] == b'\t')
-                            {
+                            while k > open_paren && (bytes[k] == b' ' || bytes[k] == b'\t') {
                                 k -= 1;
                             }
                             if bytes[k] != b'\n' {
                                 diagnostics.push(
-                                    Diagnostic::new(
-                                        self.name(),
-                                        "Expected newline before \")\"",
-                                    )
-                                    .severity(self.default_severity())
-                                    .span(Span::new(close_paren, 1)),
+                                    Diagnostic::new(self.name(), "Expected newline before \")\"")
+                                        .severity(self.default_severity())
+                                        .span(Span::new(close_paren, 1)),
                                 );
                             }
                         }
@@ -138,12 +128,9 @@ impl Rule for StylisticFunctionParenthesesNewlineInside {
                         }
                         if j < len && bytes[j] == b'\n' {
                             diagnostics.push(
-                                Diagnostic::new(
-                                    self.name(),
-                                    "Unexpected newline after \"(\"",
-                                )
-                                .severity(self.default_severity())
-                                .span(Span::new(open_paren, 1)),
+                                Diagnostic::new(self.name(), "Unexpected newline after \"(\"")
+                                    .severity(self.default_severity())
+                                    .span(Span::new(open_paren, 1)),
                             );
                         }
                     }
@@ -246,7 +233,9 @@ mod tests {
         let d = StylisticFunctionParenthesesNewlineInside
             .check_root(&[], &ctx_with_option(source, &opt));
         assert!(!d.is_empty());
-        assert!(d.iter().any(|d| d.message.contains("Expected newline before \")\""),),
+        assert!(
+            d.iter()
+                .any(|d| d.message.contains("Expected newline before \")\""),),
             "got: {:?}",
             d.iter().map(|d| &d.message).collect::<Vec<_>>()
         );

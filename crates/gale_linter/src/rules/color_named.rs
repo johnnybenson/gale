@@ -868,15 +868,15 @@ fn tokenize_value(value: &str) -> Vec<ValueToken> {
 // ---------------------------------------------------------------------------
 
 fn is_named_color(word: &str) -> bool {
-    NAMED_COLORS.iter().any(|&c| c == word)
+    NAMED_COLORS.contains(&word)
 }
 
 fn is_system_color(word: &str) -> bool {
-    SYSTEM_COLORS.iter().any(|&c| c == word)
+    SYSTEM_COLORS.contains(&word)
 }
 
 fn is_non_color_property(prop: &str) -> bool {
-    NON_COLOR_PROPERTIES.iter().any(|&p| p == prop)
+    NON_COLOR_PROPERTIES.contains(&prop)
 }
 
 /// Check if property should be ignored based on ignoreProperties config.
@@ -942,7 +942,7 @@ fn parse_hex_to_rgb(hex: &str) -> Option<(u8, u8, u8)> {
 /// Parse RGB/RGBA function arguments to (r, g, b, fully_opaque).
 fn parse_rgb_args(args: &str) -> Option<(u8, u8, u8, bool)> {
     // Handle both comma-separated and space-separated with /
-    let clean = args.replace('\n', " ").replace('\r', " ");
+    let clean = args.replace(['\n', '\r'], " ");
     let clean = clean.trim();
 
     // Skip if contains calc() or var() or other complex expressions
@@ -991,7 +991,7 @@ fn parse_rgb_args(args: &str) -> Option<(u8, u8, u8, bool)> {
 
 /// Parse HSL/HSLA arguments to (r, g, b, fully_opaque).
 fn parse_hsl_args(args: &str) -> Option<(u8, u8, u8, bool)> {
-    let clean = args.replace('\n', " ").replace('\r', " ");
+    let clean = args.replace(['\n', '\r'], " ");
     let clean = clean.trim();
 
     let lower = clean.to_ascii_lowercase();
@@ -1040,7 +1040,7 @@ fn parse_hsl_args(args: &str) -> Option<(u8, u8, u8, bool)> {
 
 /// Parse HWB arguments to (r, g, b, fully_opaque).
 fn parse_hwb_args(args: &str) -> Option<(u8, u8, u8, bool)> {
-    let clean = args.replace('\n', " ").replace('\r', " ");
+    let clean = args.replace(['\n', '\r'], " ");
     let clean = clean.trim();
 
     // HWB can be comma-separated (non-standard but in tests) or space-separated
@@ -1083,7 +1083,7 @@ fn parse_hwb_args(args: &str) -> Option<(u8, u8, u8, bool)> {
 
 /// Parse gray() function arguments to (r, g, b, fully_opaque).
 fn parse_gray_args(args: &str) -> Option<(u8, u8, u8, bool)> {
-    let clean = args.replace('\n', " ").replace('\r', " ");
+    let clean = args.replace(['\n', '\r'], " ");
     let clean = clean.trim();
 
     if clean.contains(',') {
@@ -1230,9 +1230,9 @@ mod tests {
                 span: ParserSpan::new(prop_start, decl_text.len()),
                 important: false,
             }],
-span: ParserSpan::new(0, source.len()),
+            span: ParserSpan::new(0, source.len()),
             ..Default::default()
-});
+        });
         (node, source)
     }
 

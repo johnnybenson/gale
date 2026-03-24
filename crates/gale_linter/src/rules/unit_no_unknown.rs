@@ -95,11 +95,11 @@ fn extract_units_with_context(value: &str) -> Vec<UnitOccurrence> {
         }
 
         // Skip inside url() only
-        if let Some(func) = func_stack.last() {
-            if func == "url" {
-                i += 1;
-                continue;
-            }
+        if let Some(func) = func_stack.last()
+            && func == "url"
+        {
+            i += 1;
+            continue;
         }
 
         if i + 1 < len && chars[i] == '-' && chars[i + 1] == '-' {
@@ -513,10 +513,10 @@ fn check_value(
             continue;
         }
 
-        if let Some(ref func) = occ.function {
-            if function_is_ignored(func, &opts.ignore_functions) {
-                continue;
-            }
+        if let Some(ref func) = occ.function
+            && function_is_ignored(func, &opts.ignore_functions)
+        {
+            continue;
         }
 
         let abs_offset = value_base_offset + occ.number_byte_offset;
@@ -684,9 +684,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

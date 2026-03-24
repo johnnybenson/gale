@@ -108,7 +108,7 @@ mod tests {
             declarations: vec![],
             span: ParserSpan::new(0, 20),
             ..Default::default()
-})
+        })
     }
 
     #[test]

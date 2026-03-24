@@ -152,14 +152,13 @@ fn parse_ignore_list(options: Option<&serde_json::Value>) -> Vec<String> {
         serde_json::Value::Object(o) => o,
         serde_json::Value::Array(arr) => {
             for item in arr {
-                if let serde_json::Value::Object(o) = item {
-                    if let Some(serde_json::Value::Array(names)) = o.get("ignoreMediaFeatureNames")
-                    {
-                        return names
-                            .iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect();
-                    }
+                if let serde_json::Value::Object(o) = item
+                    && let Some(serde_json::Value::Array(names)) = o.get("ignoreMediaFeatureNames")
+                {
+                    return names
+                        .iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect();
                 }
             }
             return vec![];
@@ -183,10 +182,8 @@ fn is_ignored(name: &str, ignore_list: &[String]) -> bool {
             if re.is_match(name) {
                 return true;
             }
-        } else {
-            if pattern == name {
-                return true;
-            }
+        } else if pattern == name {
+            return true;
         }
     }
     false
@@ -194,8 +191,7 @@ fn is_ignored(name: &str, ignore_list: &[String]) -> bool {
 
 /// Parse a Stylelint-style regex pattern like `/pattern/` or `/pattern/i`.
 fn parse_regex_pattern(s: &str) -> Option<Regex> {
-    if s.starts_with('/') {
-        let rest = &s[1..];
+    if let Some(rest) = s.strip_prefix('/') {
         if let Some(end) = rest.rfind('/') {
             let pattern = &rest[..end];
             let flags = &rest[end + 1..];
@@ -330,15 +326,13 @@ fn extract_media_features(params: &str) -> Vec<MediaFeature> {
                             || chars[j] == '<'
                             || chars[j] == '>'
                             || chars[j] == '=')
+                        && !matches!(name.as_str(), "not" | "and" | "or" | "only")
                     {
-                        if !matches!(name.as_str(), "not" | "and" | "or" | "only") {
-                            let byte_offset: usize =
-                                chars[..start].iter().map(|c| c.len_utf8()).sum();
-                            features.push(MediaFeature {
-                                name: name.clone(),
-                                offset_in_params: byte_offset,
-                            });
-                        }
+                        let byte_offset: usize = chars[..start].iter().map(|c| c.len_utf8()).sum();
+                        features.push(MediaFeature {
+                            name: name.clone(),
+                            offset_in_params: byte_offset,
+                        });
                     }
 
                     // Scan forward for RHS feature names in range syntax

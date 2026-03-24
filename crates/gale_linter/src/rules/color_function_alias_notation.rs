@@ -64,9 +64,7 @@ impl Rule for ColorFunctionAliasNotation {
                     diags.push(
                         Diagnostic::new(
                             self.name(),
-                            format!(
-                                "Expected \"{legacy}\" to be \"{modern}\""
-                            ),
+                            format!("Expected \"{legacy}\" to be \"{modern}\""),
                         )
                         .severity(self.default_severity())
                         .span(Span::new(fn_offset, fn_len)),
@@ -102,9 +100,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]

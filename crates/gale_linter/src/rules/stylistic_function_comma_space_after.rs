@@ -106,14 +106,13 @@ impl Rule for StylisticFunctionCommaSpaceAfter {
                     {
                         p -= 1;
                     }
-                    let fn_start = if bytes[p].is_ascii_alphanumeric()
-                        || bytes[p] == b'-'
-                        || bytes[p] == b'_'
-                    {
-                        p
-                    } else {
-                        p + 1
-                    };
+                    let fn_start =
+                        if bytes[p].is_ascii_alphanumeric() || bytes[p] == b'-' || bytes[p] == b'_'
+                        {
+                            p
+                        } else {
+                            p + 1
+                        };
                     let fn_name = &ctx.source[fn_start..=fn_end];
                     if fn_name.eq_ignore_ascii_case("url") {
                         is_url_fn = true;
@@ -284,9 +283,7 @@ impl Rule for StylisticFunctionCommaSpaceAfter {
 
                         if violation {
                             let msg = match option {
-                                "always" => {
-                                    "Expected single space after \",\""
-                                }
+                                "always" => "Expected single space after \",\"",
                                 "always-single-line" => {
                                     "Expected single space after \",\" in a single-line function"
                                 }

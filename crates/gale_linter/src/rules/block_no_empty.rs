@@ -230,10 +230,10 @@ fn find_block_comment_end(bytes: &[u8], from: usize) -> Option<usize> {
 /// Check if comment text is any stylelint/gale directive (disable, enable, etc.).
 fn is_any_directive(text: &str) -> bool {
     for prefix in &["stylelint-", "gale-"] {
-        if let Some(rest) = text.strip_prefix(prefix) {
-            if rest.starts_with("disable") || rest.starts_with("enable") {
-                return true;
-            }
+        if let Some(rest) = text.strip_prefix(prefix)
+            && (rest.starts_with("disable") || rest.starts_with("enable"))
+        {
+            return true;
         }
     }
     false
@@ -290,9 +290,9 @@ mod tests {
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![],
-span: ParserSpan::new(0, source.len()),
+            span: ParserSpan::new(0, source.len()),
             ..Default::default()
-});
+        });
         let ctx = make_context_with_source(source);
         let diags = rule.check(&node, &ctx);
         assert_eq!(diags.len(), 1);
@@ -313,9 +313,9 @@ span: ParserSpan::new(0, source.len()),
                 span: ParserSpan::new(4, 10),
                 important: false,
             }],
-span: ParserSpan::new(0, source.len()),
+            span: ParserSpan::new(0, source.len()),
             ..Default::default()
-});
+        });
         let ctx = make_context_with_source(source);
         let diags = rule.check(&node, &ctx);
         assert!(diags.is_empty());
@@ -328,9 +328,9 @@ span: ParserSpan::new(0, source.len()),
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![],
-span: ParserSpan::new(0, source.len()),
+            span: ParserSpan::new(0, source.len()),
             ..Default::default()
-});
+        });
         let ctx = make_context_with_source(source);
         let diags = rule.check(&node, &ctx);
         assert!(diags.is_empty());
@@ -343,9 +343,9 @@ span: ParserSpan::new(0, source.len()),
         let node = CssNode::Style(StyleRule {
             selector: "a".to_string(),
             declarations: vec![],
-span: ParserSpan::new(0, source.len()),
+            span: ParserSpan::new(0, source.len()),
             ..Default::default()
-});
+        });
         let ctx = make_context_with_source(source);
         let diags = rule.check(&node, &ctx);
         assert!(diags.is_empty());
@@ -358,9 +358,9 @@ span: ParserSpan::new(0, source.len()),
         let node = CssNode::Style(StyleRule {
             selector: ".btn".to_string(),
             declarations: vec![],
-span: ParserSpan::new(0, source.len()),
+            span: ParserSpan::new(0, source.len()),
             ..Default::default()
-});
+        });
         let ctx = RuleContext {
             file_path: "test.scss",
             source,
@@ -378,9 +378,9 @@ span: ParserSpan::new(0, source.len()),
         let node = CssNode::Style(StyleRule {
             selector: ".btn".to_string(),
             declarations: vec![],
-span: ParserSpan::new(0, source.len()),
+            span: ParserSpan::new(0, source.len()),
             ..Default::default()
-});
+        });
         let ctx = RuleContext {
             file_path: "test.scss",
             source,

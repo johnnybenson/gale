@@ -52,8 +52,8 @@ impl Rule for CustomPropertyEmptyLineBefore {
             // Use AST to check if previous declaration is a custom property,
             // since source-based detection fails for multi-line values (e.g.
             // the previous line might be `);` from a multi-line rgba() call).
-            let after_custom_property = decl_idx > 0
-                && rule.declarations[decl_idx - 1].property.starts_with("--");
+            let after_custom_property =
+                decl_idx > 0 && rule.declarations[decl_idx - 1].property.starts_with("--");
             let after_block = is_after_block(ctx.source, decl_start);
 
             // Apply ignore options (skip this declaration entirely)
@@ -448,9 +448,9 @@ mod tests {
                     important: false,
                 },
             ],
-span: ParserSpan::new(0, src.len()),
+            span: ParserSpan::new(0, src.len()),
             ..Default::default()
-});
+        });
         let d = CustomPropertyEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("--my-var"));
@@ -477,9 +477,9 @@ span: ParserSpan::new(0, src.len()),
                     important: false,
                 },
             ],
-span: ParserSpan::new(0, src.len()),
+            span: ParserSpan::new(0, src.len()),
             ..Default::default()
-});
+        });
         let d = CustomPropertyEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
         assert!(d.is_empty());
     }
@@ -505,9 +505,9 @@ span: ParserSpan::new(0, src.len()),
                     important: false,
                 },
             ],
-span: ParserSpan::new(0, src.len()),
+            span: ParserSpan::new(0, src.len()),
             ..Default::default()
-});
+        });
         let d = CustomPropertyEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("Unexpected"));

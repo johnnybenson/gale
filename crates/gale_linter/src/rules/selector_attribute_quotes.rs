@@ -116,10 +116,7 @@ fn check_selector_for_unquoted_attrs(
                     diags.push(
                         Diagnostic::new(
                             rule.name(),
-                            format!(
-                                "Expected quotes around \"{}\"",
-                                value_clean,
-                            ),
+                            format!("Expected quotes around \"{}\"", value_clean,),
                         )
                         .severity(rule.default_severity())
                         .span(Span::new(
@@ -163,9 +160,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, selector.len() + 20),
+            span: ParserSpan::new(0, selector.len() + 20),
             ..Default::default()
-})
+        })
     }
 
     #[test]

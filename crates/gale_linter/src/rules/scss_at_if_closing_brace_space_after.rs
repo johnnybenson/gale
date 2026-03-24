@@ -43,25 +43,26 @@ impl Rule for ScssAtIfClosingBraceSpaceAfter {
                 let is_if = rest.starts_with("@if ") || rest.starts_with("@if(");
                 let is_else_if = rest.starts_with("@else if ") || rest.starts_with("@else if(");
 
-                if is_if || is_else_if {
-                    if let Some(close_brace) = find_closing_brace(source, i) {
-                        let after = close_brace + 1;
-                        // Count spaces after `}`
-                        let mut j = after;
-                        let mut space_count = 0;
-                        while j < len && bytes[j] == b' ' {
-                            space_count += 1;
-                            j += 1;
-                        }
+                if (is_if || is_else_if)
+                    && let Some(close_brace) = find_closing_brace(source, i)
+                {
+                    let after = close_brace + 1;
+                    // Count spaces after `}`
+                    let mut j = after;
+                    let mut space_count = 0;
+                    while j < len && bytes[j] == b' ' {
+                        space_count += 1;
+                        j += 1;
+                    }
 
-                        // Check if followed by @else
-                        let followed_by_else = j < len && source[j..].starts_with("@else");
+                    // Check if followed by @else
+                    let followed_by_else = j < len && source[j..].starts_with("@else");
 
-                        if followed_by_else {
-                            match option {
-                                "always-intermediate" => {
-                                    if space_count != 1 {
-                                        diagnostics.push(
+                    if followed_by_else {
+                        match option {
+                            "always-intermediate" => {
+                                if space_count != 1 {
+                                    diagnostics.push(
                                             Diagnostic::new(
                                                 self.name(),
                                                 "Expected single space after closing brace of @if before @else".to_string(),
@@ -69,11 +70,11 @@ impl Rule for ScssAtIfClosingBraceSpaceAfter {
                                             .severity(self.default_severity())
                                             .span(Span::new(close_brace, 1)),
                                         );
-                                    }
                                 }
-                                "never-intermediate" => {
-                                    if space_count > 0 {
-                                        diagnostics.push(
+                            }
+                            "never-intermediate" => {
+                                if space_count > 0 {
+                                    diagnostics.push(
                                             Diagnostic::new(
                                                 self.name(),
                                                 "Unexpected space after closing brace of @if before @else".to_string(),
@@ -81,15 +82,14 @@ impl Rule for ScssAtIfClosingBraceSpaceAfter {
                                             .severity(self.default_severity())
                                             .span(Span::new(close_brace, 1)),
                                         );
-                                    }
                                 }
-                                _ => {}
                             }
+                            _ => {}
                         }
-
-                        i = after;
-                        continue;
                     }
+
+                    i = after;
+                    continue;
                 }
             }
             i += 1;

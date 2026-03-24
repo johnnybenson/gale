@@ -22,10 +22,7 @@ impl Rule for StylisticValueListMaxEmptyLines {
     }
 
     fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
-        let max = ctx
-            .primary_option()
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as usize;
+        let max = ctx.primary_option().and_then(|v| v.as_u64()).unwrap_or(0) as usize;
 
         let CssNode::Style(rule) = node else {
             return vec![];

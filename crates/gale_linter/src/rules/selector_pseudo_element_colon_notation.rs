@@ -155,9 +155,9 @@ mod tests {
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, source.len()),
+            span: ParserSpan::new(0, source.len()),
             ..Default::default()
-});
+        });
         let ctx = RuleContext {
             file_path: "t.css",
             source,
@@ -180,9 +180,9 @@ span: ParserSpan::new(0, source.len()),
                 span: ParserSpan::new(0, 0),
                 important: false,
             }],
-span: ParserSpan::new(0, source.len()),
+            span: ParserSpan::new(0, source.len()),
             ..Default::default()
-});
+        });
         let ctx = RuleContext {
             file_path: "t.css",
             source,

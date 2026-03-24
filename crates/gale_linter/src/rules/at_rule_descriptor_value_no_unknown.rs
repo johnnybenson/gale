@@ -35,8 +35,7 @@ fn lookup(haystack: &[&str], needle: &str) -> bool {
 /// Returns `true` if the value looks like a percentage (e.g. `50%`, `100%`, `62.5%`).
 fn is_percentage(value: &str) -> bool {
     let trimmed = value.trim();
-    if trimmed.ends_with('%') {
-        let num_part = &trimmed[..trimmed.len() - 1];
+    if let Some(num_part) = trimmed.strip_suffix('%') {
         num_part.parse::<f64>().is_ok()
     } else {
         false
@@ -47,11 +46,10 @@ fn is_percentage(value: &str) -> bool {
 fn is_angle(value: &str) -> bool {
     let trimmed = value.trim();
     for suffix in &["deg", "grad", "rad", "turn"] {
-        if trimmed.ends_with(suffix) {
-            let num_part = &trimmed[..trimmed.len() - suffix.len()];
-            if num_part.parse::<f64>().is_ok() {
-                return true;
-            }
+        if let Some(num_part) = trimmed.strip_suffix(suffix)
+            && num_part.parse::<f64>().is_ok()
+        {
+            return true;
         }
     }
     false
@@ -78,9 +76,10 @@ fn validate_descriptor_value(at_rule_name: &str, descriptor: &str, value: &str) 
                 // Accept keyword alone, or `oblique <angle>` / `oblique <angle> <angle>`
                 let parts: Vec<&str> = val_trimmed.split_whitespace().collect();
                 if parts.is_empty() {
-                    return Some(format!(
+                    return Some(
                         "Unexpected empty value for descriptor \"font-style\" in @font-face"
-                    ));
+                            .to_string(),
+                    );
                 }
                 if !lookup(FONT_STYLE_KEYWORDS, parts[0]) {
                     return Some(format!(
@@ -102,9 +101,10 @@ fn validate_descriptor_value(at_rule_name: &str, descriptor: &str, value: &str) 
                 // Accept keyword or percentage(s)
                 let parts: Vec<&str> = val_trimmed.split_whitespace().collect();
                 if parts.is_empty() {
-                    return Some(format!(
+                    return Some(
                         "Unexpected empty value for descriptor \"font-stretch\" in @font-face"
-                    ));
+                            .to_string(),
+                    );
                 }
                 // All parts must be either keywords or percentages
                 let all_valid = parts
@@ -119,12 +119,10 @@ fn validate_descriptor_value(at_rule_name: &str, descriptor: &str, value: &str) 
             _ => {}
         },
         "property" => {
-            if desc_lower == "inherits" {
-                if !lookup(PROPERTY_INHERITS_VALUES, val_trimmed) {
-                    return Some(format!(
-                        "Unexpected value \"{val_trimmed}\" for descriptor \"inherits\" in @property"
-                    ));
-                }
+            if desc_lower == "inherits" && !lookup(PROPERTY_INHERITS_VALUES, val_trimmed) {
+                return Some(format!(
+                    "Unexpected value \"{val_trimmed}\" for descriptor \"inherits\" in @property"
+                ));
             }
         }
         _ => {}
@@ -159,15 +157,14 @@ impl Rule for AtRuleDescriptorValueNoUnknown {
 
         let mut diags = Vec::new();
         for child in &at.children {
-            if let CssNode::Declaration(decl) = child {
-                if let Some(msg) = validate_descriptor_value(&at.name, &decl.property, &decl.value)
-                {
-                    diags.push(
-                        Diagnostic::new(self.name(), msg)
-                            .severity(self.default_severity())
-                            .span(Span::new(decl.span.offset, decl.span.length)),
-                    );
-                }
+            if let CssNode::Declaration(decl) = child
+                && let Some(msg) = validate_descriptor_value(&at.name, &decl.property, &decl.value)
+            {
+                diags.push(
+                    Diagnostic::new(self.name(), msg)
+                        .severity(self.default_severity())
+                        .span(Span::new(decl.span.offset, decl.span.length)),
+                );
             }
         }
         diags

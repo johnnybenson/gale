@@ -82,7 +82,7 @@ impl Rule for MediaFeatureNameDisallowedList {
         let CssNode::AtRule(at_rule) = node else {
             return vec![];
         };
-        if at_rule.name.to_ascii_lowercase() != "media" {
+        if !at_rule.name.eq_ignore_ascii_case("media") {
             return vec![];
         }
 

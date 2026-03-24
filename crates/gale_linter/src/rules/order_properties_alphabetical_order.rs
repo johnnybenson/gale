@@ -117,9 +117,9 @@ mod tests {
                 make_decl("display", "block", 15, 14),
                 make_decl("font-size", "12px", 30, 15),
             ],
-span: ParserSpan::new(0, 50),
+            span: ParserSpan::new(0, 50),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx());
         assert!(diags.is_empty());
     }
@@ -133,9 +133,9 @@ span: ParserSpan::new(0, 50),
                 make_decl("display", "block", 4, 14),
                 make_decl("color", "red", 19, 10),
             ],
-span: ParserSpan::new(0, 35),
+            span: ParserSpan::new(0, 35),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx());
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("color"));
@@ -152,9 +152,9 @@ span: ParserSpan::new(0, 35),
                 make_decl("$my-var", "10px", 19, 14),
                 make_decl("color", "red", 34, 10),
             ],
-span: ParserSpan::new(0, 50),
+            span: ParserSpan::new(0, 50),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx());
         // "color" comes after "display" which is out of order, but $my-var is skipped
         assert_eq!(diags.len(), 1);
@@ -169,9 +169,9 @@ span: ParserSpan::new(0, 50),
                 make_decl("Color", "red", 4, 10),
                 make_decl("display", "block", 15, 14),
             ],
-span: ParserSpan::new(0, 35),
+            span: ParserSpan::new(0, 35),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx());
         assert!(diags.is_empty());
     }
@@ -186,9 +186,9 @@ span: ParserSpan::new(0, 35),
                 make_decl("--my-var", "10px", 19, 16),
                 make_decl("font-size", "12px", 36, 15),
             ],
-span: ParserSpan::new(0, 55),
+            span: ParserSpan::new(0, 55),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx());
         assert!(diags.is_empty());
     }
@@ -204,9 +204,9 @@ span: ParserSpan::new(0, 55),
                 make_decl("-webkit-transform", "scale(1)", 19, 28),
                 make_decl("transform", "scale(1)", 48, 21),
             ],
-span: ParserSpan::new(0, 70),
+            span: ParserSpan::new(0, 70),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx());
         assert!(diags.is_empty());
     }
@@ -221,9 +221,9 @@ span: ParserSpan::new(0, 70),
                 make_decl("-webkit-transform", "scale(1)", 4, 28),
                 make_decl("appearance", "none", 33, 17),
             ],
-span: ParserSpan::new(0, 55),
+            span: ParserSpan::new(0, 55),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &ctx());
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("appearance"));

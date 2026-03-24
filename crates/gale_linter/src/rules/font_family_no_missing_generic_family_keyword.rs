@@ -139,9 +139,9 @@ mod tests {
                 span: ParserSpan::new(6, 28),
                 important: false,
             }],
-span: ParserSpan::new(0, 36),
+            span: ParserSpan::new(0, 36),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
         assert!(diags[0].message.contains("missing generic font family"));
@@ -158,9 +158,9 @@ span: ParserSpan::new(0, 36),
                 span: ParserSpan::new(6, 40),
                 important: false,
             }],
-span: ParserSpan::new(0, 48),
+            span: ParserSpan::new(0, 48),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert!(diags.is_empty());
     }
@@ -176,9 +176,9 @@ span: ParserSpan::new(0, 48),
                 span: ParserSpan::new(6, 20),
                 important: false,
             }],
-span: ParserSpan::new(0, 28),
+            span: ParserSpan::new(0, 28),
             ..Default::default()
-});
+        });
         let diags = rule.check(&node, &make_context());
         assert!(diags.is_empty());
     }

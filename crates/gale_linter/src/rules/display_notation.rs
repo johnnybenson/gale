@@ -62,7 +62,7 @@ impl Rule for DisplayNotation {
 
         let mut diags = Vec::new();
         for decl in &rule.declarations {
-            if decl.property.to_ascii_lowercase() != "display" {
+            if !decl.property.eq_ignore_ascii_case("display") {
                 continue;
             }
 
@@ -140,9 +140,9 @@ mod tests {
                 span: ParserSpan::new(0, prop.len() + val.len() + 2),
                 important: false,
             }],
-span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, 0),
             ..Default::default()
-})
+        })
     }
 
     #[test]
