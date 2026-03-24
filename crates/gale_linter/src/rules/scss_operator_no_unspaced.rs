@@ -62,6 +62,7 @@ impl Rule for ScssOperatorNoUnspaced {
         }
         let mut diagnostics = Vec::new();
         check_source_level(context.source, self, &mut diagnostics);
+        check_calc_multi_space(context.source, self, &mut diagnostics);
         diagnostics
     }
 }
@@ -299,6 +300,145 @@ fn check_source_level(source: &str, rule: &ScssOperatorNoUnspaced, diags: &mut V
             let (inner, end) = extract_interpolation(source, i + 2);
             check_value(inner, i + 2, false, true, rule, diags);
             i = end;
+            continue;
+        }
+        i += 1;
+    }
+}
+
+/// Check calc() blocks in the full source for operators with multiple spaces.
+/// The per-node check skips calc() content entirely, but
+/// `scss/operator-no-unspaced` should still flag multiple-space violations
+/// inside calc().
+fn check_calc_multi_space(
+    source: &str,
+    rule: &ScssOperatorNoUnspaced,
+    diags: &mut Vec<Diagnostic>,
+) {
+    let b = source.as_bytes();
+    let len = b.len();
+    let mut i = 0;
+
+    while i + 4 < len {
+        // Skip strings
+        if b[i] == b'"' || b[i] == b'\'' {
+            let q = b[i];
+            i += 1;
+            while i < len && b[i] != q {
+                if b[i] == b'\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            if i < len {
+                i += 1;
+            }
+            continue;
+        }
+        // Skip comments
+        if b[i] == b'/' && i + 1 < len && b[i + 1] == b'*' {
+            i += 2;
+            while i + 1 < len && !(b[i] == b'*' && b[i + 1] == b'/') {
+                i += 1;
+            }
+            i += 2;
+            continue;
+        }
+        if b[i] == b'/' && i + 1 < len && b[i + 1] == b'/' {
+            while i < len && b[i] != b'\n' {
+                i += 1;
+            }
+            continue;
+        }
+
+        // Detect calc(
+        if source[i..].len() >= 5
+            && source[i..i + 5].eq_ignore_ascii_case("calc(")
+        {
+            let calc_start = i + 5;
+            // Find matching )
+            let mut depth = 1i32;
+            let mut j = calc_start;
+            while j < len && depth > 0 {
+                match b[j] {
+                    b'(' => depth += 1,
+                    b')' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                    b'"' | b'\'' => {
+                        let q = b[j];
+                        j += 1;
+                        while j < len && b[j] != q {
+                            if b[j] == b'\\' {
+                                j += 1;
+                            }
+                            j += 1;
+                        }
+                    }
+                    _ => {}
+                }
+                j += 1;
+            }
+            let calc_end = j;
+            // Scan inside calc for operators with multiple spaces
+            let mut k = calc_start;
+            while k < calc_end {
+                // Skip interpolation
+                if b[k] == b'#' && k + 1 < calc_end && b[k + 1] == b'{' {
+                    k += 2;
+                    let mut id = 1i32;
+                    while k < calc_end && id > 0 {
+                        if b[k] == b'{' {
+                            id += 1;
+                        } else if b[k] == b'}' {
+                            id -= 1;
+                        }
+                        if id > 0 {
+                            k += 1;
+                        }
+                    }
+                    if k < calc_end {
+                        k += 1;
+                    }
+                    continue;
+                }
+                if (b[k] == b'+' || b[k] == b'-' || b[k] == b'*' || b[k] == b'/')
+                    && k > calc_start
+                    && k + 1 < calc_end
+                {
+                    // Skip unary
+                    if (b[k] == b'+' || b[k] == b'-') && is_unary(b, k) {
+                        k += 1;
+                        continue;
+                    }
+                    let ws_before = b[k - 1].is_ascii_whitespace();
+                    let ws_after = b[k + 1].is_ascii_whitespace();
+                    if ws_before && ws_after {
+                        let sb = count_ws_before(b, k);
+                        let sa = count_ws_after(b, k);
+                        if (sb > 1 || sa > 1) && !has_nl_before(b, k) && !has_nl_after(b, k) {
+                            let op = b[k] as char;
+                            let msg = if sb > 1 && sa > 1 {
+                                format!("Expected single space before and after \"{op}\"")
+                            } else if sb > 1 {
+                                format!("Expected single space before \"{op}\"")
+                            } else {
+                                format!("Expected single space after \"{op}\"")
+                            };
+                            diags.push(
+                                Diagnostic::new(rule.name(), msg)
+                                    .severity(rule.default_severity())
+                                    .span(Span::new(k, 1)),
+                            );
+                        }
+                    }
+                }
+                k += 1;
+            }
+            i = calc_end;
             continue;
         }
         i += 1;

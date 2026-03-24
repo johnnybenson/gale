@@ -85,13 +85,35 @@ impl Rule for StylisticBlockClosingBraceNewlineBefore {
             if bytes[i] == b'}' {
                 let brace_pos = i;
 
-                // Check what's immediately before the closing brace (skipping spaces/tabs)
+                // Stylelint checks whether `raws.after` (the whitespace between
+                // the last child and `}`) *starts* with a newline.  This means
+                // we must find the last non-whitespace byte before `}`, then
+                // check if the character immediately after it is `\n` (or `\r\n`).
+                // Trailing whitespace on the previous line (between `;` and
+                // `\n`) causes `raws.after` to start with a space, not `\n`,
+                // so Stylelint flags it.
                 let has_newline_before = if brace_pos > 0 {
+                    // Find the last non-whitespace byte before `}`
                     let mut j = brace_pos - 1;
-                    while j > 0 && (bytes[j] == b' ' || bytes[j] == b'\t') {
+                    while j > 0
+                        && (bytes[j] == b' '
+                            || bytes[j] == b'\t'
+                            || bytes[j] == b'\n'
+                            || bytes[j] == b'\r')
+                    {
                         j -= 1;
                     }
-                    bytes[j] == b'\n' || bytes[j] == b'\r'
+                    // j is now at the last non-whitespace byte (e.g. `;`)
+                    // Check if the character immediately after it is `\n` or `\r\n`
+                    let after = j + 1;
+                    if after < brace_pos {
+                        bytes[after] == b'\n'
+                            || (bytes[after] == b'\r'
+                                && after + 1 < brace_pos
+                                && bytes[after + 1] == b'\n')
+                    } else {
+                        false
+                    }
                 } else {
                     false
                 };

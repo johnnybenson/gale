@@ -316,13 +316,13 @@ fn line_byte_range(source: &str, line_number: usize) -> (usize, usize) {
 ///
 /// When `report_needless` is `true`, a disable comment is reported as "needless"
 /// only if:
-///   1. The referenced rule is **known** to Gale (in the registry), AND
-///   2. The disable didn't actually suppress any diagnostic.
+///   1. The disable targets a **specific rule** (not `/* stylelint-disable */`), AND
+///   2. The referenced rule is **known** to Gale (registered in the registry), AND
+///   3. The disable didn't actually suppress any diagnostic.
 ///
-/// Disables for **unknown** rules (e.g. custom plugin rules like
-/// `material/no-prefixes` or `scss/dollar-variable-default`) are NOT reported
-/// as needless because Gale can't know if they suppress warnings — it doesn't
-/// implement those rules.
+/// Disables for **unknown** rules (e.g. third-party plugin rules Gale doesn't
+/// implement) are NOT reported as needless because Gale can't know if they
+/// suppress warnings — it doesn't run those plugins.
 ///
 /// "All rules" disables (`/* stylelint-disable */`) are also not reported as
 /// needless, since Gale may not implement all rules that Stylelint would fire.
@@ -389,10 +389,17 @@ fn filter_disabled_and_report_needless(
             continue;
         }
 
-        // TODO: reportNeedlessDisables requires identical plugin coverage to
-        // Stylelint. Without running the exact same plugins, Gale can't tell if a
-        // disable comment actually suppresses a warning. Disabled until full
-        // plugin parity is achieved.
+        // "All rules" disables (`/* stylelint-disable */`) are never reported
+        // as needless because Gale may not implement every rule that Stylelint
+        // would fire — so a blanket disable might legitimately suppress
+        // warnings from plugin rules Gale doesn't know about.
+        if range.rule.is_none() {
+            continue;
+        }
+
+        // TODO: reportNeedlessDisables causes false positives when Gale's
+        // detection differs from Stylelint's for known rules. Disabled until
+        // every rule achieves byte-for-byte identical detection.
         continue;
 
         // Deduplicate: only report once per (comment_start, rule).
@@ -760,12 +767,15 @@ impl LintRunner {
         let line_index = SourceLineIndex::build(source);
         let disabled_ranges = collect_disabled_ranges(source, &line_index);
         let report_needless = self.report_needless_disables;
-        let enabled = &self.enabled_rules;
+        let base_enabled = &self.enabled_rules;
         filter_disabled_and_report_needless(
             &mut diagnostics,
             &disabled_ranges,
             report_needless,
-            &|rule_name| enabled.iter().any(|r| r == rule_name),
+            &|rule_name| {
+                base_enabled.iter().any(|r| r == rule_name)
+                    || enabled_rules.iter().any(|r| r == rule_name)
+            },
             source,
             file_path,
         );

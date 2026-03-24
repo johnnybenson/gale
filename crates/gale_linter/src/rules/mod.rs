@@ -79,6 +79,7 @@ pub mod media_feature_name_value_allowed_list;
 pub mod media_feature_name_value_no_unknown;
 pub mod media_feature_range_notation;
 pub mod media_query_no_invalid;
+pub mod material_no_prefixes;
 pub mod media_type_no_deprecated;
 pub mod named_grid_areas_no_invalid;
 pub mod nesting_selector_no_missing_scoping_root;
@@ -94,6 +95,7 @@ pub mod no_unknown_animations;
 pub mod number_leading_zero;
 pub mod number_max_precision;
 pub mod order_order;
+pub mod plugin_browser_compat;
 pub mod order_properties_alphabetical_order;
 pub mod order_properties_order;
 pub mod property_allowed_list;
@@ -147,11 +149,15 @@ pub mod unit_no_unknown;
 pub mod value_keyword_case;
 pub mod value_no_vendor_prefix;
 
+// Spectrum tools custom plugin rules
+pub mod spectrum_tools_no_unknown_custom_properties;
+
 // @stylistic rules
 pub mod stylistic_at_rule_name_case;
 pub mod stylistic_at_rule_name_space_after;
 pub mod stylistic_at_rule_semicolon_newline_after;
 pub mod stylistic_at_rule_semicolon_space_before;
+pub mod stylistic_block_closing_brace_empty_line_before;
 pub mod stylistic_block_closing_brace_newline_after;
 pub mod stylistic_block_closing_brace_newline_before;
 pub mod stylistic_block_closing_brace_space_before;
@@ -416,6 +422,7 @@ pub fn register_all(registry: &mut RuleRegistry) {
         media_feature_range_notation::MediaFeatureRangeNotation,
     ));
     registry.register(Box::new(media_query_no_invalid::MediaQueryNoInvalid));
+    registry.register(Box::new(material_no_prefixes::MaterialNoPrefixes));
     registry.register(Box::new(media_type_no_deprecated::MediaTypeNoDeprecated));
     registry.register(Box::new(
         named_grid_areas_no_invalid::NamedGridAreasNoInvalid,
@@ -450,6 +457,9 @@ pub fn register_all(registry: &mut RuleRegistry) {
         order_properties_alphabetical_order::OrderPropertiesAlphabeticalOrder,
     ));
     registry.register(Box::new(order_properties_order::OrderPropertiesOrder));
+    registry.register(Box::new(
+        plugin_browser_compat::PluginBrowserCompat,
+    ));
     registry.register(Box::new(number_max_precision::NumberMaxPrecision));
     registry.register(Box::new(property_allowed_list::PropertyAllowedList));
     registry.register(Box::new(property_disallowed_list::PropertyDisallowedList));
@@ -537,6 +547,11 @@ pub fn register_all(registry: &mut RuleRegistry) {
     registry.register(Box::new(unit_no_unknown::UnitNoUnknown));
     registry.register(Box::new(value_keyword_case::ValueKeywordCase));
     registry.register(Box::new(value_no_vendor_prefix::ValueNoVendorPrefix));
+
+    // Spectrum tools custom plugin rules
+    registry.register(Box::new(
+        spectrum_tools_no_unknown_custom_properties::SpectrumToolsNoUnknownCustomProperties,
+    ));
 
     // @stylistic rules
     registry.register(Box::new(
@@ -656,6 +671,9 @@ pub fn register_all(registry: &mut RuleRegistry) {
     ));
     registry.register(Box::new(
         stylistic_media_feature_parentheses_space_inside::StylisticMediaFeatureParenthesesSpaceInside,
+    ));
+    registry.register(Box::new(
+        stylistic_block_closing_brace_empty_line_before::StylisticBlockClosingBraceEmptyLineBefore,
     ));
     registry.register(Box::new(
         stylistic_block_closing_brace_newline_before::StylisticBlockClosingBraceNewlineBefore,

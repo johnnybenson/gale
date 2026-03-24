@@ -567,6 +567,16 @@ fn check_children(
             .collect();
         check_nodes(rule_impl, &child_nodes, ctx, opts, false, diags);
     }
+    // Also recurse into nested at-rules (e.g. @include, @media inside a
+    // style rule) which may contain style rules that need checking.
+    for at_node in &style.nested_at_rules {
+        if let CssNode::AtRule(at_rule) = at_node {
+            let at_name = at_rule.name.to_lowercase();
+            if at_name != "keyframes" && !at_name.ends_with("-keyframes") {
+                check_nodes(rule_impl, &at_rule.children, ctx, opts, false, diags);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
