@@ -388,22 +388,26 @@ def compare_results(
         s_warnings = stylelint.get(file_path, [])
         g_warnings = gale.get(file_path, [])
 
-        s_set = {_warning_key(w) for w in s_warnings}
-        g_set = {_warning_key(w) for w in g_warnings}
+        # Use Counter (multiset) to detect duplicate warnings correctly.
+        # If Gale emits a warning twice and Stylelint once, the extra is a FP.
+        s_counter = Counter(_warning_key(w) for w in s_warnings)
+        g_counter = Counter(_warning_key(w) for w in g_warnings)
 
-        matching = s_set & g_set
-        stylelint_only = s_set - g_set
-        gale_only = g_set - s_set
+        matching = sum((s_counter & g_counter).values())
+        stylelint_only_counter = s_counter - g_counter
+        gale_only_counter = g_counter - s_counter
+        stylelint_only = set(stylelint_only_counter.elements())
+        gale_only = set(gale_only_counter.elements())
 
-        report["matching_warnings"] += len(matching)
-        report["stylelint_only_warnings"] += len(stylelint_only)
-        report["gale_only_warnings"] += len(gale_only)
+        report["matching_warnings"] += matching
+        report["stylelint_only_warnings"] += sum(stylelint_only_counter.values())
+        report["gale_only_warnings"] += sum(gale_only_counter.values())
 
         if stylelint_only or gale_only:
             report["files_differ"] += 1
             report["diffs"].append({
                 "file": file_path,
-                "matching": len(matching),
+                "matching": matching,
                 "stylelint_only": [_key_to_dict(k) for k in sorted(stylelint_only)],
                 "gale_only": [_key_to_dict(k) for k in sorted(gale_only)],
             })

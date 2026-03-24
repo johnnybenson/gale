@@ -35,11 +35,6 @@ impl Rule for SelectorAttributeQuotes {
 
         let mut diags = Vec::new();
         check_selector_for_unquoted_attrs(self, &rule.selector, rule.span.offset, &mut diags);
-
-        for child in &rule.children {
-            check_selector_for_unquoted_attrs(self, &child.selector, child.span.offset, &mut diags);
-        }
-
         diags
     }
 }
