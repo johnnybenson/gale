@@ -58,7 +58,10 @@ def run_cmd(cmd: list[str], cwd: str | None = None, timeout: int = 300) -> subpr
 def clone_repo(repo: str, branch: str, dest: Path, force: bool = False) -> bool:
     """Shallow-clone a repo. Returns True if clone dir exists after."""
     if dest.exists() and not force:
-        print(f"  [skip] Already cloned: {dest.name}")
+        print(f"  [pull] Updating existing clone: {dest.name}")
+        result = run_cmd(["git", "pull", "--ff-only"], cwd=str(dest), timeout=60)
+        if result.returncode != 0:
+            print(f"  [warn] git pull failed (continuing with existing clone): {result.stderr.strip()[:200]}")
         return True
 
     if dest.exists():

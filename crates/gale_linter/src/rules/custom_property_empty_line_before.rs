@@ -32,7 +32,7 @@ impl Rule for CustomPropertyEmptyLineBefore {
         let opts = Options::from_ctx(ctx);
         let mut diags = Vec::new();
 
-        for (decl_idx, decl) in rule.declarations.iter().enumerate() {
+        for decl in rule.declarations.iter() {
             // Only check custom properties (starting with --)
             if !decl.property.starts_with("--") {
                 continue;
@@ -49,11 +49,11 @@ impl Rule for CustomPropertyEmptyLineBefore {
             let is_first = is_first_in_block_by_source(ctx.source, decl_start);
             let is_single_line = is_single_line_block(ctx.source, rule);
             let after_comment = is_after_comment(ctx.source, decl_start);
-            // Use AST to check if previous declaration is a custom property,
-            // since source-based detection fails for multi-line values (e.g.
-            // the previous line might be `);` from a multi-line rgba() call).
-            let after_custom_property =
-                decl_idx > 0 && rule.declarations[decl_idx - 1].property.starts_with("--");
+            // Use source-based check for after-custom-property to avoid false
+            // positives when a non-adjacent custom property (e.g. inside a
+            // nested @include block) appears before this one in the AST's
+            // declarations array but is not physically adjacent in the source.
+            let after_custom_property = is_after_custom_property(ctx.source, decl_start);
             let after_block = is_after_block(ctx.source, decl_start);
 
             // Apply ignore options (skip this declaration entirely)
@@ -352,10 +352,13 @@ fn is_after_custom_property(source: &str, offset: usize) -> bool {
         return false;
     }
     let before = &source[..offset];
+    let lines: Vec<&str> = before.lines().collect();
+    let mut i = lines.len();
 
     // Walk backwards to find the previous meaningful line
-    for line in before.lines().rev() {
-        let stripped = line.trim();
+    while i > 0 {
+        i -= 1;
+        let stripped = lines[i].trim();
         if stripped.is_empty() {
             continue;
         }
@@ -363,10 +366,29 @@ fn is_after_custom_property(source: &str, offset: usize) -> bool {
         if stripped.starts_with("--") {
             return true;
         }
-        // If preceded by a comment, keep looking (comments don't break the chain
-        // for after-custom-property in Stylelint).
+        // If preceded by a comment, keep looking.
         if stripped.ends_with("*/") || stripped.starts_with("/*") || stripped.starts_with("//") {
             continue;
+        }
+        // The previous non-empty, non-comment line ends with `;` — this is the
+        // end of a declaration. It may be a multi-line value; scan back to the
+        // start of that declaration to check if it's a custom property.
+        if stripped.ends_with(';') {
+            while i > 0 {
+                i -= 1;
+                let s = lines[i].trim();
+                if s.is_empty() {
+                    continue;
+                }
+                if s.starts_with("--") {
+                    return true;
+                }
+                // Block boundary — stop
+                if s.starts_with('{') || s.ends_with('{') || s == "}" {
+                    return false;
+                }
+                // Otherwise it's a continuation line of the value — keep scanning
+            }
         }
         return false;
     }

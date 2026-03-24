@@ -69,7 +69,7 @@
     "branch": "main",
     "paths": ["packages"],
     "globs": ["packages/**/*.scss"],
-    "notes": "UK Government design system."
+    "notes": "UK Government frontend, stylelint-config-gds/scss"
   },
   {
     "name": "spectrum-css",
@@ -101,7 +101,7 @@
     "branch": "main",
     "paths": ["app/assets/stylesheets"],
     "globs": ["app/assets/stylesheets/**/*.scss"],
-    "notes": "Forum platform (46k stars). SCSS."
+    "notes": "Forum software, @discourse/lint-configs/stylelint"
   },
   {
     "name": "elastic-eui",

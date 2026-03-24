@@ -1131,6 +1131,7 @@ const CONFIG_FILENAMES: &[&str] = &[
     "stylelint.config.cjs",
     ".stylelintrc.js",
     ".stylelintrc.cjs",
+    ".stylelintrc.mjs",
 ];
 
 /// Walk upward from `start_dir` looking for the first config file.
@@ -1384,38 +1385,54 @@ fn resolve_import_path(file_dir: &Path, rel_path: &str) -> Option<PathBuf> {
 /// Resolve an npm package import by walking up the directory tree looking for
 /// `node_modules/<package>/`.  Tries the package's `main` field, then
 /// `index.js`, then `index.cjs`.
+#[allow(dead_code)]
 fn resolve_npm_package_path(file_dir: &Path, package: &str) -> Option<PathBuf> {
+    // Split into package name and optional subpath for exports resolution
+    let (pkg_name, subpath) = split_npm_package_subpath(package);
+
     let mut dir = file_dir.to_path_buf();
     loop {
-        let candidate = dir.join("node_modules").join(package);
+        let candidate = dir.join("node_modules").join(pkg_name);
         if candidate.is_dir() {
-            // Try package.json "main" field
+            // Try package.json "exports" field first, then "main"
             let pkg_json = candidate.join("package.json");
             if pkg_json.is_file()
                 && let Ok(contents) = std::fs::read_to_string(&pkg_json)
                 && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&contents)
-                && let Some(main) = parsed.get("main").and_then(|v| v.as_str())
             {
-                let main_path = candidate.join(main);
-                if main_path.is_file() {
-                    return Some(main_path);
+                // Try exports field
+                let exports_subpath = subpath.unwrap_or(".");
+                if let Some(resolved) = resolve_package_exports(&parsed, exports_subpath) {
+                    let export_path = candidate.join(&resolved);
+                    if export_path.is_file() {
+                        return Some(export_path);
+                    }
+                }
+                // Try main field (only when no subpath)
+                if subpath.is_none()
+                    && let Some(main) = parsed.get("main").and_then(|v| v.as_str())
+                {
+                    let main_path = candidate.join(main);
+                    if main_path.is_file() {
+                        return Some(main_path);
+                    }
                 }
             }
-            // Try index.js, index.cjs
-            for name in &["index.js", "index.cjs", "index.mjs"] {
-                let idx = candidate.join(name);
-                if idx.is_file() {
-                    return Some(idx);
+
+            if subpath.is_none() {
+                // Try index.js, index.cjs
+                for name in &["index.js", "index.cjs", "index.mjs"] {
+                    let idx = candidate.join(name);
+                    if idx.is_file() {
+                        return Some(idx);
+                    }
                 }
-            }
-            // If the package path itself is a file (e.g. single-file package)
-            if candidate.is_file() {
-                return Some(candidate);
             }
         }
+
         // Also try as a file directly (e.g. scoped package with subpath)
         let candidate_file = dir.join("node_modules").join(package);
-        for ext in &["", ".js", ".cjs", ".json"] {
+        for ext in &["", ".js", ".cjs", ".json", ".mjs"] {
             let with_ext = PathBuf::from(format!("{}{}", candidate_file.display(), ext));
             if with_ext.is_file() {
                 return Some(with_ext);
@@ -1562,18 +1579,16 @@ fn resolve_js_imports(source: &str, file_dir: Option<&Path>) -> String {
     let mut result = source.to_string();
 
     for (var_name, rel_path) in &imports {
-        let import_path = if rel_path.starts_with("./") || rel_path.starts_with("../") {
-            // Relative import
-            match resolve_import_path(file_dir, rel_path) {
-                Some(p) => p,
-                None => continue,
-            }
-        } else {
-            // npm package import — resolve from node_modules
-            match resolve_npm_package_path(file_dir, rel_path) {
-                Some(p) => p,
-                None => continue,
-            }
+        // Only inline relative imports (./foo or ../foo).
+        // npm package imports (e.g. require('postcss-scss')) are not config
+        // objects and inlining them produces JS syntax (shorthand properties,
+        // complex objects) that breaks the JS→JSON converter.
+        if !rel_path.starts_with("./") && !rel_path.starts_with("../") {
+            continue;
+        }
+        let import_path = match resolve_import_path(file_dir, rel_path) {
+            Some(p) => p,
+            None => continue,
         };
 
         let imported_source = match std::fs::read_to_string(&import_path) {
@@ -3104,6 +3119,54 @@ fn find_node_modules(start_dir: &Path) -> Option<PathBuf> {
     }
 }
 
+/// Resolve a subpath from a package.json `exports` field.
+///
+/// Handles these `exports` shapes:
+/// - `"exports": { "./sub": "./sub.mjs" }` (subpath → string)
+/// - `"exports": { "./sub": { "default": "./sub.mjs" } }` (subpath → condition map)
+/// - `"exports": { ".": "./index.mjs" }` (main entry point)
+/// - `"exports": "./index.mjs"` (sugar for `{ ".": "./index.mjs" }`)
+///
+/// `subpath` should be the bare subpath (e.g. `"stylelint"` not `"./stylelint"`).
+/// The special value `"."` resolves the package main entry point.
+fn resolve_package_exports(pkg: &serde_json::Value, subpath: &str) -> Option<String> {
+    let exports = pkg.get("exports")?;
+
+    // Normalise the lookup key: `"."` stays as-is, otherwise prepend `"./"`
+    let key = if subpath == "." {
+        ".".to_string()
+    } else {
+        format!("./{subpath}")
+    };
+
+    // `exports` can be a string (sugar for `{ ".": "<string>" }`)
+    if let Some(s) = exports.as_str() {
+        if key == "." {
+            return Some(s.to_string());
+        }
+        return None;
+    }
+
+    let exports_obj = exports.as_object()?;
+    let entry = exports_obj.get(&key)?;
+
+    // The entry can be a string or a condition map
+    if let Some(s) = entry.as_str() {
+        return Some(s.to_string());
+    }
+
+    // Condition map: try "default", "require", "import" in that order
+    if let Some(obj) = entry.as_object() {
+        for condition in &["default", "require", "import"] {
+            if let Some(val) = obj.get(*condition).and_then(|v| v.as_str()) {
+                return Some(val.to_string());
+            }
+        }
+    }
+
+    None
+}
+
 /// Try to load a [`ConfigFile`] from an npm package installed in `node_modules`.
 ///
 /// Supports subpath imports like `@scope/package/subpath` which resolves to
@@ -3123,9 +3186,23 @@ fn resolve_npm_config(package_name: &str, base_dir: &Path) -> Option<ConfigFile>
         return None;
     }
 
-    // If there's a subpath, resolve it directly as a file within the package.
+    // If there's a subpath, first try the `exports` field in package.json,
+    // then fall back to direct file resolution with common extensions.
     if let Some(sub) = subpath {
-        // Try with common extensions
+        // Try `exports` field in package.json first (e.g. `"./stylelint": "./stylelint.mjs"`)
+        let pkg_json_path = pkg_dir.join("package.json");
+        if let Ok(pkg_json) = std::fs::read_to_string(&pkg_json_path)
+            && let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&pkg_json)
+            && let Some(resolved) = resolve_package_exports(&pkg, sub)
+        {
+            let export_path = pkg_dir.join(&resolved);
+            if export_path.is_file()
+                && let Ok(config) = load_config_file(&export_path)
+            {
+                return Some(config);
+            }
+        }
+        // Fall back: try with common extensions
         for ext in &["", ".js", ".json", ".cjs", ".mjs"] {
             let path = pkg_dir.join(format!("{sub}{ext}"));
             if path.is_file()
@@ -3137,15 +3214,27 @@ fn resolve_npm_config(package_name: &str, base_dir: &Path) -> Option<ConfigFile>
         return None;
     }
 
-    // 1. Try package.json "main" field
+    // 1. Try package.json "exports" field for the main entry point (".")
+    // 2. Then try "main" field
     let pkg_json_path = pkg_dir.join("package.json");
     if let Ok(pkg_json) = std::fs::read_to_string(&pkg_json_path)
         && let Ok(pkg) = serde_json::from_str::<serde_json::Value>(&pkg_json)
-        && let Some(main) = pkg.get("main").and_then(|m| m.as_str())
     {
-        let main_path = pkg_dir.join(main);
-        if let Ok(config) = load_config_file(&main_path) {
-            return Some(config);
+        // Try `exports["."]` first
+        if let Some(resolved) = resolve_package_exports(&pkg, ".") {
+            let export_path = pkg_dir.join(&resolved);
+            if export_path.is_file()
+                && let Ok(config) = load_config_file(&export_path)
+            {
+                return Some(config);
+            }
+        }
+        // Try `main` field
+        if let Some(main) = pkg.get("main").and_then(|m| m.as_str()) {
+            let main_path = pkg_dir.join(main);
+            if let Ok(config) = load_config_file(&main_path) {
+                return Some(config);
+            }
         }
     }
 

@@ -236,42 +236,30 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                     }
 
                     if ignore_diff_syntaxes {
-                        let syntaxes_are_equal =
-                            is_equal_value_syntaxes(current_value, dup_value, &lower_prop);
-
-                        if syntaxes_are_equal {
-                            // Same syntax means report
-                            let (report_prop, report_span) = if duplicate_is_more_important {
-                                (prop.clone(), decl.span)
-                            } else {
-                                (dup_decl.property.clone(), dup_decl.span)
-                            };
-
-                            if !duplicate_is_more_important {
-                                decl_map.insert(lower_prop.clone(), current_index);
-                            }
-
-                            diagnostics.push(
-                                Diagnostic::new(
-                                    self.name(),
-                                    format!("Unexpected duplicate \"{}\"", report_prop),
-                                )
-                                .severity(self.default_severity())
-                                .span(Span::new(report_span.offset, report_span.length)),
-                            );
-
-                            decls.push(DeclInfo {
-                                property: prop.clone(),
-                                lower_prop: lower_prop.clone(),
-                                value: decl.value.clone(),
-                                important: decl.important,
-                                span: decl.span,
-                            });
-                            continue;
-                        }
+                        // For consecutive-duplicates-with-different-syntaxes, Stylelint
+                        // skips ALL consecutive duplicates in a fallback group, regardless
+                        // of whether the values have the same or different syntax. This
+                        // matches the CSS fallback pattern: `cursor: move; cursor: grab;
+                        // cursor: grab;` is valid and none are reported.
+                        // Update decl_map so the next entry sees a consecutive duplicate.
+                        decl_map.insert(lower_prop.clone(), current_index);
+                        decls.push(DeclInfo {
+                            property: prop.clone(),
+                            lower_prop: lower_prop.clone(),
+                            value: decl.value.clone(),
+                            important: decl.important,
+                            span: decl.span,
+                        });
+                        continue;
                     }
 
-                    // If values differ, skip (allowed by these ignore modes)
+                    // If values differ, skip (allowed by these ignore modes).
+                    // IMPORTANT: do NOT update decl_map here. Stylelint keeps the
+                    // original declaration as the reference point, so subsequent
+                    // duplicates with the same value still compare against the first
+                    // (different-syntax) one and are also skipped. Updating decl_map
+                    // would make the next identical duplicate compare against itself
+                    // (same value → equal syntax → falsely reported).
                     if current_value != dup_value {
                         decls.push(DeclInfo {
                             property: prop.clone(),
@@ -280,9 +268,7 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                             important: decl.important,
                             span: decl.span,
                         });
-                        if !duplicate_is_more_important {
-                            decl_map.insert(lower_prop.clone(), current_index);
-                        }
+                        // Do NOT update decl_map — keep pointing to the original decl.
                         continue;
                     }
 

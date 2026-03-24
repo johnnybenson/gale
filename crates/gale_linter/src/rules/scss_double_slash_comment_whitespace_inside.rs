@@ -61,6 +61,19 @@ impl Rule for ScssDoubleSlashCommentWhitespaceInside {
             return vec![];
         }
 
+        // Skip `//` comments embedded inside selector lists (preceding non-empty
+        // line ends with `,`). postcss-scss doesn't expose these as comment nodes
+        // so Stylelint never checks them.
+        if comment.span.offset > 0 {
+            let before = &ctx.source[..comment.span.offset];
+            // Find the previous non-empty line
+            if let Some(prev_line) = before.lines().rev().find(|l| !l.trim().is_empty()) {
+                if prev_line.trim_end().ends_with(',') {
+                    return vec![];
+                }
+            }
+        }
+
         let option = ctx.primary_option_str().unwrap_or("always");
 
         // The comment text should be the content after `//`.

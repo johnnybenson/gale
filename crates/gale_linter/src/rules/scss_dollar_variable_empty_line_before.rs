@@ -145,9 +145,61 @@ impl Rule for ScssDollarVariableEmptyLineBefore {
                 .map(|p| p.starts_with("//") || p.starts_with("/*") || p.ends_with("*/"))
                 .unwrap_or(false);
 
-            let is_after_dollar_variable = prev_non_empty
-                .map(|p| p.starts_with('$') && p.contains(':'))
-                .unwrap_or(false);
+            // Check if the previous declaration was a $variable. This includes
+            // multi-line declarations like:
+            //   $var: some-fn(
+            //     arg1,
+            //     arg2
+            //   ) !default;     <- prev_non_empty would be ") !default;"
+            // In that case we need to trace back to the statement start.
+            let is_after_dollar_variable = {
+                let direct_match = prev_non_empty
+                    .map(|p| p.starts_with('$') && p.contains(':'))
+                    .unwrap_or(false);
+
+                if direct_match {
+                    true
+                } else if let Some(prev) = prev_non_empty {
+                    // Check if the prev line ends with `) !default;` or `)` or `;`
+                    // indicating the end of a multi-line declaration. Walk back to
+                    // find the statement's opening line and check if it's a $var.
+                    let is_multi_line_end = prev.ends_with(") !default;")
+                        || prev.ends_with(");")
+                        || (prev.starts_with(')') && (prev.ends_with(';') || prev.ends_with("!default;")));
+
+                    if is_multi_line_end && line_idx > 0 {
+                        // Count unmatched closing parens to find where multi-line
+                        // statement started. Walk backwards.
+                        let mut k = line_idx - 1;
+                        let mut paren_balance: i32 = 0;
+                        let mut found = false;
+                        loop {
+                            let l = lines[k].trim();
+                            for ch in l.chars().rev() {
+                                if ch == ')' {
+                                    paren_balance += 1;
+                                } else if ch == '(' {
+                                    paren_balance -= 1;
+                                }
+                            }
+                            if paren_balance <= 0 {
+                                // This line opened the statement
+                                found = l.starts_with('$') && l.contains(':');
+                                break;
+                            }
+                            if k == 0 {
+                                break;
+                            }
+                            k -= 1;
+                        }
+                        found
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            };
 
             // Handle ignore options
             if ignore_after_comment && is_after_comment {

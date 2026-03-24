@@ -30,6 +30,55 @@ fn find_value_offset(source: &str, decl_offset: usize, property_len: usize) -> u
     start + off
 }
 
+/// Check whether the function call starting at `fn_start` in `value` (lowercase)
+/// contains any SCSS-specific arguments that make it non-standard syntax.
+///
+/// Stylelint's `isStandardSyntaxColorFunction` returns `false` when any
+/// function argument starts with `#` (including `#{...}` interpolation) or
+/// `$` (SCSS variable), or includes `.$` (chained variable). In those cases
+/// the function is not checked.
+fn has_scss_args(value: &str, fn_start: usize) -> bool {
+    // Find the opening parenthesis
+    let after_fn = &value[fn_start..];
+    let paren_pos = match after_fn.find('(') {
+        Some(p) => fn_start + p + 1,
+        None => return false,
+    };
+
+    // Find the matching closing parenthesis
+    let mut depth = 1i32;
+    let mut end = paren_pos;
+    let bytes = value.as_bytes();
+    while end < bytes.len() && depth > 0 {
+        match bytes[end] {
+            b'(' => depth += 1,
+            b')' => depth -= 1,
+            _ => {}
+        }
+        end += 1;
+    }
+
+    let args = &value[paren_pos..end.saturating_sub(1)];
+
+    // Check each comma-separated argument for SCSS syntax
+    for arg in args.split(',') {
+        let trimmed = arg.trim();
+        // SCSS interpolation #{...} or hex starting with #
+        if trimmed.starts_with('#') {
+            return true;
+        }
+        // SCSS variable $var
+        if trimmed.starts_with('$') {
+            return true;
+        }
+        // Chained variable .$
+        if trimmed.contains(".$") {
+            return true;
+        }
+    }
+    false
+}
+
 impl Rule for ColorFunctionAliasNotation {
     fn name(&self) -> &'static str {
         "color-function-alias-notation"
@@ -59,6 +108,15 @@ impl Rule for ColorFunctionAliasNotation {
                 while let Some(pos) = lower[search_from..].find(alias) {
                     let abs_pos = search_from + pos;
                     let legacy = &alias[..alias.len() - 1]; // "rgba" or "hsla"
+
+                    // Skip functions with SCSS-specific args (variables, interpolation).
+                    // Mirrors Stylelint's `isStandardSyntaxColorFunction` check which
+                    // returns false for args starting with `#` or `$`.
+                    if has_scss_args(&lower, abs_pos) {
+                        search_from = abs_pos + 1;
+                        continue;
+                    }
+
                     let fn_offset = value_offset + abs_pos;
                     let fn_len = legacy.len();
                     diags.push(
@@ -145,5 +203,35 @@ mod tests {
             &ctx(),
         );
         assert_eq!(d.len(), 2);
+    }
+
+    #[test]
+    fn skips_rgba_with_scss_variable() {
+        // rgba($color, 0.7) — SCSS variable as first arg, not standard syntax
+        let d = ColorFunctionAliasNotation.check(
+            &style_with_value("rgba($danger, 0.7)"),
+            &ctx(),
+        );
+        assert!(d.is_empty(), "rgba() with SCSS variable arg should be skipped");
+    }
+
+    #[test]
+    fn skips_rgba_with_scss_interpolation() {
+        // rgba(0, 0, 0, #{$opacity}) — SCSS interpolation in args
+        let d = ColorFunctionAliasNotation.check(
+            &style_with_value("rgba(0, 0, 0, #{$opacity})"),
+            &ctx(),
+        );
+        assert!(d.is_empty(), "rgba() with SCSS interpolation should be skipped");
+    }
+
+    #[test]
+    fn still_reports_plain_rgba() {
+        // Plain rgba() without SCSS args should still be reported
+        let d = ColorFunctionAliasNotation.check(
+            &style_with_value("rgba(0, 0, 0, 0.5)"),
+            &ctx(),
+        );
+        assert_eq!(d.len(), 1);
     }
 }

@@ -46,6 +46,15 @@ impl Rule for CommentWhitespaceInside {
             return vec![];
         }
 
+        // Skip comments embedded inside selector lists (preceding text ends with `,`).
+        // postcss doesn't expose these as comment nodes so Stylelint never checks them.
+        if offset > 0 {
+            let before = ctx.source[..offset].trim_end();
+            if before.ends_with(',') {
+                return vec![];
+            }
+        }
+
         // Extract the inner content between /* and */, skipping any extra
         // asterisks or `!` that form part of the opener/closer (e.g. /** ... **/ or /*! ... */).
         // Stylelint treats `/**` and `/*!` the same as `/*` — the extra chars

@@ -108,6 +108,15 @@ impl Rule for ScssDoubleSlashCommentEmptyLineBefore {
                 let end = source[i..].find('\n').map(|p| i + p).unwrap_or(len);
                 let comment_text = &source[i + 2..end];
 
+                // Skip comments that are inside a selector list (between selector parts
+                // separated by commas in a multi-line selector). PostCSS treats these as
+                // part of the selector's raw text, not as comment nodes, so Stylelint's
+                // walkComments() never visits them. We must match that behavior.
+                if is_inside_selector_list(source, comment_start) {
+                    i = end;
+                    continue;
+                }
+
                 // Check ignore conditions
                 if ignore_stylelint_commands && is_stylelint_command(comment_text) {
                     i = end;
@@ -323,6 +332,167 @@ fn line_contains_slash_comment(line: &str) -> bool {
             _ => i += 1,
         }
     }
+    false
+}
+
+/// Returns true if the `//` comment at `offset` appears to be inside a
+/// multi-line selector (between selector parts before the opening `{`).
+///
+/// PostCSS/postcss-scss embeds `//` comments in the raw selector text when
+/// they appear between selector parts (before the opening `{`). Stylelint's
+/// `walkComments` never visits these embedded comments, so we must skip them.
+///
+/// Detection:
+/// 1. Walk backward, skipping whitespace and other `//` comment lines, to
+///    find the last non-comment, non-blank line before this comment.
+/// 2. Examine that line's trailing content:
+///    - Ends with `,` → definitely inside a selector list → skip
+///    - Ends with `{` → inside a block body → real comment
+///    - Ends with `}` or `;` → after completed statement → real comment
+///    - Other (selector text) → use forward scan to confirm selector context
+/// 3. Forward scan: if the first `{`/`}`/`;` after the comment is `{` → skip
+fn is_inside_selector_list(source: &str, offset: usize) -> bool {
+    let bytes = source.as_bytes();
+    let len = bytes.len();
+
+    // Walk backward from start of the comment's line, skipping `//` comment
+    // lines and blank lines, to find the first real content line.
+
+    // First, move to the start of the comment line
+    let mut pos = offset;
+    // Skip whitespace before `//` on this line
+    while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t') {
+        pos -= 1;
+    }
+    // Step back over the newline
+    if pos > 0 && bytes[pos - 1] == b'\n' {
+        pos -= 1;
+        if pos > 0 && bytes[pos - 1] == b'\r' {
+            pos -= 1;
+        }
+    } else {
+        // No newline before → first line of file or inline
+        return false;
+    }
+
+    // Now scan backward over blank lines and `//` comment lines
+    loop {
+        // Skip trailing whitespace on the current line
+        while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t') {
+            pos -= 1;
+        }
+
+        if pos == 0 {
+            break;
+        }
+
+        // Skip over newlines (blank lines)
+        if bytes[pos - 1] == b'\n' {
+            pos -= 1;
+            if pos > 0 && bytes[pos - 1] == b'\r' {
+                pos -= 1;
+            }
+            continue;
+        }
+
+        // Found the last character of the previous non-blank line.
+        // Now determine the full content of that line.
+        let line_end = pos;
+        let mut line_start = pos;
+        while line_start > 0 && bytes[line_start - 1] != b'\n' {
+            line_start -= 1;
+        }
+        let line_content = source[line_start..line_end].trim();
+
+        if line_content.is_empty() {
+            // Empty line (only whitespace) — keep going backward
+            if line_start == 0 {
+                break;
+            }
+            pos = line_start - 1;
+            continue;
+        }
+
+        // Skip `//` comment lines
+        if line_content.starts_with("//") {
+            if line_start == 0 {
+                break;
+            }
+            pos = line_start - 1;
+            if pos > 0 && bytes[pos - 1] == b'\r' {
+                // Already handled — just set pos
+            }
+            continue;
+        }
+
+        // Found a real non-comment non-blank line. Examine its last char.
+        let last = *line_content.as_bytes().last().unwrap_or(&0);
+        return match last {
+            // Inside a block body → real comment, not selector context
+            b'{' | b'}' | b';' => false,
+            // Selector list separator → definitely in selector context
+            b',' => true,
+            // Other (selector text like `.foo` or `span`) → forward scan
+            _ => forward_scan_for_opening_brace(source, offset, len),
+        };
+    }
+
+    // Reached start of file without finding decisive content
+    forward_scan_for_opening_brace(source, offset, len)
+}
+
+/// Scan forward from after the `//` comment at `offset`, skipping other `//`
+/// comment lines and whitespace. Return true if the first `{`, `}`, or `;`
+/// found is `{` (indicating the comment was in selector-before-block context).
+fn forward_scan_for_opening_brace(source: &str, offset: usize, len: usize) -> bool {
+    let bytes = source.as_bytes();
+    let mut pos = offset;
+
+    // Skip to end of current comment line
+    while pos < len && bytes[pos] != b'\n' {
+        pos += 1;
+    }
+    if pos < len {
+        pos += 1;
+    }
+
+    while pos < len {
+        // Skip whitespace
+        if matches!(bytes[pos], b' ' | b'\t' | b'\n' | b'\r') {
+            pos += 1;
+            continue;
+        }
+
+        // Skip block comments
+        if pos + 1 < len && bytes[pos] == b'/' && bytes[pos + 1] == b'*' {
+            pos += 2;
+            while pos + 1 < len {
+                if bytes[pos] == b'*' && bytes[pos + 1] == b'/' {
+                    pos += 2;
+                    break;
+                }
+                pos += 1;
+            }
+            continue;
+        }
+
+        // Skip `//` comment lines
+        if pos + 1 < len && bytes[pos] == b'/' && bytes[pos + 1] == b'/' {
+            while pos < len && bytes[pos] != b'\n' {
+                pos += 1;
+            }
+            continue;
+        }
+
+        match bytes[pos] {
+            b'{' => return true,
+            b'}' | b';' => return false,
+            _ => {
+                pos += 1;
+            }
+        }
+    }
+
     false
 }
 

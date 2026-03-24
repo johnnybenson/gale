@@ -59,6 +59,10 @@ fn check_nodes(
                             if decl.property.starts_with('$') {
                                 continue;
                             }
+                            // Use the declaration's own span so that inline
+                            // disable-next-line comments (which disable the
+                            // declaration's line, not the @-rule's line) work
+                            // correctly.
                             diags.push(
                                 Diagnostic::new(
                                     rule.name(),
@@ -68,7 +72,7 @@ fn check_nodes(
                                     ),
                                 )
                                 .severity(rule.default_severity())
-                                .span(Span::new(at.span.offset, at.span.length)),
+                                .span(Span::new(decl.span.offset, decl.span.length)),
                             );
                         }
                     }

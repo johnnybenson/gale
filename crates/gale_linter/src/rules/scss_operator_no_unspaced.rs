@@ -352,7 +352,7 @@ fn check_calc_multi_space(
         }
 
         // Detect calc(
-        if source[i..].len() >= 5 && source[i..i + 5].eq_ignore_ascii_case("calc(") {
+        if i + 5 <= len && b[i..i + 5].eq_ignore_ascii_case(b"calc(") {
             let calc_start = i + 5;
             // Find matching )
             let mut depth = 1i32;
@@ -706,7 +706,7 @@ fn check_value_inner(
             continue;
         }
         // calc()
-        if i + 5 <= len && value[i..].to_ascii_lowercase().starts_with("calc(") {
+        if i + 5 <= len && b[i..i + 5].eq_ignore_ascii_case(b"calc(") {
             in_calc = true;
             calc_depth = paren_depth + 1;
             paren_depth += 1;
@@ -714,7 +714,7 @@ fn check_value_inner(
             continue;
         }
         // url() — skip content but check interpolation inside
-        if i + 4 <= len && value[i..].to_ascii_lowercase().starts_with("url(") {
+        if i + 4 <= len && b[i..i + 4].eq_ignore_ascii_case(b"url(") {
             in_url = true;
             url_depth = paren_depth + 1;
             paren_depth += 1;
@@ -1457,13 +1457,13 @@ fn has_operator_before_token(b: &[u8], slash_pos: usize) -> bool {
 /// followed by `(`. Returns `Some(len)` where `len` includes the `(` character,
 /// or `None` if not a color function.
 fn is_color_function_at(value: &str, i: usize) -> Option<usize> {
-    const COLOR_FNS: &[&str] = &[
-        "rgb(", "rgba(", "hsl(", "hsla(", "hwb(", "lab(", "lch(", "oklch(", "oklab(", "color(",
+    const COLOR_FNS: &[&[u8]] = &[
+        b"rgb(", b"rgba(", b"hsl(", b"hsla(", b"hwb(", b"lab(", b"lch(", b"oklch(", b"oklab(",
+        b"color(",
     ];
-    let rest = &value[i..];
-    let lower = rest.to_ascii_lowercase();
+    let rest = &value.as_bytes()[i..];
     for &f in COLOR_FNS {
-        if lower.starts_with(f) {
+        if rest.len() >= f.len() && rest[..f.len()].eq_ignore_ascii_case(f) {
             return Some(f.len());
         }
     }
