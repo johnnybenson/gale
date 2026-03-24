@@ -1579,16 +1579,35 @@ fn resolve_js_imports(source: &str, file_dir: Option<&Path>) -> String {
     let mut result = source.to_string();
 
     for (var_name, rel_path) in &imports {
-        // Only inline relative imports (./foo or ../foo).
-        // npm package imports (e.g. require('postcss-scss')) are not config
-        // objects and inlining them produces JS syntax (shorthand properties,
-        // complex objects) that breaks the JS→JSON converter.
-        if !rel_path.starts_with("./") && !rel_path.starts_with("../") {
+        let import_path = if rel_path.starts_with("./") || rel_path.starts_with("../") {
+            // Relative import — resolve from file_dir.
+            match resolve_import_path(file_dir, rel_path) {
+                Some(p) => p,
+                None => continue,
+            }
+        } else {
+            // npm package import — try to resolve it and inline only if the
+            // exported value converts cleanly to valid JSON (e.g. an array of
+            // strings like @github/browserslist-config).  Packages that export
+            // non-serialisable JS (functions, shorthand properties, etc.) are
+            // left as-is so the JS→JSON converter can substitute `null` for
+            // unresolved identifiers rather than producing invalid JSON.
+            let candidate = match resolve_npm_package_path(file_dir, rel_path) {
+                Some(p) => p,
+                None => continue,
+            };
+            let npm_source = match std::fs::read_to_string(&candidate) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+            if let Some(raw_value) = extract_default_export(&npm_source) {
+                let json_value = js_object_to_json(&raw_value);
+                // Only inline if the result is valid JSON.
+                if serde_json::from_str::<serde_json::Value>(&json_value).is_ok() {
+                    result = replace_whole_word(&result, var_name, &json_value);
+                }
+            }
             continue;
-        }
-        let import_path = match resolve_import_path(file_dir, rel_path) {
-            Some(p) => p,
-            None => continue,
         };
 
         let imported_source = match std::fs::read_to_string(&import_path) {

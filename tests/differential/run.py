@@ -87,6 +87,8 @@ def detect_package_manager(clone_dir: Path) -> str:
         return "yarn"
     if (clone_dir / "bun.lockb").exists() or (clone_dir / "bun.lock").exists():
         return "bun"
+    if (clone_dir / "package-lock.json").exists():
+        return "npm"
     return "bun"
 
 

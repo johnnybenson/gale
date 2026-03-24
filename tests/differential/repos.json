@@ -144,14 +144,6 @@
     "notes": "Data science IDE (15k stars). Extends stylelint-config-standard."
   },
   {
-    "name": "polaris",
-    "repo": "Shopify/polaris",
-    "branch": "main",
-    "paths": ["polaris-react", "polaris"],
-    "globs": ["polaris-react/**/*.scss", "polaris/**/*.scss"],
-    "notes": "Shopify design system (6k stars)."
-  },
-  {
     "name": "joomla",
     "repo": "joomla/joomla-cms",
     "branch": "5.4-dev",

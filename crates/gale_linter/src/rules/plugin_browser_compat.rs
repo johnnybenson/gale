@@ -350,6 +350,51 @@ fn browserslist_cache() -> &'static std::sync::Mutex<HashMap<String, Vec<Browser
     BROWSERSLIST_CACHE.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
 }
 
+/// Find the `browserslist` binary in the project's own node_modules/.bin.
+/// Walks up from `start_dir` until it finds one, so it works for files
+/// nested inside monorepo sub-packages.  Returns an absolute path so the
+/// binary can be invoked with a different `current_dir`.
+fn find_browserslist_bin(start_dir: &Path) -> Option<PathBuf> {
+    // Canonicalize to an absolute path so that walking up works correctly
+    // even when start_dir is relative (e.g. "src/forms").
+    let start_abs = start_dir.canonicalize().ok().unwrap_or_else(|| {
+        std::env::current_dir()
+            .ok()
+            .map(|cwd| cwd.join(start_dir))
+            .unwrap_or_else(|| start_dir.to_path_buf())
+    });
+    let mut dir = start_abs;
+    loop {
+        let candidate = dir.join("node_modules").join(".bin").join("browserslist");
+        if candidate.exists() {
+            return Some(candidate);
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
+/// Run `browserslist [query]` using the project-local binary when available,
+/// falling back to `npx browserslist`.  Using the local binary ensures that
+/// the caniuse-lite database version matches the one Stylelint uses, which
+/// is critical for byte-for-byte identical `plugin/browser-compat` output.
+fn run_browserslist(query: Option<&str>, work_dir: &Path) -> Option<std::process::Output> {
+    let local_bin = find_browserslist_bin(work_dir);
+    let mut cmd = match local_bin {
+        Some(ref bin) => std::process::Command::new(bin),
+        None => {
+            let mut c = std::process::Command::new("npx");
+            c.arg("browserslist");
+            c
+        }
+    };
+    if let Some(q) = query {
+        cmd.arg(q);
+    }
+    cmd.current_dir(work_dir).output().ok()
+}
+
 fn resolve_browserslist(queries: &[String], file_path: &Path) -> Option<Vec<BrowserTarget>> {
     if queries.is_empty() {
         return None;
@@ -374,13 +419,7 @@ fn resolve_browserslist(queries: &[String], file_path: &Path) -> Option<Vec<Brow
         }
     }
 
-    // Run `npx browserslist` to resolve the query.
-    let output = std::process::Command::new("npx")
-        .arg("browserslist")
-        .arg(&query)
-        .current_dir(&work_dir)
-        .output()
-        .ok()?;
+    let output = run_browserslist(Some(&query), &work_dir)?;
 
     if !output.status.success() {
         return None;
@@ -494,12 +533,7 @@ fn resolve_browserslist_default(file_path: &Path) -> Option<Vec<BrowserTarget>> 
         }
     }
 
-    // Run `npx browserslist` with no query — it uses the project's own config.
-    let output = std::process::Command::new("npx")
-        .arg("browserslist")
-        .current_dir(&project_root)
-        .output()
-        .ok()?;
+    let output = run_browserslist(None, &project_root)?;
 
     if !output.status.success() {
         return None;
