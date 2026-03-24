@@ -11,6 +11,26 @@ pub struct ColorFunctionNotation;
 
 const COLOR_FUNCTIONS: &[&str] = &["rgb(", "rgba(", "hsl(", "hsla("];
 
+/// Find the position of the matching closing paren, handling nesting.
+/// Returns the offset relative to the start of `s` (which should begin
+/// right after the opening paren).
+fn find_matching_paren(s: &str) -> Option<usize> {
+    let mut depth: i32 = 1;
+    for (i, ch) in s.char_indices() {
+        match ch {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(i);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
 impl Rule for ColorFunctionNotation {
     fn name(&self) -> &'static str {
         "color-function-notation"
@@ -24,10 +44,23 @@ impl Rule for ColorFunctionNotation {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::Style(rule) = node else {
             return vec![];
         };
+
+        // Read secondary options for `ignore: ["with-var-inside"]`
+        let ignore_with_var = ctx
+            .secondary_options()
+            .or(ctx.options)
+            .and_then(|v| v.get("ignore"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .any(|item| item.as_str() == Some("with-var-inside"))
+            })
+            .unwrap_or(false);
+
         let mut diags = Vec::new();
         for decl in &rule.declarations {
             let lower = decl.value.to_ascii_lowercase();
@@ -36,9 +69,16 @@ impl Rule for ColorFunctionNotation {
                 while let Some(pos) = lower[search_from..].find(func) {
                     let abs_pos = search_from + pos;
                     let args_start = abs_pos + func.len();
-                    if let Some(close) = lower[args_start..].find(')') {
+                    if let Some(close) = find_matching_paren(&lower[args_start..]) {
                         let args = &decl.value[args_start..args_start + close];
                         if args.contains(',') {
+                            // Skip if ignore: ["with-var-inside"] and args contain var(
+                            if ignore_with_var
+                                && args.to_ascii_lowercase().contains("var(")
+                            {
+                                search_from = abs_pos + 1;
+                                continue;
+                            }
                             let fn_name = &func[..func.len() - 1]; // strip trailing (
                             diags.push(
                                 Diagnostic::new(

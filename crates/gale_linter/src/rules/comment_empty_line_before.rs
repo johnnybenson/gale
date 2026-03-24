@@ -59,6 +59,18 @@ impl Rule for CommentEmptyLineBefore {
             })
             .unwrap_or(false);
 
+        // ignoreComments: array of string or regex patterns.  When a comment's
+        // text matches any of these patterns the rule is skipped for that comment.
+        let ignore_comment_patterns: Vec<String> = secondary
+            .and_then(|v| v.get("ignoreComments"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| item.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let mut diags = Vec::new();
         let bytes = source.as_bytes();
         let len = bytes.len();
@@ -112,12 +124,49 @@ impl Rule for CommentEmptyLineBefore {
                     continue;
                 }
 
+                // Skip comments matching ignoreComments patterns.
+                // Patterns may be plain strings (exact match) or regex patterns.
+                // JS config regex literals `/pattern/` are converted to plain
+                // strings by the config parser, so we try regex first then fall
+                // back to exact string match.
+                if !ignore_comment_patterns.is_empty() {
+                    let trimmed_comment = comment_text.trim();
+                    let should_ignore = ignore_comment_patterns.iter().any(|pat| {
+                        let re_str = if pat.starts_with('/') && pat.ends_with('/') {
+                            &pat[1..pat.len() - 1]
+                        } else {
+                            pat.as_str()
+                        };
+                        // Try as regex first; if it's not a valid regex or doesn't
+                        // look like one, fall back to exact match.
+                        if let Ok(re) = regex::Regex::new(re_str) {
+                            re.is_match(trimmed_comment)
+                        } else {
+                            trimmed_comment == pat
+                        }
+                    });
+                    if should_ignore {
+                        continue;
+                    }
+                }
+
                 let before = &source[..comment_start];
 
                 // Skip inline comments (comments on the same line as other content)
                 let line_start = before.rfind('\n').map(|p| p + 1).unwrap_or(0);
                 let prefix = &before[line_start..];
                 if !prefix.trim().is_empty() {
+                    continue;
+                }
+
+                // Skip comments embedded in selectors (e.g., between selector
+                // parts in a comma-separated list).  Heuristic: if the last
+                // non-whitespace character before the comment is `,`, the
+                // comment is inside a selector list — Stylelint's PostCSS AST
+                // does not represent these as standalone comment nodes so they
+                // are not checked.
+                let trimmed_before_comma = before.trim_end();
+                if trimmed_before_comma.ends_with(',') {
                     continue;
                 }
 

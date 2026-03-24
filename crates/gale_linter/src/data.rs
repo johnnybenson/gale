@@ -474,6 +474,7 @@ static KNOWN_PROPERTIES: &[&str] = &[
     "text-decoration",
     "text-decoration-color",
     "text-decoration-line",
+    "text-decoration-skip",
     "text-decoration-skip-ink",
     "text-decoration-style",
     "text-decoration-thickness",

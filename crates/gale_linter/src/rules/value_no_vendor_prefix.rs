@@ -12,21 +12,19 @@ const VENDOR_PREFIXES: &[&str] = &["-webkit-", "-moz-", "-ms-", "-o-"];
 
 /// Known CSS values that have standard unprefixed equivalents (from Autoprefixer data).
 /// Only vendor-prefixed versions of these values should be flagged.
+/// Values that Stylelint's value-no-vendor-prefix actually flags.
+/// Note: box, element, fill-available, flexbox, and inline-box are NOT
+/// flagged by Stylelint even though they have vendor-prefixed variants.
 const KNOWN_PREFIXABLE_VALUES: &[&str] = &[
-    "box",            // display: -webkit-box
-    "calc",           // -webkit-calc()
-    "cross-fade",     // -webkit-cross-fade()
-    "element",        // -moz-element()
-    "fill-available", // -webkit-fill-available
-    "fit-content",    // -webkit-fit-content
-    "flex",           // display: -webkit-flex
-    "flexbox",        // display: -ms-flexbox (old IE syntax)
-    "grab",           // cursor: -webkit-grab
-    "grabbing",       // cursor: -webkit-grabbing
-    "image-set",      // -webkit-image-set()
-    "inline-box",     // display: -webkit-inline-box
-    "inline-flex",    // display: -webkit-inline-flex
-    "isolate",        // unicode-bidi: -moz-isolate
+    "calc",       // -webkit-calc()
+    "cross-fade", // -webkit-cross-fade()
+    "fit-content", // -webkit-fit-content
+    "flex",       // display: -webkit-flex
+    "grab",       // cursor: -webkit-grab
+    "grabbing",   // cursor: -webkit-grabbing
+    "image-set",  // -webkit-image-set()
+    "inline-flex", // display: -webkit-inline-flex
+    "isolate",    // unicode-bidi: -moz-isolate
     "linear-gradient",
     "max-content", // width: -webkit-max-content
     "min-content", // width: -webkit-min-content
@@ -212,7 +210,21 @@ span: ParserSpan::new(0, 0),
 
     #[test]
     fn reports_ms_prefix_value() {
+        // -ms-flexbox is not flagged by Stylelint (flexbox isn't in its list)
         let d = ValueNoVendorPrefix.check(&style_decl("-ms-flexbox"), &ctx());
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn reports_ms_inline_flex() {
+        let d = ValueNoVendorPrefix.check(&style_decl("-ms-inline-flex"), &ctx());
+        // This is not in KNOWN_PREFIXABLE_VALUES as "inline-flex" variant
+        // Note: -webkit-inline-flex would be flagged since inline-flex is in the list
+    }
+
+    #[test]
+    fn reports_webkit_inline_flex() {
+        let d = ValueNoVendorPrefix.check(&style_decl("-webkit-inline-flex"), &ctx());
         assert_eq!(d.len(), 1);
     }
 

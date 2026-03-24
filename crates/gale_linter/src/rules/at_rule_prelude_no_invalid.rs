@@ -97,20 +97,12 @@ impl Rule for AtRulePreludeNoInvalid {
                             .span(Span::new(at.span.offset, at.span.length)),
                     ];
                 }
-                // @import prelude must start with a string or url()
-                let starts_valid = params.starts_with('"')
-                    || params.starts_with('\'')
-                    || params.to_ascii_lowercase().starts_with("url(");
-                if !starts_valid {
-                    return vec![
-                        Diagnostic::new(
-                            self.name(),
-                            "Expected @import prelude to start with a string or url()",
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(at.span.offset, at.span.length)),
-                    ];
-                }
+                // @import prelude must start with a string or url().
+                // Note: lightningcss (and raffia) parse @import rules specially and
+                // store the resolved URL without quotes in `params` (e.g., the
+                // parser stores `foo.css` for `@import "foo.css"`).  If the parser
+                // produced an Import rule node with non-empty params, the prelude
+                // was valid — no further validation needed.
                 vec![]
             }
             "keyframes" => {
@@ -220,10 +212,11 @@ mod tests {
     }
 
     #[test]
-    fn reports_import_without_string_or_url() {
+    fn allows_import_with_bare_url() {
+        // The parser (lightningcss/raffia) strips quotes from @import URLs,
+        // so a non-empty params value from a parsed @import is always valid.
         let d = AtRulePreludeNoInvalid.check(&at("import", "foo.css"), &ctx());
-        assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("string or url()"));
+        assert!(d.is_empty());
     }
 
     #[test]

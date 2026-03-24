@@ -50,6 +50,8 @@ const SYSTEM_COLORS: &[&str] = &[
     "Menu",
     "MenuText",
     "Scrollbar",
+    "SelectedItem",
+    "SelectedItemText",
     "ThreeDDarkShadow",
     "ThreeDFace",
     "ThreeDHighlight",
