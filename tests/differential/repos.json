@@ -166,5 +166,13 @@
     "paths": ["src"],
     "globs": ["src/**/*.scss"],
     "notes": "React UI library (8.7k stars). stylelint-config-standard-scss v15, stylelint v16."
+  },
+  {
+    "name": "fundamental-styles",
+    "repo": "SAP/fundamental-styles",
+    "branch": "main",
+    "paths": ["src", "packages"],
+    "globs": ["src/**/*.scss", "packages/**/*.scss"],
+    "notes": "SAP design system (900+ stars). stylelint-config-standard-scss, stylelint v16.8."
   }
 ]

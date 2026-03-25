@@ -318,6 +318,27 @@ fn is_after_comment(source: &str, offset: usize) -> bool {
     false
 }
 
+/// Returns true if a line that ends with `}` represents a real block-close,
+/// NOT just SCSS interpolation `#{...}` at the end of a value.
+///
+/// A real block-close contains a `{` that is NOT preceded by `#`.
+/// Examples:
+///   `}` alone → true (unmatched block-close)
+///   `@include mixin() { content }` → true (has `{` not from interpolation)
+///   `prop: #{$var}` → false (only `{` is from SCSS interpolation)
+fn is_real_block_close(s: &str) -> bool {
+    if s == "}" {
+        return true; // lone `}` is always a block-close
+    }
+    let bytes = s.as_bytes();
+    for i in 0..bytes.len() {
+        if bytes[i] == b'{' && (i == 0 || bytes[i - 1] != b'#') {
+            return true; // found a non-interpolation `{`
+        }
+    }
+    false
+}
+
 /// Check if preceded by a block (a rule or at-rule ending with `}`).
 fn is_after_block(source: &str, offset: usize) -> bool {
     if offset == 0 || offset > source.len() {
@@ -438,8 +459,12 @@ fn is_after_declaration(source: &str, offset: usize) -> bool {
             }
             continue;
         }
-        // If the line ends with `}`, it's a block, not a declaration
-        if stripped.ends_with('}') && paren_depth == 0 {
+        // If the line ends with `}` or `};`, it may be a block end.
+        // Distinguish real block-closes (e.g. `@include mixin() { ... };`) from
+        // SCSS interpolation at end of value (e.g. `prop: #{$var};`).
+        // A real block-close has a `{` that is NOT preceded by `#`.
+        let stripped_no_semi = stripped.strip_suffix(';').unwrap_or(stripped);
+        if stripped_no_semi.ends_with('}') && paren_depth == 0 && is_real_block_close(stripped_no_semi) {
             return false;
         }
         // If the line ends with `{`, it's a selector/at-rule

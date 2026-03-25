@@ -33,6 +33,12 @@ impl Rule for SelectorAttributeQuotes {
             return vec![];
         };
 
+        // Stylelint's isStandardSyntaxRule returns false for selectors with
+        // SCSS/Less interpolation. Skip those to match Stylelint's behavior.
+        if rule.selector.contains("#{") || rule.selector.contains("@{") {
+            return vec![];
+        }
+
         let mut diags = Vec::new();
         check_selector_for_unquoted_attrs(self, &rule.selector, rule.span.offset, &mut diags);
         diags

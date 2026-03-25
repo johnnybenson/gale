@@ -668,6 +668,7 @@ static KNOWN_PSEUDO_ELEMENTS: &[&str] = &[
     "after",
     "backdrop",
     "before",
+    "content",
     "cue",
     "details-content",
     "file-selector-button",

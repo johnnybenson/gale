@@ -1534,6 +1534,15 @@ fn is_unary(b: &[u8], i: usize) -> bool {
     if p == b'(' || p == b',' || p == b':' {
         return true;
     }
+    // Negative number literal: `-` preceded by whitespace and followed by a
+    // digit or decimal point (e.g. `inset -0.375rem`). This is a sign, not
+    // a subtraction operator.
+    if p.is_ascii_whitespace()
+        && i + 1 < b.len()
+        && (b[i + 1].is_ascii_digit() || b[i + 1] == b'.')
+    {
+        return true;
+    }
     let mut j = i;
     while j > 0 && b[j - 1].is_ascii_whitespace() {
         j -= 1;

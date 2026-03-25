@@ -13,6 +13,8 @@ use crate::rule::{Rule, RuleContext};
 pub struct ScssFunctionNoUnknown;
 
 /// Known CSS functions (sorted for binary search).
+/// Includes legacy/vendor functions that Stylelint's scss/function-no-unknown
+/// considers standard (e.g. `rect` for clip, `from`/`to`/`color-stop` for old WebKit gradients).
 static KNOWN_CSS_FUNCTIONS: &[&str] = &[
     "abs",
     "acos",
@@ -29,6 +31,7 @@ static KNOWN_CSS_FUNCTIONS: &[&str] = &[
     "clamp",
     "color",
     "color-mix",
+    "color-stop",
     "conic-gradient",
     "contrast",
     "cos",
@@ -44,6 +47,7 @@ static KNOWN_CSS_FUNCTIONS: &[&str] = &[
     "exp",
     "fit-content",
     "format",
+    "from",
     "grayscale",
     "hsl",
     "hsla",
@@ -78,6 +82,7 @@ static KNOWN_CSS_FUNCTIONS: &[&str] = &[
     "pow",
     "radial-gradient",
     "ray",
+    "rect",
     "rem",
     "repeat",
     "repeating-conic-gradient",
@@ -112,6 +117,7 @@ static KNOWN_CSS_FUNCTIONS: &[&str] = &[
     "symbols",
     "tan",
     "tech",
+    "to",
     "translate",
     "translate3d",
     "translatex",
@@ -261,6 +267,19 @@ impl Rule for ScssFunctionNoUnknown {
             return vec![];
         };
 
+        // Read `ignoreFunctions` from secondary options.
+        let ignore_functions: Vec<String> = ctx
+            .secondary_options()
+            .and_then(|v| v.get("ignoreFunctions"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(|s| s.to_ascii_lowercase())
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let mut diags = Vec::new();
         for decl in &rule.declarations {
             for func_name in extract_functions(&decl.value) {
@@ -281,6 +300,12 @@ impl Rule for ScssFunctionNoUnknown {
                     && pos > 0
                     && decl.value.as_bytes()[pos - 1] == b'.'
                 {
+                    continue;
+                }
+
+                // Skip functions in the user-supplied ignoreFunctions list
+                let func_lower = func_name.to_ascii_lowercase();
+                if ignore_functions.iter().any(|f| f == &func_lower) {
                     continue;
                 }
 

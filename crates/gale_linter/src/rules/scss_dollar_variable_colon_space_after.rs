@@ -46,6 +46,7 @@ impl Rule for ScssDollarVariableColonSpaceAfter {
         let bytes = source.as_bytes();
         let len = bytes.len();
         let mut i = 0;
+        let mut paren_depth: usize = 0;
 
         while i < len {
             // Skip line comments (`// ...`)
@@ -82,6 +83,19 @@ impl Rule for ScssDollarVariableColonSpaceAfter {
                 continue;
             }
 
+            // Track parentheses depth. $variable: inside parentheses is a
+            // mixin/function parameter default or named argument — not a declaration.
+            if bytes[i] == b'(' {
+                paren_depth += 1;
+                i += 1;
+                continue;
+            }
+            if bytes[i] == b')' {
+                paren_depth = paren_depth.saturating_sub(1);
+                i += 1;
+                continue;
+            }
+
             // Look for `$`
             if bytes[i] != b'$' {
                 i += 1;
@@ -105,6 +119,12 @@ impl Rule for ScssDollarVariableColonSpaceAfter {
 
             if j >= len || bytes[j] != b':' {
                 i = j;
+                continue;
+            }
+
+            // Skip $var: inside parentheses (mixin parameters, named arguments)
+            if paren_depth > 0 {
+                i = j + 1;
                 continue;
             }
 

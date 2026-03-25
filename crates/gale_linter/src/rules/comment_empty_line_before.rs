@@ -202,9 +202,22 @@ impl Rule for CommentEmptyLineBefore {
                     }
                 }
 
-                // Check for empty line before the comment
-                let trimmed = before.trim_end_matches([' ', '\t']);
-                if !trimmed.ends_with("\n\n") && !trimmed.ends_with("\r\n\r\n") {
+                // Check for empty line before the comment.
+                // An "empty line" is any line containing only whitespace.
+                let has_empty_line = {
+                    let b4 = before.trim_end_matches(|c: char| c == ' ' || c == '\t');
+                    if let Some(last_nl) = b4.rfind('\n') {
+                        let prev = &b4[..last_nl];
+                        if let Some(prev_nl) = prev.rfind('\n') {
+                            prev[prev_nl + 1..].trim().is_empty()
+                        } else {
+                            prev.trim().is_empty()
+                        }
+                    } else {
+                        false
+                    }
+                };
+                if !has_empty_line {
                     diags.push(
                         Diagnostic::new(
                             self.name(),

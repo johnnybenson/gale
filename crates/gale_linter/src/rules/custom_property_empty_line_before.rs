@@ -379,6 +379,12 @@ fn is_after_custom_property(source: &str, offset: usize) -> bool {
                 if s.starts_with('{') || s.ends_with('{') || s == "}" {
                     return false;
                 }
+                // Another complete statement (ends with `;`) — this is a
+                // separate declaration, not a continuation of the value.
+                // Stop scanning to avoid crossing into unrelated declarations.
+                if s.ends_with(';') {
+                    return false;
+                }
                 // Otherwise it's a continuation line of the value — keep scanning
             }
         }

@@ -227,6 +227,14 @@ fn check_at_rule_nodes(
             // Always recurse into children first
             check_at_rule_nodes(rule_impl, &at_rule.children, ctx, opts, diags);
 
+            // Skip non-standard at-rules: Stylelint's isStandardSyntaxAtRule returns false
+            // for at-rules with no params and no block (e.g. `@content;` inside mixins).
+            if at_rule.params.is_empty() && at_rule.children.is_empty()
+                && is_blockless_source(at_rule, ctx.source)
+            {
+                continue;
+            }
+
             // Check if this at-rule is in the ignoreAtRules list.
             // Match both exact names and prefix matches (e.g. "else" matches
             // both "@else" and "@else if").
@@ -373,13 +381,17 @@ fn check_at_rule_nodes(
 
         // Also recurse into style rules to find nested at-rules
         if let CssNode::Style(style) = node {
-            // Collect child nodes (nested style rules + nested at-rules)
+            // Collect child nodes (nested style rules + nested at-rules + declarations).
+            // Declarations must be included so that prev_non_comment() correctly
+            // identifies them as the previous sibling, preventing blockless-after-same-name-blockless
+            // from firing when declarations separate two @include calls.
             let mut child_nodes: Vec<CssNode> = style
                 .children
                 .iter()
                 .map(|sr| CssNode::Style(sr.clone()))
                 .collect();
             child_nodes.extend(style.nested_at_rules.iter().cloned());
+            child_nodes.extend(style.declarations.iter().map(|d| CssNode::Declaration(d.clone())));
             // Sort by offset so order is correct
             child_nodes.sort_by_key(|n| match n {
                 CssNode::Style(s) => s.span.offset,
