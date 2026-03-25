@@ -407,8 +407,7 @@ fn walk_scss_nodes(
                                         s.find(orig_part)
                                             .map(|o| style.span.offset + o + leading_len)
                                             .or_else(|| {
-                                                s.find(part_trimmed)
-                                                    .map(|o| style.span.offset + o)
+                                                s.find(part_trimmed).map(|o| style.span.offset + o)
                                             })
                                     })
                                     .unwrap_or(style.span.offset)
