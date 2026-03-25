@@ -189,10 +189,21 @@ fn parse_font_families_from_source(
         } else if bytes[i] == b';' || bytes[i] == b'}' {
             // End of declaration value
             break;
+        } else if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+            // Skip block comments inside the value (e.g. `/*rtl:...*/`).
+            i += 2;
+            while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                i += 1;
+            }
+            i += 2; // skip */
         } else {
-            // Unquoted name — spans multiple words until comma, semicolon, or end
+            // Unquoted name — spans multiple words until comma, semicolon, or comment end
             let start = i;
             while i < len && bytes[i] != b',' && bytes[i] != b';' && bytes[i] != b'}' {
+                // Stop at block comments (e.g. `serif/*rtl:...*/`)
+                if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+                    break;
+                }
                 // Stop at `!important`
                 if bytes[i] == b'!' {
                     // Check if this is `!important`
@@ -391,15 +402,46 @@ impl Rule for FontFamilyNameQuotes {
                 continue;
             }
 
-            if source.is_empty() {
-                // Without source, fall back to parsed value (less accurate)
+            if source.is_empty() || decl.span.length == 0 {
+                // Without source or span, fall back to parsed value (less accurate)
                 self.check_from_parsed_value(decl, mode, &mut diagnostics);
                 continue;
             }
 
-            // Use parsed value for checking — source scanning is fragile
-            // with multi-line values, SCSS variables, and CSS var().
-            self.check_from_parsed_value(decl, mode, &mut diagnostics);
+            // Use the original source text so that quote presence/absence is
+            // preserved exactly as written. lightningcss normalises font-family
+            // values and may strip quotes, producing false positives if we rely
+            // on the parsed value.
+            let value_start = find_value_start(source, decl.span.offset, decl.property.len());
+            let value_end = find_value_end(source, value_start);
+
+            // Determine the font-family portion for `font` shorthand.
+            let (family_start, family_end) = if prop_lower == "font" {
+                let fs = find_font_family_start_in_source(source, value_start, value_end)
+                    .unwrap_or(value_start);
+                (fs, value_end)
+            } else {
+                (value_start, value_end)
+            };
+
+            let families = parse_font_families_from_source(source, family_start, family_end);
+            for family in families {
+                // Skip SCSS variables, var(), interpolations, and other
+                // non-standard constructs that Stylelint also skips.
+                if family.name.starts_with('$')
+                    || family.name.starts_with("var(")
+                    || family.name.starts_with('@')
+                    || family.name.contains("#{")
+                    || family.name.contains('(')
+                    || family.name.contains(".$")
+                    || family.name.contains('{')
+                    || family.name.contains('}')
+                    || family.name.contains(';')
+                {
+                    continue;
+                }
+                self.check_family(&family, mode, &mut diagnostics);
+            }
         }
 
         diagnostics

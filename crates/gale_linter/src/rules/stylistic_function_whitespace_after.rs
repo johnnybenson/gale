@@ -116,8 +116,19 @@ impl Rule for StylisticFunctionWhitespaceAfter {
                 }
                 let close_paren = j;
 
-                // Check the character after the closing paren
-                let after = close_paren + 1;
+                // Check the character after the closing paren.
+                // Skip any block comment immediately following the paren
+                // (e.g. `rotate(90deg)/* rtl:ignore */;`) and look at what
+                // comes after the comment — if it is a natural terminator,
+                // no whitespace is required.
+                let mut after = close_paren + 1;
+                if after + 1 < len && bytes[after] == b'/' && bytes[after + 1] == b'*' {
+                    after += 2;
+                    while after + 1 < len && !(bytes[after] == b'*' && bytes[after + 1] == b'/') {
+                        after += 1;
+                    }
+                    after += 2; // skip */
+                }
                 if after < len {
                     let ch_after = bytes[after];
                     // Don't flag if followed by `)`, `,`, `;`, `}`, `{`, or newline — those are
@@ -202,5 +213,15 @@ mod tests {
     fn never_accepts_no_space() {
         let d = check("a { background: url(foo.png)no-repeat; }", "never");
         assert!(d.is_empty());
+    }
+
+    #[test]
+    fn always_accepts_comment_after_function_before_semicolon() {
+        // `rotate(90deg)/* rtl:ignore */;` — comment immediately after `)` then `;`
+        let d = check("a { transform: rotate(90deg)/* rtl:ignore */; }", "always");
+        assert!(
+            d.is_empty(),
+            "a comment between function close and semicolon should not require whitespace"
+        );
     }
 }

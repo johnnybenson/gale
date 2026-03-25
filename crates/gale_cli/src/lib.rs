@@ -212,10 +212,17 @@ fn discover_files(paths: &[String], opts: &DiscoverOptions<'_>) -> Vec<PathBuf> 
                     .parent()
                     .map(|p| p.to_string_lossy().to_string())
                     .unwrap_or_default();
-                if parent.is_empty() {
+                let candidate = if parent.is_empty() {
                     PathBuf::from(prefix)
                 } else {
                     PathBuf::from(parent)
+                };
+                // An empty path (e.g. when the pattern starts with `**` or `{`)
+                // is not a valid walk root — fall back to the current directory.
+                if candidate.as_os_str().is_empty() {
+                    PathBuf::from(".")
+                } else {
+                    candidate
                 }
             };
 
@@ -1306,5 +1313,26 @@ mod tests {
 
         // Should find all CSS files recursively: a.css, b.scss, sub/d.css, sub/e.less
         assert_eq!(files.len(), 4);
+    }
+
+    #[test]
+    fn test_glob_brace_expansion_css_scss() {
+        let tmp = tempfile::tempdir().unwrap();
+        create_test_tree(tmp.path());
+
+        // Brace expansion: should find both .css and .scss files recursively.
+        let pattern = format!("{}/**/*.{{css,scss}}", tmp.path().display());
+        let files = discover_files(&[pattern], &default_opts());
+
+        // a.css, b.scss, sub/d.css (not sub/e.less)
+        assert_eq!(files.len(), 3);
+    }
+
+    #[test]
+    fn test_glob_brace_expansion_relative() {
+        // Test that a bare `**/*.{css,scss}` (no absolute prefix, starting with **)
+        // resolves to cwd as the walk root and does not panic.
+        // We just verify that is_glob_pattern detects it correctly.
+        assert!(is_glob_pattern("**/*.{css,scss}"));
     }
 }

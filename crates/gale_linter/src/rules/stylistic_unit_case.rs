@@ -92,10 +92,47 @@ fn find_units(value: &str) -> Vec<(usize, String)> {
             continue;
         }
 
+        // Skip function calls (including var()), since their arguments may
+        // contain digits followed by letters that are not CSS units
+        // (e.g. var(--base0C) where `C` is part of a custom property name).
+        if bytes[i] == b'(' {
+            // Skip the entire parenthesised argument list (nested parens allowed)
+            let mut depth = 1;
+            i += 1;
+            while i < len && depth > 0 {
+                if bytes[i] == b'(' {
+                    depth += 1;
+                } else if bytes[i] == b')' {
+                    depth -= 1;
+                } else if bytes[i] == b'"' || bytes[i] == b'\'' {
+                    let q = bytes[i];
+                    i += 1;
+                    while i < len && bytes[i] != q {
+                        if bytes[i] == b'\\' {
+                            i += 1;
+                        }
+                        i += 1;
+                    }
+                }
+                i += 1;
+            }
+            continue;
+        }
+
         // Skip past a number (digits, dots)
         if bytes[i].is_ascii_digit()
             || (bytes[i] == b'.' && i + 1 < len && bytes[i + 1].is_ascii_digit())
         {
+            // Check that the digit is not part of an identifier (preceded by
+            // alphanumeric or `-` which would make it a name, not a number).
+            let preceded_by_ident = i > 0
+                && (bytes[i - 1].is_ascii_alphanumeric()
+                    || bytes[i - 1] == b'-'
+                    || bytes[i - 1] == b'_');
+            if preceded_by_ident {
+                i += 1;
+                continue;
+            }
             while i < len && (bytes[i].is_ascii_digit() || bytes[i] == b'.') {
                 i += 1;
             }
@@ -166,5 +203,16 @@ mod tests {
         let d = rule.check(&style_with_value("10Rem"), &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("\"rem\""));
+    }
+
+    #[test]
+    fn does_not_flag_var_custom_property_with_uppercase_letter() {
+        // `var(--base0C)` — the `C` is part of the custom property name, not a unit
+        let rule = StylisticUnitCase;
+        let d = rule.check(&style_with_value("var(--base0C)"), &ctx());
+        assert!(
+            d.is_empty(),
+            "uppercase letter in a CSS custom property name must not be flagged as a unit"
+        );
     }
 }

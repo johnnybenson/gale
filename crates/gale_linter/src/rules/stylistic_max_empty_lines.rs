@@ -72,7 +72,13 @@ impl Rule for StylisticMaxEmptyLines {
                     }
                     i += 1;
                 }
-                i += 2;
+                i += 2; // skip */
+                // The closing `*/` is non-empty content on the current line, so
+                // reset line_is_empty. Without this, a multi-line comment whose
+                // body ends with a newline (e.g. "/*\n * text\n */") would leave
+                // line_is_empty=true, making the `\n` after `*/` look like an
+                // extra empty line.
+                line_is_empty = false;
                 continue;
             }
 
@@ -161,5 +167,30 @@ mod tests {
         let source = "a { }\n\n\n\nb { }";
         let d = StylisticMaxEmptyLines.check_root(&[], &ctx_with_max(source, &max));
         assert!(!d.is_empty());
+    }
+
+    #[test]
+    fn multiline_comment_close_does_not_count_as_empty_line() {
+        // A multi-line comment whose last body line ends with \n before `*/`
+        // must not cause the line containing `*/` to count as empty.
+        // Bootstrap's cover.css starts with exactly this pattern.
+        let max = serde_json::json!(2);
+        let source = "/*\n * Globals\n */\n\n\n/* Custom button */\n.foo { }";
+        let d = StylisticMaxEmptyLines.check_root(&[], &ctx_with_max(source, &max));
+        assert!(
+            d.is_empty(),
+            "two empty lines after a multi-line comment should be allowed with max=2"
+        );
+    }
+
+    #[test]
+    fn three_empty_lines_after_multiline_comment_is_flagged() {
+        let max = serde_json::json!(2);
+        let source = "/*\n * Globals\n */\n\n\n\n/* Custom button */\n.foo { }";
+        let d = StylisticMaxEmptyLines.check_root(&[], &ctx_with_max(source, &max));
+        assert!(
+            !d.is_empty(),
+            "three empty lines after a multi-line comment should be flagged with max=2"
+        );
     }
 }
