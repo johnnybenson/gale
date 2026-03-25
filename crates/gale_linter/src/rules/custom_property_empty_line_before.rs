@@ -95,10 +95,7 @@ impl Rule for CustomPropertyEmptyLineBefore {
                 diags.push(
                     Diagnostic::new(
                         self.name(),
-                        format!(
-                            "Expected empty line before custom property \"{}\"",
-                            decl.property
-                        ),
+                        "Expected empty line before custom property".to_string(),
                     )
                     .severity(self.default_severity())
                     .span(Span::new(decl.span.offset, decl.span.length)),
@@ -107,10 +104,7 @@ impl Rule for CustomPropertyEmptyLineBefore {
                 diags.push(
                     Diagnostic::new(
                         self.name(),
-                        format!(
-                            "Unexpected empty line before custom property \"{}\"",
-                            decl.property
-                        ),
+                        "Unexpected empty line before custom property".to_string(),
                     )
                     .severity(self.default_severity())
                     .span(Span::new(decl.span.offset, decl.span.length)),
@@ -335,10 +329,8 @@ fn is_after_comment(source: &str, offset: usize) -> bool {
             }
             return true;
         }
+        // SCSS line comment on its own line
         if stripped.starts_with("//") {
-            return true;
-        }
-        if stripped.contains("//") {
             return true;
         }
         return false;
@@ -475,7 +467,7 @@ mod tests {
         });
         let d = CustomPropertyEmptyLineBefore.check(&node, &make_ctx_with_options(src, &opts));
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("--my-var"));
+        assert!(d[0].message.contains("custom property"));
     }
 
     #[test]

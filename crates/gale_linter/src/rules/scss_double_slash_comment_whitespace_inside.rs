@@ -108,13 +108,18 @@ impl Rule for ScssDoubleSlashCommentWhitespaceInside {
 
         let starts_with_space = content.starts_with(' ') || content.starts_with('\t');
 
+        // Stylelint points to the character right after `//`, not to `//` itself.
+        // comment.span.offset always points to the `//` in source (raffia stores
+        // text content without `//`, but span.start still includes the `//`).
+        let after_slashes = comment.span.offset + 2;
+
         match option {
             "always" => {
                 if !starts_with_space {
                     vec![
-                        Diagnostic::new(self.name(), "Expected whitespace after //".to_string())
+                        Diagnostic::new(self.name(), "Expected a space after //".to_string())
                             .severity(self.default_severity())
-                            .span(Span::new(comment.span.offset, comment.span.length)),
+                            .span(Span::new(after_slashes, 1)),
                     ]
                 } else {
                     vec![]
@@ -125,7 +130,7 @@ impl Rule for ScssDoubleSlashCommentWhitespaceInside {
                     vec![
                         Diagnostic::new(self.name(), "Unexpected whitespace after //".to_string())
                             .severity(self.default_severity())
-                            .span(Span::new(comment.span.offset, comment.span.length)),
+                            .span(Span::new(after_slashes, 1)),
                     ]
                 } else {
                     vec![]
@@ -171,7 +176,7 @@ mod tests {
         let d =
             ScssDoubleSlashCommentWhitespaceInside.check(&line_comment("//comment"), &scss_ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("Expected whitespace"));
+        assert!(d[0].message.contains("Expected a space"));
     }
 
     #[test]
@@ -245,7 +250,7 @@ mod tests {
         let d = ScssDoubleSlashCommentWhitespaceInside
             .check(&line_comment("//TODO fix this"), &scss_ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("Expected whitespace"));
+        assert!(d[0].message.contains("Expected a space"));
     }
 
     #[test]

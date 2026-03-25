@@ -400,6 +400,10 @@ impl Rule for UnitNoUnknown {
                     if decl.property.eq_ignore_ascii_case("unicode-range") {
                         continue;
                     }
+                    // Skip SCSS variable declarations ($var: value)
+                    if decl.property.starts_with('$') {
+                        continue;
+                    }
                     let value_offset =
                         find_value_offset(ctx.source, decl.span.offset, decl.span.length);
                     check_value(
@@ -456,6 +460,7 @@ impl Rule for UnitNoUnknown {
             CssNode::Declaration(decl) => {
                 if decl.property.eq_ignore_ascii_case("content")
                     || decl.property.eq_ignore_ascii_case("unicode-range")
+                    || decl.property.starts_with('$')
                 {
                     return vec![];
                 }

@@ -28,7 +28,7 @@ impl Rule for ScssNoDuplicateMixins {
 
         let mut seen: HashSet<String> = HashSet::new();
         let mut diagnostics = Vec::new();
-        collect_mixins(nodes, &mut seen, &mut diagnostics, self);
+        collect_mixins(nodes, &mut seen, &mut diagnostics, self, ctx.source);
         diagnostics
     }
 }
@@ -38,34 +38,43 @@ fn collect_mixins(
     seen: &mut HashSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
     rule: &ScssNoDuplicateMixins,
+    source: &str,
 ) {
     for node in nodes {
         match node {
             CssNode::AtRule(at) if at.name == "mixin" => {
-                // The mixin name is the first word in params.
-                let mixin_name = at.params.split_whitespace().next().unwrap_or("").trim();
-                // Also strip trailing `(` if present (e.g. `foo(` -> `foo`).
-                let mixin_name = mixin_name.trim_end_matches('(');
+                // The mixin name is everything before the first `(` or whitespace.
+                let raw = at.params.trim();
+                let mixin_name = raw
+                    .split(|c: char| c == '(' || c.is_whitespace())
+                    .next()
+                    .unwrap_or("")
+                    .trim();
                 if mixin_name.is_empty() {
                     continue;
                 }
                 if seen.contains(mixin_name) {
+                    // Point to the mixin name, not the `@mixin` keyword.
+                    // Stylelint message has no quotes around the name.
+                    let at_src_end = (at.span.offset + at.span.length).min(source.len());
+                    let at_src = &source[at.span.offset..at_src_end];
+                    let name_off = at_src.find(mixin_name).unwrap_or(0);
                     diagnostics.push(
                         Diagnostic::new(
                             rule.name(),
-                            format!("Unexpected duplicate mixin \"{}\"", mixin_name),
+                            format!("Unexpected duplicate mixin {}", mixin_name),
                         )
                         .severity(rule.default_severity())
-                        .span(Span::new(at.span.offset, at.span.length)),
+                        .span(Span::new(at.span.offset + name_off, mixin_name.len())),
                     );
                 } else {
                     seen.insert(mixin_name.to_string());
                 }
                 // Also recurse into children for nested mixins.
-                collect_mixins(&at.children, seen, diagnostics, rule);
+                collect_mixins(&at.children, seen, diagnostics, rule, source);
             }
             CssNode::AtRule(at) => {
-                collect_mixins(&at.children, seen, diagnostics, rule);
+                collect_mixins(&at.children, seen, diagnostics, rule, source);
             }
             _ => {}
         }
@@ -119,7 +128,7 @@ mod tests {
         let nodes = vec![mixin("foo"), mixin("bar"), mixin("foo")];
         let d = ScssNoDuplicateMixins.check_root(&nodes, &scss_ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("\"foo\""));
+        assert!(d[0].message.contains("foo"));
     }
 
     #[test]

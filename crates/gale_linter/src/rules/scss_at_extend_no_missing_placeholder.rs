@@ -34,16 +34,18 @@ impl Rule for ScssAtExtendNoMissingPlaceholder {
 
         let params = at.params.trim();
         if !params.starts_with('%') {
+            // Point to the selector, not the `@extend` keyword.
+            let at_src_end = (at.span.offset + at.span.length).min(ctx.source.len());
+            let at_src = &ctx.source[at.span.offset..at_src_end];
+            let sel_off = at_src.find(params).unwrap_or(0);
             vec![
                 Diagnostic::new(
                     self.name(),
-                    format!(
-                        "Expected @extend to use a %placeholder selector, got \"{}\"",
-                        params
-                    ),
+                    "Expected a placeholder selector (e.g. %placeholder) to be used in @extend"
+                        .to_string(),
                 )
                 .severity(self.default_severity())
-                .span(Span::new(at.span.offset, at.span.length)),
+                .span(Span::new(at.span.offset + sel_off, params.len())),
             ]
         } else {
             vec![]
@@ -78,7 +80,7 @@ mod tests {
     fn reports_non_placeholder() {
         let d = ScssAtExtendNoMissingPlaceholder.check(&extend(".foo"), &scss_ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains(".foo"));
+        assert!(d[0].message.contains("placeholder"));
     }
 
     #[test]

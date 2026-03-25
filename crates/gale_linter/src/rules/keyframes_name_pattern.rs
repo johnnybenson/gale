@@ -39,14 +39,19 @@ impl Rule for KeyframesNamePattern {
         }
 
         let pattern_str = ctx
-            .options
-            .and_then(|v| v.as_str())
+            .primary_option_str()
             .unwrap_or(DEFAULT_PATTERN);
 
         let re = match Regex::new(pattern_str) {
             Ok(r) => r,
             Err(_) => return vec![],
         };
+
+        // Read custom message from secondary options
+        let custom_message = ctx
+            .secondary_options()
+            .and_then(|v| v.get("message"))
+            .and_then(|v| v.as_str());
 
         let name = at.params.trim();
         if name.is_empty() {
@@ -67,15 +72,35 @@ impl Rule for KeyframesNamePattern {
             .unwrap_or(name);
 
         if !re.is_match(name) {
-            return vec![
-                Diagnostic::new(
-                    self.name(),
-                    format!(
-                        "Expected keyframes name \"{name}\" to match pattern \"{pattern_str}\""
-                    ),
+            let message = if let Some(tmpl) = custom_message {
+                tmpl.replace("${name}", name)
+            } else {
+                format!(
+                    "Expected keyframes name \"{name}\" to match pattern \"{pattern_str}\""
                 )
-                .severity(self.default_severity())
-                .span(Span::new(at.span.offset, at.span.length)),
+            };
+
+            // Compute the offset of the keyframes name in the source.
+            // The name starts after `@keyframes ` (or `@-webkit-keyframes `).
+            let name_offset = if at.span.offset < ctx.source.len() {
+                let source_slice = &ctx.source[at.span.offset..];
+                // Find where at.params starts in the source
+                let at_keyword = format!("@{}", at.name);
+                if let Some(kw_pos) = source_slice.find(&at_keyword) {
+                    let after_kw = &source_slice[kw_pos + at_keyword.len()..];
+                    let leading_ws = after_kw.len() - after_kw.trim_start().len();
+                    at.span.offset + kw_pos + at_keyword.len() + leading_ws
+                } else {
+                    at.span.offset
+                }
+            } else {
+                at.span.offset
+            };
+
+            return vec![
+                Diagnostic::new(self.name(), message)
+                    .severity(self.default_severity())
+                    .span(Span::new(name_offset, name.len())),
             ];
         }
 

@@ -31,9 +31,23 @@ impl Rule for ScssCommentNoEmpty {
             return vec![];
         };
 
-        // Skip line comments (`//`) — they are exempt in this SCSS rule.
         if comment.is_line {
-            return vec![];
+            // Flag empty line comments: `//` with nothing (or only whitespace) after.
+            // Raffia stores text after `//` in comment.text (without `//` prefix).
+            let content = if comment.text.starts_with("//") {
+                &comment.text[2..]
+            } else {
+                &comment.text
+            };
+            return if content.trim().is_empty() {
+                vec![
+                    Diagnostic::new(self.name(), "Unexpected empty comment")
+                        .severity(self.default_severity())
+                        .span(Span::new(comment.span.offset, comment.span.length)),
+                ]
+            } else {
+                vec![]
+            };
         }
 
         let inner = comment.text.trim_start_matches("/*").trim_end_matches("*/");
@@ -95,11 +109,23 @@ mod tests {
     }
 
     #[test]
-    fn skips_line_comments() {
+    fn reports_empty_line_comments() {
+        // A `//` with no content after it is an empty comment and should be flagged.
         let node = CssNode::Comment(Comment {
             is_line: true,
             text: "".to_string(),
             span: ParserSpan::new(0, 2),
+        });
+        let d = ScssCommentNoEmpty.check(&node, &scss_ctx());
+        assert_eq!(d.len(), 1);
+    }
+
+    #[test]
+    fn skips_non_empty_line_comments() {
+        let node = CssNode::Comment(Comment {
+            is_line: true,
+            text: " some text".to_string(),
+            span: ParserSpan::new(0, 12),
         });
         assert!(ScssCommentNoEmpty.check(&node, &scss_ctx()).is_empty());
     }

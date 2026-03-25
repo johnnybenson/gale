@@ -56,13 +56,17 @@ impl Rule for ScssAtRuleConditionalNoParentheses {
 
         // Check if the entire parameter is wrapped in parentheses
         if is_wrapped_in_parens(params) {
+            // Stylelint points to the `(` of the condition, not the `@if` keyword.
+            let at_src_end = (at.span.offset + at.span.length).min(ctx.source.len());
+            let at_src = &ctx.source[at.span.offset..at_src_end];
+            let paren_off = at_src.find('(').unwrap_or(0);
             vec![
                 Diagnostic::new(
                     self.name(),
-                    format!("Unexpected parentheses in conditional @{} rule", at.name),
+                    "Unexpected () used to surround statements for @-rules".to_string(),
                 )
                 .severity(self.default_severity())
-                .span(Span::new(at.span.offset, at.span.length)),
+                .span(Span::new(at.span.offset + paren_off, 1)),
             ]
         } else {
             vec![]
@@ -124,7 +128,7 @@ mod tests {
         let d =
             ScssAtRuleConditionalNoParentheses.check(&at_node("if", "($condition)"), &scss_ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("Unexpected parentheses"));
+        assert!(d[0].message.contains("Unexpected ()"));
     }
 
     #[test]

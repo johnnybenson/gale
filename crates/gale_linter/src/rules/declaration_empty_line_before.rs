@@ -24,143 +24,28 @@ impl Rule for DeclarationEmptyLineBefore {
     }
 
     fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
-        let CssNode::Style(rule) = node else {
-            return vec![];
-        };
         let opts = Options::from_ctx(ctx);
         let mut diags = Vec::new();
 
-        for decl in rule.declarations.iter() {
-            // Stylelint's declaration-empty-line-before only checks standard
-            // property declarations.  Custom properties (starting with `--`)
-            // are handled by `custom-property-empty-line-before` instead.
-            if decl.property.starts_with("--") {
-                continue;
+        match node {
+            CssNode::Style(rule) => {
+                let parent_span = rule.span;
+                for decl in rule.declarations.iter() {
+                    check_decl(self, decl, ctx, &opts, parent_span, &mut diags);
+                }
             }
-
-            // Skip SCSS variable declarations ($var: value)
-            if decl.property.starts_with('$') {
-                continue;
-            }
-
-            let decl_start = decl.span.offset;
-            if decl_start == 0 || decl_start > ctx.source.len() {
-                continue;
-            }
-
-            // Validate that the span actually points to this declaration in
-            // the source.  The parser may produce incorrect offsets when the
-            // property name also appears in the selector text.  We verify
-            // that after the property name there is a colon (possibly with
-            // whitespace), which distinguishes a real declaration from a
-            // coincidental match in a selector.
-            {
-                let after_prop = decl_start + decl.property.len();
-                if after_prop < ctx.source.len() {
-                    let rest = ctx.source[after_prop..].trim_start();
-                    if !rest.starts_with(':') {
-                        continue;
+            CssNode::AtRule(at_rule) => {
+                // Also check declarations inside SCSS at-rule bodies (e.g. @mixin, @if).
+                // Stylelint's declaration-empty-line-before uses walkDecls() which visits
+                // declarations inside @mixin and other at-rule bodies.
+                let parent_span = at_rule.span;
+                for child in at_rule.children.iter() {
+                    if let CssNode::Declaration(decl) = child {
+                        check_decl(self, decl, ctx, &opts, parent_span, &mut diags);
                     }
                 }
             }
-
-            // Check if this is first-nested (first content after the opening `{`).
-            let is_first = is_first_in_block_by_source(ctx.source, decl_start);
-
-            // When the declaration is the first thing after `{`, only look for
-            // empty lines between `{` and the declaration — not outside the
-            // block.  This prevents false positives for single-line blocks like
-            // `&::after { clear: both }` that follow an unrelated blank line.
-            let has_empty = if is_first {
-                has_empty_line_after_brace(ctx.source, decl_start)
-            } else {
-                has_empty_line_before(ctx.source, decl_start)
-            };
-
-            // Check if this is a single-line block
-            let is_single_line = is_single_line_block(ctx.source, rule);
-
-            // Check if preceded by a comment (look at source before the declaration)
-            let after_comment = is_after_comment(ctx.source, decl_start);
-
-            // Check if preceded by a block (rule or at-rule ending with `}`)
-            let after_block = is_after_block(ctx.source, decl_start);
-
-            // Check if preceded by another standard (non-custom) declaration.
-            // Use source-based analysis to correctly handle $var lines and
-            // other non-declaration content.
-            let after_declaration = is_after_declaration(ctx.source, decl_start);
-
-            // ignore: ["inside-single-line-block"]
-            if opts.ignore_inside_single_line_block && is_single_line {
-                continue;
-            }
-
-            // ignore: ["after-comment"]
-            if opts.ignore_after_comment && after_comment {
-                continue;
-            }
-
-            // ignore: ["after-declaration"]
-            if opts.ignore_after_declaration && after_declaration {
-                continue;
-            }
-
-            // ignore: ["first-nested"]
-            if opts.ignore_first_nested && is_first {
-                continue;
-            }
-
-            // Determine expectation
-            let expects_empty = match opts.primary {
-                PrimaryOption::Always => true,
-                PrimaryOption::Never => false,
-            };
-
-            let mut expectation = expects_empty;
-
-            // Apply exceptions — first match only (Stylelint behavior).
-            // Only the first matching exception flips the expectation.
-            let exception_matched = if opts.except_first_nested && is_first {
-                true
-            } else if opts.except_after_comment && after_comment {
-                true
-            } else if opts.except_after_declaration && after_declaration {
-                true
-            } else {
-                opts.except_after_block && after_block
-            };
-
-            if exception_matched {
-                expectation = !expectation;
-            }
-
-            // Report
-            if expectation && !has_empty {
-                diags.push(
-                    Diagnostic::new(
-                        self.name(),
-                        format!(
-                            "Expected empty line before declaration \"{}\"",
-                            decl.property
-                        ),
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(decl.span.offset, decl.span.length)),
-                );
-            } else if !expectation && has_empty {
-                diags.push(
-                    Diagnostic::new(
-                        self.name(),
-                        format!(
-                            "Unexpected empty line before declaration \"{}\"",
-                            decl.property
-                        ),
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(decl.span.offset, decl.span.length)),
-                );
-            }
+            _ => {}
         }
         diags
     }
@@ -428,10 +313,6 @@ fn is_after_comment(source: &str, offset: usize) -> bool {
         if stripped.starts_with("//") {
             return true;
         }
-        // If the line contains `//`, it has a trailing SCSS comment
-        if stripped.contains("//") {
-            return true;
-        }
         return false;
     }
     false
@@ -480,7 +361,53 @@ fn is_after_declaration(source: &str, offset: usize) -> bool {
         if stripped.is_empty() {
             continue;
         }
-        // Skip comments — but extract the code portion before inline comments
+        // Handle SCSS `//` comments. In PostCSS-SCSS, a `//` comment is a separate
+        // sibling node. Whether it is a "shared-line comment" (skipped by
+        // getPreviousNonSharedLineCommentNode) depends on whether getNodeLine(comment)
+        // == getNodeLine(comment.prev()) using START lines.
+        //
+        // When paren_depth == 0 (not inside a multi-line expression):
+        //   - A pure `//` line → non-shared-line comment → return false
+        //   - `X; // comment` where X has no `:` (e.g. `);`) → the comment is on a
+        //     different line than the preceding declaration's start → non-shared → false
+        //   - `decl: val; // comment` → X contains `:` → shared-line → strip comment
+        //
+        // When paren_depth > 0 (inside a multi-line expression, e.g. `calc(`):
+        //   - `//` comments are part of the value text, not siblings → strip and continue
+        let stripped = if !stripped.starts_with("//") {
+            if let Some(comment_pos) = stripped.find("//") {
+                let before_comment = stripped[..comment_pos].trim_end();
+                if before_comment.is_empty() {
+                    if paren_depth == 0 {
+                        // Standalone `//` line at top level → non-shared-line comment
+                        return false;
+                    }
+                    continue;
+                }
+                if paren_depth == 0 {
+                    if before_comment.contains(':') {
+                        // `decl: val; // comment` → shared-line with declaration start
+                        before_comment
+                    } else {
+                        // `); // comment` or similar → non-shared-line comment → false
+                        return false;
+                    }
+                } else {
+                    // Inside multi-line parens: strip comment, continue paren tracking
+                    before_comment
+                }
+            } else {
+                stripped
+            }
+        } else {
+            // Pure `//` comment line
+            if paren_depth == 0 {
+                return false;
+            }
+            continue;
+        };
+
+        // Skip pure comment lines
         if stripped.starts_with("//") || stripped.starts_with("/*") || stripped.ends_with("*/") {
             if let Some(comment_start) = stripped.find("/*") {
                 let before_comment = stripped[..comment_start].trim();
@@ -613,14 +540,149 @@ fn is_declaration_like(line: &str) -> bool {
     true
 }
 
-/// Check if the style rule is a single-line block.
-fn is_single_line_block(source: &str, rule: &gale_css_parser::StyleRule) -> bool {
-    let start = rule.span.offset;
-    let end = (start + rule.span.length).min(source.len());
+/// Check if the parent block is a single-line block (given its span).
+fn is_single_line_block(source: &str, span: gale_css_parser::Span) -> bool {
+    let start = span.offset;
+    let end = (start + span.length).min(source.len());
     if start >= source.len() {
         return false;
     }
     !source[start..end].contains('\n')
+}
+
+/// Check and possibly emit a diagnostic for a single declaration.
+fn check_decl(
+    rule_impl: &DeclarationEmptyLineBefore,
+    decl: &gale_css_parser::Declaration,
+    ctx: &RuleContext,
+    opts: &Options,
+    parent_span: gale_css_parser::Span,
+    diags: &mut Vec<Diagnostic>,
+) {
+    // Stylelint's declaration-empty-line-before only checks standard
+    // property declarations.  Custom properties (starting with `--`)
+    // are handled by `custom-property-empty-line-before` instead.
+    if decl.property.starts_with("--") {
+        return;
+    }
+
+    // Skip SCSS variable declarations ($var: value)
+    if decl.property.starts_with('$') {
+        return;
+    }
+
+    let decl_start = decl.span.offset;
+    if decl_start == 0 || decl_start > ctx.source.len() {
+        return;
+    }
+
+    // Validate that the span actually points to this declaration in
+    // the source.  The parser may produce incorrect offsets when the
+    // property name also appears in the selector text.  We verify
+    // that after the property name there is a colon (possibly with
+    // whitespace), which distinguishes a real declaration from a
+    // coincidental match in a selector.
+    {
+        let after_prop = decl_start + decl.property.len();
+        if after_prop < ctx.source.len() {
+            let rest = ctx.source[after_prop..].trim_start();
+            if !rest.starts_with(':') {
+                return;
+            }
+        }
+    }
+
+    // Check if this is first-nested (first content after the opening `{`).
+    let is_first = is_first_in_block_by_source(ctx.source, decl_start);
+
+    // When the declaration is the first thing after `{`, only look for
+    // empty lines between `{` and the declaration — not outside the
+    // block.  This prevents false positives for single-line blocks like
+    // `&::after { clear: both }` that follow an unrelated blank line.
+    let has_empty = if is_first {
+        has_empty_line_after_brace(ctx.source, decl_start)
+    } else {
+        has_empty_line_before(ctx.source, decl_start)
+    };
+
+    // Check if this is a single-line block
+    let is_single_line = is_single_line_block(ctx.source, parent_span);
+
+    // Check if preceded by a comment (look at source before the declaration)
+    let after_comment = is_after_comment(ctx.source, decl_start);
+
+    // Check if preceded by a block (rule or at-rule ending with `}`)
+    let after_block = is_after_block(ctx.source, decl_start);
+
+    // Check if preceded by another standard (non-custom) declaration.
+    // Use source-based analysis to correctly handle $var lines and
+    // other non-declaration content.
+    let after_declaration = is_after_declaration(ctx.source, decl_start);
+
+    // ignore: ["inside-single-line-block"]
+    if opts.ignore_inside_single_line_block && is_single_line {
+        return;
+    }
+
+    // ignore: ["after-comment"]
+    if opts.ignore_after_comment && after_comment {
+        return;
+    }
+
+    // ignore: ["after-declaration"]
+    if opts.ignore_after_declaration && after_declaration {
+        return;
+    }
+
+    // ignore: ["first-nested"]
+    if opts.ignore_first_nested && is_first {
+        return;
+    }
+
+    // Determine expectation
+    let expects_empty = match opts.primary {
+        PrimaryOption::Always => true,
+        PrimaryOption::Never => false,
+    };
+
+    let mut expectation = expects_empty;
+
+    // Apply exceptions — first match only (Stylelint behavior).
+    // Only the first matching exception flips the expectation.
+    let exception_matched = if opts.except_first_nested && is_first {
+        true
+    } else if opts.except_after_comment && after_comment {
+        true
+    } else if opts.except_after_declaration && after_declaration {
+        true
+    } else {
+        opts.except_after_block && after_block
+    };
+
+    if exception_matched {
+        expectation = !expectation;
+    }
+
+    // Report
+    if expectation && !has_empty {
+        diags.push(
+            Diagnostic::new(
+                rule_impl.name(),
+                "Expected empty line before declaration".to_string(),
+            )
+            .severity(rule_impl.default_severity())
+            .span(Span::new(decl.span.offset, decl.span.length)),
+        );
+    } else if !expectation && has_empty {
+        diags.push(
+            Diagnostic::new(
+                rule_impl.name(),
+                "Unexpected empty line before declaration".to_string(),
+            )
+            .severity(rule_impl.default_severity())
+            .span(Span::new(decl.span.offset, decl.span.length)),
+        );
+    }
 }
 
 #[cfg(test)]
@@ -676,7 +738,7 @@ mod tests {
         });
         let d = DeclarationEmptyLineBefore.check(&node, &make_ctx(src));
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("display"));
+        assert!(d[0].message.contains("empty line before declaration"));
     }
 
     #[test]

@@ -80,16 +80,23 @@ impl Rule for DeclarationPropertyValueKeywordNoDeprecated {
                     continue;
                 }
 
+                // Find the keyword in the source to report the correct column.
+                let decl_src_end = (decl.span.offset + decl.span.length).min(ctx.source.len());
+                let decl_src = &ctx.source[decl.span.offset..decl_src_end];
+                let kw_off = decl_src
+                    .to_ascii_lowercase()
+                    .find(keyword)
+                    .unwrap_or(0);
                 diags.push(
                     Diagnostic::new(
                         self.name(),
                         format!(
-                            "Unexpected deprecated keyword \"{}\" for property \"{}\". Use \"{}\" instead.",
-                            keyword, decl.property, suggestion
+                            "Unexpected deprecated keyword \"{}\" for property \"{}\"",
+                            keyword, decl.property
                         ),
                     )
                     .severity(self.default_severity())
-                    .span(Span::new(decl.span.offset, decl.span.length)),
+                    .span(Span::new(decl.span.offset + kw_off, keyword.len())),
                 );
             }
         }
@@ -134,7 +141,6 @@ mod tests {
         let d = DeclarationPropertyValueKeywordNoDeprecated.check(&node, &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("overlay"));
-        assert!(d[0].message.contains("auto"));
     }
 
     #[test]
@@ -143,7 +149,6 @@ mod tests {
         let d = DeclarationPropertyValueKeywordNoDeprecated.check(&node, &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("distribute"));
-        assert!(d[0].message.contains("inter-character"));
     }
 
     #[test]
@@ -152,7 +157,6 @@ mod tests {
         let d = DeclarationPropertyValueKeywordNoDeprecated.check(&node, &ctx());
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("break-word"));
-        assert!(d[0].message.contains("overflow-wrap: anywhere"));
     }
 
     #[test]

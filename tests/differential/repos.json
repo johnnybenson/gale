@@ -158,5 +158,13 @@
     "paths": ["ui"],
     "globs": ["ui/**/*.scss"],
     "notes": "Salesforce Lightning design system (2k stars). SCSS-heavy."
+  },
+  {
+    "name": "rsuite",
+    "repo": "rsuite/rsuite",
+    "branch": "main",
+    "paths": ["src"],
+    "globs": ["src/**/*.scss"],
+    "notes": "React UI library (8.7k stars). stylelint-config-standard-scss v15, stylelint v16."
   }
 ]

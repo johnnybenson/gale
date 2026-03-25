@@ -64,6 +64,15 @@ impl Rule for ColorFunctionNotation {
         let mut diags = Vec::new();
         for decl in &rule.declarations {
             let lower = decl.value.to_ascii_lowercase();
+
+            // Pre-compute: find where the value starts within the declaration source.
+            // This lets us map a byte-position in `decl.value` → byte-position in source.
+            let decl_src_end = (decl.span.offset + decl.span.length).min(ctx.source.len());
+            let decl_src = &ctx.source[decl.span.offset..decl_src_end];
+            let decl_src_lower = decl_src.to_ascii_lowercase();
+            // The value may not match exactly (multi-line whitespace differences), so fall back to 0.
+            let val_start_in_decl = decl_src_lower.find(lower.as_str()).unwrap_or(0);
+
             for &func in COLOR_FUNCTIONS {
                 let mut search_from = 0;
                 while let Some(pos) = lower[search_from..].find(func) {
@@ -77,16 +86,16 @@ impl Rule for ColorFunctionNotation {
                                 search_from = abs_pos + 1;
                                 continue;
                             }
-                            let fn_name = &func[..func.len() - 1]; // strip trailing (
+                            let fn_name = &func[..func.len() - 1]; // strip trailing '('
+                            // Use abs_pos (position in value) to locate this specific occurrence.
+                            let fn_off = val_start_in_decl + abs_pos;
                             diags.push(
                                 Diagnostic::new(
                                     self.name(),
-                                    format!(
-                                        "Expected modern color function notation for {fn_name}()"
-                                    ),
+                                    "Expected modern color-function notation".to_string(),
                                 )
                                 .severity(self.default_severity())
-                                .span(Span::new(decl.span.offset, decl.span.length)),
+                                .span(Span::new(decl.span.offset + fn_off, fn_name.len())),
                             );
                         }
                     }
@@ -130,7 +139,7 @@ mod tests {
     fn reports_legacy_rgb() {
         let d = ColorFunctionNotation.check(&style_with_value("rgb(0, 0, 0)"), &ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("rgb()"));
+        assert!(d[0].message.contains("color-function notation"));
     }
 
     #[test]
@@ -143,7 +152,7 @@ mod tests {
     fn reports_legacy_hsl() {
         let d = ColorFunctionNotation.check(&style_with_value("hsl(0, 100%, 50%)"), &ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("hsl()"));
+        assert!(d[0].message.contains("color-function notation"));
     }
 
     #[test]

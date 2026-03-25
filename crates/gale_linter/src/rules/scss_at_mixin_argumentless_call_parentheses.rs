@@ -83,16 +83,21 @@ impl Rule for ScssAtMixinArgumentlessCallParentheses {
             }
             "never" => {
                 if has_parens {
+                    let mixin_name = params.trim_end_matches("()");
+                    // Point to the mixin name, not the `@include` keyword.
+                    let at_src_end = (at.span.offset + at.span.length).min(ctx.source.len());
+                    let at_src = &ctx.source[at.span.offset..at_src_end];
+                    let name_off = at_src.find(mixin_name).unwrap_or(0);
                     vec![
                         Diagnostic::new(
                             self.name(),
                             format!(
-                                "Unexpected parentheses in argumentless @include \"{}\"",
-                                params
+                                "Unexpected parentheses in argumentless mixin \"{}\" call",
+                                mixin_name
                             ),
                         )
                         .severity(self.default_severity())
-                        .span(Span::new(at.span.offset, at.span.length)),
+                        .span(Span::new(at.span.offset + name_off, mixin_name.len())),
                     ]
                 } else {
                     vec![]

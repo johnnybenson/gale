@@ -215,7 +215,7 @@ impl Rule for ShorthandPropertyNoRedundantValues {
 
                 let mut diag = Diagnostic::new(
                     self.name(),
-                    format!("Expected \"{}\" instead of \"{}\"", shortened, raw_value),
+                    format!("Expected \"{}\" to be \"{}\"", raw_value, shortened),
                 )
                 .severity(self.default_severity())
                 .span(Span::new(value_offset, raw_value.len()));
@@ -400,7 +400,7 @@ fn check_border_radius(
             let fix = build_fix_from_raw(ctx.source, decl, raw_value, &shortened);
             let mut diag = Diagnostic::new(
                 rule_name,
-                format!("Expected \"{}\" instead of \"{}\"", shortened, raw_value),
+                format!("Expected \"{}\" to be \"{}\"", raw_value, shortened),
             )
             .severity(Severity::Warning)
             .span(Span::new(value_offset, raw_value.len()));
@@ -421,7 +421,7 @@ fn check_border_radius(
             let fix = build_fix_from_raw(ctx.source, decl, raw_value, &shortened);
             let mut diag = Diagnostic::new(
                 rule_name,
-                format!("Expected \"{}\" instead of \"{}\"", shortened, raw_value),
+                format!("Expected \"{}\" to be \"{}\"", raw_value, shortened),
             )
             .severity(Severity::Warning)
             .span(Span::new(value_offset, raw_value.len()));

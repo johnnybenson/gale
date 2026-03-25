@@ -142,7 +142,7 @@ impl Rule for DeclarationBlockNoShorthandPropertyOverrides {
                             Diagnostic::new(
                                 self.name(),
                                 format!(
-                                    "Unexpected shorthand property \"{}\" after its longhand \"{}\"",
+                                    "Unexpected shorthand \"{}\" after \"{}\"",
                                     prop, longhand,
                                 ),
                             )
@@ -208,8 +208,8 @@ mod tests {
         });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
-        assert!(diags[0].message.contains("border"));
-        assert!(diags[0].message.contains("border-color"));
+        assert!(diags[0].message.contains("\"border\""));
+        assert!(diags[0].message.contains("\"border-color\""));
     }
 
     #[test]
@@ -262,7 +262,7 @@ mod tests {
         });
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
-        assert!(diags[0].message.contains("font"));
-        assert!(diags[0].message.contains("font-weight"));
+        assert!(diags[0].message.contains("\"font\""));
+        assert!(diags[0].message.contains("\"font-weight\""));
     }
 }

@@ -61,6 +61,10 @@ impl Rule for ScssDollarVariablePattern {
             },
             None => false,
         };
+        let custom_message = secondary
+            .and_then(|obj| obj.get("message"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
 
         let mut diagnostics = Vec::new();
 
@@ -70,11 +74,11 @@ impl Rule for ScssDollarVariablePattern {
                 &re,
                 pattern_str,
                 false, // not inside an at-rule at top level
-                false, // not inside a loop at top level
                 false, // not inside any block at top level
                 &HashSet::new(),
                 ignore_inside_at_rule,
                 ignore_local,
+                custom_message.as_deref(),
                 &mut diagnostics,
             );
         }
@@ -85,17 +89,18 @@ impl Rule for ScssDollarVariablePattern {
 
 impl ScssDollarVariablePattern {
     /// Recursively walk the AST, tracking at-rule context and loop variables.
+    #[allow(clippy::too_many_arguments)]
     fn walk(
         &self,
         node: &CssNode,
         re: &Regex,
         pattern_str: &str,
         inside_at_rule: bool,
-        inside_loop: bool,
         inside_block: bool,
         loop_vars: &HashSet<String>,
         ignore_inside_at_rule: bool,
         ignore_local: bool,
+        custom_message: Option<&str>,
         diagnostics: &mut Vec<Diagnostic>,
     ) {
         match node {
@@ -109,8 +114,10 @@ impl ScssDollarVariablePattern {
                     return;
                 }
 
-                // Always skip ALL variable declarations inside @each / @for loops.
-                if inside_loop {
+                // Skip the loop iterator variables themselves (e.g., $color in
+                // `@each $color in $list`). Other variables declared inside loops
+                // are still checked, matching Stylelint-scss behavior.
+                if loop_vars.contains(var_name) {
                     return;
                 }
 
@@ -125,13 +132,15 @@ impl ScssDollarVariablePattern {
                 }
 
                 if !re.is_match(var_name) {
+                    let message = custom_message
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| {
+                            "Expected $ variable name to match specified pattern".to_string()
+                        });
                     diagnostics.push(
-                        Diagnostic::new(
-                            self.name(),
-                            "Expected $ variable name to match specified pattern".to_string(),
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(decl.span.offset, decl.span.length)),
+                        Diagnostic::new(self.name(), message)
+                            .severity(self.default_severity())
+                            .span(Span::new(decl.span.offset, decl.span.length)),
                     );
                 }
             }
@@ -140,8 +149,6 @@ impl ScssDollarVariablePattern {
                 // Extract loop variable names from @each and @for params.
                 let mut child_loop_vars = loop_vars.clone();
                 let name_lower = at_rule.name.to_lowercase();
-
-                let is_loop = name_lower == "each" || name_lower == "for";
 
                 if name_lower == "each" {
                     // @each $var1, $var2 in $list
@@ -159,11 +166,11 @@ impl ScssDollarVariablePattern {
                         re,
                         pattern_str,
                         true, // inside an at-rule
-                        inside_loop || is_loop,
                         true, // inside a block
                         &child_loop_vars,
                         ignore_inside_at_rule,
                         ignore_local,
+                        custom_message,
                         diagnostics,
                     );
                 }
@@ -178,11 +185,11 @@ impl ScssDollarVariablePattern {
                         re,
                         pattern_str,
                         inside_at_rule,
-                        inside_loop,
                         true, // inside a style rule block
                         loop_vars,
                         ignore_inside_at_rule,
                         ignore_local,
+                        custom_message,
                         diagnostics,
                     );
                 }
@@ -194,11 +201,11 @@ impl ScssDollarVariablePattern {
                         re,
                         pattern_str,
                         inside_at_rule,
-                        inside_loop,
                         true, // inside a style rule block
                         loop_vars,
                         ignore_inside_at_rule,
                         ignore_local,
+                        custom_message,
                         diagnostics,
                     );
                 }
@@ -390,9 +397,9 @@ mod tests {
     }
 
     #[test]
-    fn ignores_all_vars_inside_each_loop() {
+    fn reports_non_loop_vars_inside_each_loop() {
         // @each $name in $list { $otherBad: "test"; }
-        // All variable declarations inside @each are ignored (matches stylelint-scss)
+        // $otherBad is NOT the loop iterator — should still be checked.
         let nodes = vec![CssNode::AtRule(ParserAtRule {
             name: "each".to_string(),
             params: "$name in $list".to_string(),
@@ -404,11 +411,9 @@ mod tests {
                 important: false,
             })],
         })];
-        assert!(
-            ScssDollarVariablePattern
-                .check_root(&nodes, &scss_ctx())
-                .is_empty()
-        );
+        let d = ScssDollarVariablePattern.check_root(&nodes, &scss_ctx());
+        assert_eq!(d.len(), 1);
+        assert!(d[0].message.contains("Expected $ variable name"));
     }
 
     // -- ignoreInside tests --
@@ -605,9 +610,9 @@ mod tests {
     }
 
     #[test]
-    fn still_reports_non_matching_var_outside_loop() {
+    fn still_reports_non_matching_vars_inside_and_outside_loop() {
         // $myBadVar: red;  (top-level, camelCase, doesn't match default kebab pattern)
-        // @each $name in $list { ... }
+        // @each $name in $list { $localVar: "test"; }  ($localVar also doesn't match)
         let nodes = vec![
             dollar_var("$myBadVar"),
             CssNode::AtRule(ParserAtRule {
@@ -623,9 +628,8 @@ mod tests {
             }),
         ];
         let d = ScssDollarVariablePattern.check_root(&nodes, &scss_ctx());
-        // Only the top-level $myBadVar should be reported, not $localVar inside @each
-        assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("Expected $ variable name"));
+        // Both $myBadVar and $localVar should be reported (neither is a loop iterator)
+        assert_eq!(d.len(), 2);
     }
 
     #[test]

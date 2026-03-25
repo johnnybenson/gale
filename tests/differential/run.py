@@ -480,7 +480,7 @@ def print_report(repo_name: str, report: dict):
             print(f"  {rule:<50} {rule_fn[rule]:<8} {rule_fp[rule]:<8}")
 
     # Show first N file diffs
-    max_diffs = 5
+    max_diffs = 50
     shown = 0
     for diff in report["diffs"]:
         if shown >= max_diffs:

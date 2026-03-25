@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use gale_css_parser::CssNode;
+use gale_css_parser::{CssNode, Syntax};
 use gale_diagnostics::{Diagnostic, Severity, SourceLineIndex, Span};
 
 use crate::rule::{Rule, RuleContext};
@@ -27,102 +27,83 @@ impl Rule for NoDuplicateSelectors {
         let line_index = SourceLineIndex::build(context.source);
         let mut seen: HashMap<String, usize> = HashMap::new();
         let mut diagnostics = Vec::new();
+        let is_scss = matches!(context.syntax, Syntax::Scss | Syntax::Sass | Syntax::Less);
 
         collect_selectors(
             nodes,
+            &[],
             &mut seen,
             &mut diagnostics,
             self,
             &line_index,
             context.source,
+            is_scss,
         );
 
         diagnostics
     }
 }
 
-fn collect_selectors(
-    nodes: &[CssNode],
-    seen: &mut HashMap<String, usize>,
-    diagnostics: &mut Vec<Diagnostic>,
-    rule: &NoDuplicateSelectors,
-    line_index: &SourceLineIndex,
-    source: &str,
-) {
-    for node in nodes {
-        match node {
-            CssNode::Style(style_rule) => {
-                // Stylelint skips selectors with SCSS/Less interpolation
-                // (non-standard syntax).
-                let raw = style_rule.selector.trim();
-                if raw.contains("#{") || raw.contains("@{") {
-                    continue;
+/// Split a selector list by commas (respecting parentheses), returning trimmed parts.
+/// Matches PostCSS `list.comma` behavior which trims all elements.
+fn split_and_trim(selector: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut depth: usize = 0;
+    let mut start = 0;
+    let bytes = selector.as_bytes();
+    for (i, &b) in bytes.iter().enumerate() {
+        match b {
+            b'(' => depth += 1,
+            b')' => depth = depth.saturating_sub(1),
+            b',' if depth == 0 => {
+                let part = selector[start..i].trim().to_string();
+                if !part.is_empty() {
+                    parts.push(part);
                 }
-                let selector = normalize_selector(raw);
-
-                // Use the original source text for the message to preserve
-                // exact formatting (whitespace, quoting, etc.).
-                let display_selector = {
-                    let start = style_rule.span.offset;
-                    let end = (start + style_rule.selector.len()).min(source.len());
-                    if start < source.len() {
-                        // Extract from source and trim to the selector
-                        // (before the opening brace).
-                        let src = &source[start..end];
-                        let trimmed = src.trim();
-                        if trimmed.is_empty() { raw } else { trimmed }
-                    } else {
-                        raw
-                    }
-                };
-
-                if let Some(&first_line) = seen.get(&selector) {
-                    diagnostics.push(
-                        Diagnostic::new(
-                            rule.name(),
-                            format!(
-                                "Unexpected duplicate selector \"{}\", first used at line {}",
-                                display_selector, first_line,
-                            ),
-                        )
-                        .severity(rule.default_severity())
-                        .span(Span::new(style_rule.span.offset, style_rule.span.length)),
-                    );
-                } else {
-                    let (line, _) = line_index.offset_to_location(style_rule.span.offset);
-                    seen.insert(selector, line);
-                }
-            }
-            CssNode::AtRule(at_rule) => {
-                // Use a separate scope for at-rule children so that selectors
-                // inside different at-rules (e.g. @media) don't clash with
-                // top-level selectors.
-                let mut scoped_seen = HashMap::new();
-                collect_selectors(
-                    &at_rule.children,
-                    &mut scoped_seen,
-                    diagnostics,
-                    rule,
-                    line_index,
-                    source,
-                );
+                start = i + 1;
             }
             _ => {}
         }
     }
+    let last = selector[start..].trim().to_string();
+    if !last.is_empty() {
+        parts.push(last);
+    }
+    parts
 }
 
-/// Normalize a selector for duplicate comparison.
-///
-/// Sorts comma-separated selector lists so that `a, b` and `b, a` are
-/// considered the same. Also trims whitespace around each part.
-fn normalize_selector(selector: &str) -> String {
-    let mut parts: Vec<String> = selector
-        .split(',')
+/// Expand a SCSS/Less child selector against parent selectors.
+/// Uses trimmed child parts (matching PostCSS `list.comma` behavior).
+fn expand_selector(parents: &[String], child: &str) -> Vec<String> {
+    let child_parts = split_and_trim(child);
+    let mut results = Vec::new();
+    for child_part in &child_parts {
+        if child_part.is_empty() {
+            continue;
+        }
+        if child_part.contains('&') {
+            for parent in parents {
+                let expanded = child_part.replace('&', parent.as_str());
+                results.push(expanded);
+            }
+        } else {
+            for parent in parents {
+                results.push(format!("{} {}", parent, child_part));
+            }
+        }
+    }
+    results
+}
+
+/// Normalize a set of expanded selectors for duplicate comparison.
+/// Sorts the selectors and collapses whitespace.
+fn normalize_expanded(selectors: &[String]) -> String {
+    let mut normalized: Vec<String> = selectors
+        .iter()
         .map(|s| collapse_whitespace(s.trim()))
         .collect();
-    parts.sort_unstable();
-    parts.join(", ")
+    normalized.sort_unstable();
+    normalized.join(", ")
 }
 
 /// Collapse runs of whitespace into a single space.
@@ -141,6 +122,129 @@ fn collapse_whitespace(s: &str) -> String {
         }
     }
     result
+}
+
+/// Walk CSS/SCSS/Less nodes recursively, checking for duplicate selectors.
+///
+/// `parent_selectors`: expanded parent selectors for `&` substitution (SCSS).
+/// `seen`: maps normalized expanded selector → first occurrence line number.
+/// At-rules create fresh `seen` scopes (matching Stylelint's `nodeContextLookup`).
+fn collect_selectors(
+    nodes: &[CssNode],
+    parent_selectors: &[String],
+    seen: &mut HashMap<String, usize>,
+    diagnostics: &mut Vec<Diagnostic>,
+    rule: &NoDuplicateSelectors,
+    line_index: &SourceLineIndex,
+    source: &str,
+    is_scss: bool,
+) {
+    for node in nodes {
+        match node {
+            CssNode::Style(style_rule) => {
+                let raw = style_rule.selector.trim();
+
+                // Skip selectors with preprocessor interpolation (non-standard).
+                // Stylelint's isStandardSyntaxRule returns false for these.
+                let is_standard = !raw.contains("#{") && !raw.contains("@{");
+
+                // Compute the expanded selectors for comparison.
+                // Non-standard selectors still get placeholder parents for child
+                // recursion (children need to know their non-standard parent context).
+                let expanded: Vec<String> = if is_scss && !parent_selectors.is_empty() {
+                    expand_selector(parent_selectors, raw)
+                } else {
+                    // Top-level rule or CSS: use the selector parts as-is.
+                    split_and_trim(raw)
+                };
+
+                // Only check standard selectors (matching Stylelint's isStandardSyntaxRule).
+                // Also skip if any expanded selector contains SCSS interpolation — postcss-selector-parser
+                // fails to parse such selectors in Stylelint, causing no-duplicate-selectors to skip them.
+                let expanded_is_standard = !expanded.iter().any(|s| s.contains("#{") || s.contains("@{"));
+                if is_standard && expanded_is_standard && !expanded.is_empty() {
+                    let normalized_key = normalize_expanded(&expanded);
+                    let (line, _) = line_index.offset_to_location(style_rule.span.offset);
+
+                    if let Some(&first_line) = seen.get(&normalized_key) {
+                        diagnostics.push(
+                            Diagnostic::new(
+                                rule.name(),
+                                format!(
+                                    "Unexpected duplicate selector \"{}\", first used at line {}",
+                                    raw, first_line,
+                                ),
+                            )
+                            .severity(rule.default_severity())
+                            .span(Span::new(style_rule.span.offset, style_rule.span.length)),
+                        );
+                    } else {
+                        seen.insert(normalized_key, line);
+                    }
+                }
+
+                // Compute parent selectors for child recursion.
+                // For SCSS, pass the expanded versions (or the raw selector if
+                // at the top level / non-expandable).
+                let new_parents: Vec<String> = if is_scss {
+                    if parent_selectors.is_empty() {
+                        split_and_trim(raw)
+                    } else {
+                        expand_selector(parent_selectors, raw)
+                    }
+                } else {
+                    vec![]
+                };
+
+                // Recurse into nested style rules (SCSS nesting).
+                let children_nodes: Vec<CssNode> = style_rule
+                    .children
+                    .iter()
+                    .map(|c| CssNode::Style(c.clone()))
+                    .collect();
+                collect_selectors(
+                    &children_nodes,
+                    &new_parents,
+                    seen,
+                    diagnostics,
+                    rule,
+                    line_index,
+                    source,
+                    is_scss,
+                );
+
+                // Recurse into nested at-rules (e.g. `@media` inside a rule).
+                collect_selectors(
+                    &style_rule.nested_at_rules,
+                    &new_parents,
+                    seen,
+                    diagnostics,
+                    rule,
+                    line_index,
+                    source,
+                    is_scss,
+                );
+            }
+            CssNode::AtRule(at_rule) => {
+                // Each at-rule establishes a fresh duplicate-detection scope,
+                // matching Stylelint's `nodeContextLookup` behaviour.
+                // Pass the current parent_selectors through (at-rules don't reset
+                // the `&` context — only the duplicate-detection scope resets).
+                let mut scoped_seen = HashMap::new();
+                collect_selectors(
+                    &at_rule.children,
+                    parent_selectors,
+                    &mut scoped_seen,
+                    diagnostics,
+                    rule,
+                    line_index,
+                    source,
+                    is_scss,
+                );
+            }
+            _ => {}
+        }
+    }
 }
 
 #[cfg(test)]
@@ -273,5 +377,24 @@ mod tests {
         };
         let diags = rule.check_root(&result.nodes, &ctx);
         assert_eq!(diags.len(), 1, "should detect duplicate .foo in SCSS");
+    }
+
+    #[test]
+    fn detects_nested_scss_duplicate_ampersand() {
+        let scss = ".parent {\n  & { color: red; }\n  & { color: blue; }\n}";
+        let result = gale_css_parser::parse(scss, Syntax::Scss).expect("should parse SCSS");
+        let rule = NoDuplicateSelectors;
+        let ctx = RuleContext {
+            file_path: "test.scss",
+            source: scss,
+            syntax: Syntax::Scss,
+            options: None,
+        };
+        let diags = rule.check_root(&result.nodes, &ctx);
+        assert_eq!(
+            diags.len(),
+            1,
+            "nested & in same parent should be flagged as duplicate"
+        );
     }
 }

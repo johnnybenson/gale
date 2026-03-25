@@ -37,17 +37,18 @@ impl Rule for NumberMaxPrecision {
 
         let mut diags = Vec::new();
         for decl in &rule.declarations {
-            if exceeds_precision(&decl.value, max) {
+            if let Some((original, rounded)) = find_precision_issue(&decl.value, max) {
+                // Stylelint points to the number itself, not the declaration start.
+                let decl_src_end = (decl.span.offset + decl.span.length).min(ctx.source.len());
+                let decl_src = &ctx.source[decl.span.offset..decl_src_end];
+                let num_off = decl_src.find(original.as_str()).unwrap_or(0);
                 diags.push(
                     Diagnostic::new(
                         self.name(),
-                        format!(
-                            "Expected number to have no more than {max} decimal places in \"{}\"",
-                            decl.value,
-                        ),
+                        format!("Expected \"{original}\" to be \"{rounded}\""),
                     )
                     .severity(self.default_severity())
-                    .span(Span::new(decl.span.offset, decl.span.length)),
+                    .span(Span::new(decl.span.offset + num_off, original.len())),
                 );
             }
         }
@@ -56,12 +57,24 @@ impl Rule for NumberMaxPrecision {
 }
 
 fn exceeds_precision(value: &str, max: usize) -> bool {
+    find_precision_issue(value, max).is_some()
+}
+
+/// Find the first number in `value` that exceeds `max` decimal places.
+/// Returns `(original_number_str, rounded_str)` if found.
+fn find_precision_issue(value: &str, max: usize) -> Option<(String, String)> {
     let chars: Vec<char> = value.chars().collect();
     let len = chars.len();
     let mut i = 0;
 
     while i < len {
         if chars[i] == '.' {
+            // Find the start of the number (digits before the dot)
+            let mut num_start = i;
+            while num_start > 0 && chars[num_start - 1].is_ascii_digit() {
+                num_start -= 1;
+            }
+
             // Count digits after the decimal point
             let mut decimal_digits = 0;
             let mut j = i + 1;
@@ -69,13 +82,34 @@ fn exceeds_precision(value: &str, max: usize) -> bool {
                 decimal_digits += 1;
                 j += 1;
             }
+
             if decimal_digits > max {
-                return true;
+                // Extract the full number string
+                let original: String = chars[num_start..j].iter().collect();
+
+                // Round to `max` decimal places
+                let rounded = round_to_precision(&original, max);
+                return Some((original, rounded));
             }
         }
         i += 1;
     }
-    false
+    None
+}
+
+/// Round a decimal number string to `max` decimal places.
+fn round_to_precision(num: &str, max: usize) -> String {
+    if let Ok(f) = num.parse::<f64>() {
+        let factor = 10f64.powi(max as i32);
+        let rounded = (f * factor).round() / factor;
+        if max == 0 {
+            format!("{}", rounded as i64)
+        } else {
+            format!("{:.prec$}", rounded, prec = max)
+        }
+    } else {
+        num.to_string()
+    }
 }
 
 #[cfg(test)]

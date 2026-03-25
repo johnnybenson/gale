@@ -41,29 +41,39 @@ impl Rule for SelectorPseudoElementColonNotation {
 
         // The parsed selector from lightningcss normalizes to `::`, so we must
         // look at the original source text to detect actual notation.
-        let mut diags = Vec::new();
-
-        // Search source text for this rule's selector area
-        let search_area = if rule.span.length > 0 {
-            let end = (rule.span.offset + rule.span.length).min(source.len());
-            &source[rule.span.offset..end]
+        // IMPORTANT: only look at the SELECTOR source portion (before `{`) to
+        // avoid flagging `:before`/`:after` that appear in child rules.
+        let rule_src_start = rule.span.offset;
+        let rule_src_end = (rule.span.offset + rule.span.length).min(source.len());
+        let rule_src = if rule_src_start < rule_src_end {
+            &source[rule_src_start..rule_src_end]
         } else {
-            source
+            ""
         };
+        // The selector ends at the first `{`.
+        let selector_src_len = rule_src.find('{').unwrap_or(rule_src.len());
+        let selector_src = &rule_src[..selector_src_len];
+        let selector_src_lower = selector_src.to_ascii_lowercase();
 
-        // First check if the normalized selector contains any of these pseudo-elements
+        // Check if the selector (normalized or in source) contains any relevant pseudo-elements.
+        // lightningcss normalizes :before → ::before, but raffia (SCSS) may not.
         let sel_lower = rule.selector.to_ascii_lowercase();
-        let has_relevant_pseudo = LEGACY_PSEUDO_ELEMENTS
-            .iter()
-            .any(|p| sel_lower.contains(&format!("::{p}")));
+        let has_relevant_pseudo = LEGACY_PSEUDO_ELEMENTS.iter().any(|p| {
+            sel_lower.contains(&format!("::{p}"))
+                || sel_lower.contains(&format!(":{p}"))
+                || selector_src_lower.contains(&format!("::{p}"))
+                || selector_src_lower.contains(&format!(":{p}"))
+        });
         if !has_relevant_pseudo {
             return vec![];
         }
 
+        let mut diags = Vec::new();
+
         for pseudo in LEGACY_PSEUDO_ELEMENTS {
             let single_pattern = format!(":{pseudo}");
             let double_pattern = format!("::{pseudo}");
-            let lower_search = search_area.to_ascii_lowercase();
+            let lower_search = &selector_src_lower;
 
             if want_single {
                 // Looking for `::pseudo` that should be `:pseudo`
@@ -77,7 +87,7 @@ impl Rule for SelectorPseudoElementColonNotation {
                         || !lower_search.as_bytes()[end_idx].is_ascii_alphanumeric();
 
                     if !is_triple && at_boundary {
-                        let fix_offset = rule.span.offset + abs_idx;
+                        let fix_offset = rule_src_start + abs_idx;
                         // Report position at the second colon to match Stylelint
                         let report_offset = fix_offset + 1;
                         diags.push(
@@ -109,13 +119,11 @@ impl Rule for SelectorPseudoElementColonNotation {
                         || !lower_search.as_bytes()[end_idx].is_ascii_alphanumeric();
 
                     if !is_double && at_boundary {
-                        let fix_offset = rule.span.offset + abs_idx;
+                        let fix_offset = rule_src_start + abs_idx;
                         diags.push(
                             Diagnostic::new(
                                 self.name(),
-                                format!(
-                                    "Expected double colon notation \"::{pseudo}\" instead of \":{pseudo}\""
-                                ),
+                                "Expected double colon pseudo-element notation".to_string(),
                             )
                             .severity(self.default_severity())
                             .span(Span::new(fix_offset, single_pattern.len()))
@@ -199,7 +207,7 @@ mod tests {
         let (node, ctx) = style_with_selector_and_source("a::before", source);
         let d = SelectorPseudoElementColonNotation.check(&node, &ctx);
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("::before"));
+        assert!(d[0].message.contains("double colon pseudo-element notation"));
     }
 
     #[test]

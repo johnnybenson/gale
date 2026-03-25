@@ -2360,8 +2360,11 @@ fn replace_arrow_functions(s: &str) -> String {
             let trimmed = result.trim_end().len();
             result.truncate(trimmed);
 
+            // Capture the parameter name while removing it from result.
+            let param_name: String;
             if result.ends_with(')') {
                 // Remove the parenthesized parameter list by finding the matching `(`.
+                let mut removed = Vec::new();
                 let mut depth = 0i32;
                 while let Some(ch) = result.pop() {
                     if ch == ')' {
@@ -2372,13 +2375,23 @@ fn replace_arrow_functions(s: &str) -> String {
                             break;
                         }
                     }
+                    if depth > 0 {
+                        removed.push(ch);
+                    }
                 }
+                removed.reverse();
+                param_name = removed.iter().collect::<String>().trim().to_string();
             } else {
                 // Bare identifier: remove word characters
+                let mut removed = Vec::new();
                 while result.ends_with(|c: char| c.is_ascii_alphanumeric() || c == '_' || c == '$')
                 {
-                    result.pop();
+                    if let Some(ch) = result.pop() {
+                        removed.push(ch);
+                    }
                 }
+                removed.reverse();
+                param_name = removed.iter().collect();
             }
 
             // Skip past `=>`
@@ -2389,13 +2402,64 @@ fn replace_arrow_functions(s: &str) -> String {
                 i += 1;
             }
 
-            // Skip the arrow function body.
-            if i < len {
-                i = skip_js_expression(&chars, i);
-            }
+            // Check if body is a template literal
+            if i < len && chars[i] == '`' {
+                // Extract template literal content
+                i += 1; // skip opening backtick
+                let mut template_content = String::new();
+                let mut tmpl_depth = 0i32;
+                while i < len {
+                    if chars[i] == '\\' && i + 1 < len {
+                        template_content.push(chars[i]);
+                        template_content.push(chars[i + 1]);
+                        i += 2;
+                        continue;
+                    }
+                    if chars[i] == '$' && i + 1 < len && chars[i + 1] == '{' {
+                        tmpl_depth += 1;
+                        template_content.push('$');
+                        template_content.push('{');
+                        i += 2;
+                        continue;
+                    }
+                    if chars[i] == '}' && tmpl_depth > 0 {
+                        tmpl_depth -= 1;
+                        template_content.push('}');
+                        i += 1;
+                        continue;
+                    }
+                    if chars[i] == '`' && tmpl_depth == 0 {
+                        i += 1; // skip closing backtick
+                        break;
+                    }
+                    template_content.push(chars[i]);
+                    i += 1;
+                }
 
-            // Emit `null` in place of the arrow function.
-            result.push_str("null");
+                // Replace ${paramName} with ${name} to standardize placeholder
+                let standardized = if !param_name.is_empty() && param_name != "name" {
+                    let placeholder = format!("${{{}}}", param_name);
+                    template_content.replace(&placeholder, "${name}")
+                } else {
+                    template_content
+                };
+
+                // Escape double quotes in content
+                let escaped = standardized.replace('"', "\\\"");
+
+                // Emit as JSON double-quoted string
+                result.push('"');
+                result.push_str(&escaped);
+                result.push('"');
+            } else {
+                // Skip the arrow function body.
+                if i < len {
+                    i = skip_js_expression(&chars, i);
+                }
+
+                // Emit `null` in place of the arrow function.
+                result.push_str("null");
+            }
             continue;
         }
 
@@ -3191,20 +3255,31 @@ fn resolve_package_exports(pkg: &serde_json::Value, subpath: &str) -> Option<Str
 /// Supports subpath imports like `@scope/package/subpath` which resolves to
 /// `node_modules/@scope/package/subpath.js` (or `.json`).
 fn resolve_npm_config(package_name: &str, base_dir: &Path) -> Option<ConfigFile> {
-    let node_modules = find_node_modules(base_dir)?;
-
-    // Split scoped packages with subpaths:
-    // "@scope/pkg/sub" → package = "@scope/pkg", subpath = Some("sub")
-    // "@scope/pkg"     → package = "@scope/pkg", subpath = None
-    // "pkg/sub"        → package = "pkg",        subpath = Some("sub")
-    // "pkg"            → package = "pkg",        subpath = None
     let (pkg_name, subpath) = split_npm_package_subpath(package_name);
 
-    let pkg_dir = node_modules.join(pkg_name);
-    if !pkg_dir.is_dir() {
-        return None;
+    // Walk up directory tree trying each `node_modules` found, so that nested
+    // packages (e.g. `stylelint-config-recommended-scss` inside
+    // `stylelint-config-standard-scss/node_modules/`) are resolved correctly.
+    let mut dir = base_dir.to_path_buf();
+    loop {
+        let nm = dir.join("node_modules");
+        if nm.is_dir() {
+            let pkg_dir = nm.join(pkg_name);
+            if pkg_dir.is_dir() {
+                if let Some(config) = try_load_npm_pkg(&pkg_dir, subpath) {
+                    return Some(config);
+                }
+            }
+        }
+        if !dir.pop() {
+            break;
+        }
     }
+    None
+}
 
+/// Attempt to load a config from an already-located package directory.
+fn try_load_npm_pkg(pkg_dir: &Path, subpath: Option<&str>) -> Option<ConfigFile> {
     // If there's a subpath, first try the `exports` field in package.json,
     // then fall back to direct file resolution with common extensions.
     if let Some(sub) = subpath {

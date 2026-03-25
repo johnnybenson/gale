@@ -126,19 +126,22 @@ fn has_trailing_keyword(s: &str) -> bool {
 }
 
 /// Extract a path string from at-rule params, stripping quotes.
+/// Handles `@use 'path' as alias` by finding the content between quote chars.
 fn extract_path(params: &str) -> &str {
     let trimmed = params.trim();
-    // Remove quotes if present.
-    let trimmed = trimmed
-        .strip_prefix('"')
-        .and_then(|s| s.strip_suffix('"'))
-        .or_else(|| {
-            trimmed
-                .strip_prefix('\'')
-                .and_then(|s| s.strip_suffix('\''))
-        })
-        .unwrap_or(trimmed);
-    // For @use, there may be ` as <name>` after the path.
+    // Quoted path: find content between matching quotes, ignoring any trailing
+    // ` as <alias>` or other keywords that follow the closing quote.
+    if let Some(s) = trimmed.strip_prefix('"') {
+        if let Some(end) = s.find('"') {
+            return &s[..end];
+        }
+    }
+    if let Some(s) = trimmed.strip_prefix('\'') {
+        if let Some(end) = s.find('\'') {
+            return &s[..end];
+        }
+    }
+    // Unquoted: take first whitespace-separated token.
     trimmed.split_whitespace().next().unwrap_or(trimmed)
 }
 

@@ -2,6 +2,7 @@ use gale_css_parser::CssNode;
 use gale_diagnostics::{Diagnostic, Edit, Fix, Severity, Span};
 
 use crate::rule::{Rule, RuleContext};
+use crate::stylelint_version::stylelint_major_version;
 
 /// Enforce consistent case for keyword values.
 ///
@@ -746,8 +747,12 @@ impl Rule for ValueKeywordCase {
     }
 
     fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
-        let CssNode::Style(rule) = node else {
-            return vec![];
+        // Collect declarations from either a style rule or a standalone declaration
+        // (e.g., inside a @mixin, @function, @if at-rule).
+        let decls: Vec<&gale_css_parser::Declaration> = match node {
+            CssNode::Style(rule) => rule.declarations.iter().collect(),
+            CssNode::Declaration(decl) => vec![decl],
+            _ => return vec![],
         };
 
         let expect_upper = ctx.primary_option_str().is_some_and(|s| s == "upper");
@@ -784,10 +789,17 @@ impl Rule for ValueKeywordCase {
             })
             .unwrap_or_default();
 
-        let camel_case_svg = secondary
-            .and_then(|v| v.get("camelCaseSvgKeywords"))
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+        // Stylelint <=13 always treats camelCase SVG keywords (currentColor, etc.) as
+        // canonical even without `camelCaseSvgKeywords: true`.  Stylelint 14+ introduced
+        // the explicit option; without it the keywords are normalised to lowercase.
+        let camel_case_svg = if stylelint_major_version() <= 13 {
+            true
+        } else {
+            secondary
+                .and_then(|v| v.get("camelCaseSvgKeywords"))
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false)
+        };
 
         let is_scss = matches!(
             ctx.syntax,
@@ -796,7 +808,7 @@ impl Rule for ValueKeywordCase {
 
         let mut diags = Vec::new();
 
-        for decl in &rule.declarations {
+        for decl in &decls {
             let prop = &decl.property;
 
             let decl_start = decl.span.offset;
@@ -867,38 +879,35 @@ impl Rule for ValueKeywordCase {
                 let text = &token.text;
                 let abs_offset = value_abs_start + token.offset;
 
-                // Keywords with canonical camelCase forms.
-                // `currentColor` is always exempt -- it's a CSS keyword (not just
-                // SVG) whose canonical mixed-case form is accepted by every
-                // browser and by Stylelint regardless of options.
-                if text.eq_ignore_ascii_case("currentColor") {
-                    continue;
-                }
-
-                // Other SVG camelCase keywords (optimizeSpeed, crispEdges, etc.)
-                if is_svg_camel_case_keyword(text) && camel_case_svg && !expect_upper {
-                    // "lower" + camelCaseSvgKeywords: expected = camelCase canonical
-                    let canonical = SVG_CAMEL_CASE_KEYWORDS
-                        .iter()
-                        .find(|k| k.eq_ignore_ascii_case(text))
-                        .unwrap();
-                    if *text != **canonical {
-                        diags.push(
-                            Diagnostic::new(
-                                self.name(),
-                                format!("Expected \"{}\" to be \"{}\"", text, canonical),
-                            )
-                            .severity(self.default_severity())
-                            .span(Span::new(abs_offset, text.len()))
-                            .fix(Fix::new(
-                                format!("Convert to \"{}\"", canonical),
-                                vec![Edit::new(Span::new(abs_offset, text.len()), *canonical)],
-                            )),
-                        );
+                // SVG camelCase keywords (currentColor, optimizeSpeed, crispEdges, etc.)
+                if is_svg_camel_case_keyword(text) {
+                    if camel_case_svg && !expect_upper {
+                        // "lower" + camelCaseSvgKeywords:true: expected = camelCase canonical
+                        let canonical = SVG_CAMEL_CASE_KEYWORDS
+                            .iter()
+                            .find(|k| k.eq_ignore_ascii_case(text))
+                            .unwrap();
+                        if *text != **canonical {
+                            diags.push(
+                                Diagnostic::new(
+                                    self.name(),
+                                    format!("Expected \"{}\" to be \"{}\"", text, canonical),
+                                )
+                                .severity(self.default_severity())
+                                .span(Span::new(abs_offset, text.len()))
+                                .fix(Fix::new(
+                                    format!("Convert to \"{}\"", canonical),
+                                    vec![Edit::new(Span::new(abs_offset, text.len()), *canonical)],
+                                )),
+                            );
+                        }
+                        // camelCaseSvgKeywords:true + lower: handled above as canonical camelCase.
+                        continue;
                     }
-                    continue;
+                    // camelCaseSvgKeywords:false (default) or upper mode: fall through to
+                    // normal lower/upper check. Stylelint treats these as regular keywords
+                    // (e.g. currentColor → currentcolor with `lower` option).
                 }
-                // "upper" mode or camelCaseSvgKeywords:false -- treat like normal keyword
 
                 // Property-context filtering
                 if token.kind == TokenKind::Ident && !should_check_keyword(text, prop, &tokens, idx)
@@ -962,6 +971,15 @@ mod tests {
             source: "",
             syntax: Syntax::Css,
             options: None,
+        }
+    }
+
+    fn ctx_with_opts(opts: &serde_json::Value) -> RuleContext<'_> {
+        RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: Some(opts),
         }
     }
 
@@ -1033,25 +1051,36 @@ mod tests {
     }
 
     #[test]
-    fn skips_current_color_always() {
-        // currentColor should always be exempt, regardless of camelCaseSvgKeywords
+    fn reports_current_color_in_lower_mode() {
+        // With `lower` mode (default) and camelCaseSvgKeywords:false (default),
+        // Stylelint v16 reports currentColor → expected currentcolor.
         let d = ValueKeywordCase.check(&style_with_decl("color", "currentColor"), &ctx());
-        assert!(d.is_empty(), "currentColor should not be flagged");
+        assert_eq!(d.len(), 1, "currentColor should be flagged in lower mode");
+        assert!(d[0].message.contains("currentcolor"));
     }
 
     #[test]
-    fn skips_currentcolor_lowercase() {
+    fn allows_currentcolor_lowercase() {
         let d = ValueKeywordCase.check(&style_with_decl("color", "currentcolor"), &ctx());
-        assert!(d.is_empty(), "currentcolor should not be flagged");
+        assert!(d.is_empty(), "currentcolor (lowercase) should not be flagged");
     }
 
     #[test]
-    fn skips_current_color_in_border() {
+    fn reports_current_color_in_border_lower_mode() {
         let d = ValueKeywordCase.check(&style_with_decl("border-color", "currentColor"), &ctx());
-        assert!(
-            d.is_empty(),
-            "currentColor in border-color should not be flagged"
-        );
+        assert_eq!(d.len(), 1, "currentColor in border-color should be flagged in lower mode");
+    }
+
+    #[test]
+    fn allows_current_color_when_camel_case_svg_keywords_enabled() {
+        // camelCaseSvgKeywords:true + lower: expected = camelCase canonical (currentColor)
+        let opts = serde_json::json!(["lower", { "camelCaseSvgKeywords": true }]);
+        let ctx = ctx_with_opts(&opts);
+        let d = ValueKeywordCase.check(&style_with_decl("color", "currentColor"), &ctx);
+        assert!(d.is_empty(), "currentColor should be allowed when camelCaseSvgKeywords:true");
+        // Lowercase should be flagged
+        let d2 = ValueKeywordCase.check(&style_with_decl("color", "currentcolor"), &ctx);
+        assert_eq!(d2.len(), 1, "currentcolor should be flagged when camelCaseSvgKeywords:true");
     }
 
     #[test]

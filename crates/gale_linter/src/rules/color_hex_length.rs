@@ -25,15 +25,17 @@ impl Rule for ColorHexLength {
     }
 
     fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
-        let CssNode::Style(rule) = node else {
-            return vec![];
+        let decls: Vec<&gale_css_parser::Declaration> = match node {
+            CssNode::Style(rule) => rule.declarations.iter().collect(),
+            CssNode::Declaration(decl) => vec![decl],
+            _ => return vec![],
         };
 
         // Primary option: "short" (default) or "long".
         let mode = ctx.primary_option_str().unwrap_or("short");
 
         let mut diags = Vec::new();
-        for decl in &rule.declarations {
+        for decl in &decls {
             // Search the source within the declaration span for hex colors.
             let decl_start = decl.span.offset;
             let decl_end = decl_start + decl.span.length;

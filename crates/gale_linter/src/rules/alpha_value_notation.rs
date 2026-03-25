@@ -77,7 +77,7 @@ fn check_declaration(
     };
 
     // Check alpha values in color functions
-    for (rel_offset, func_name) in find_alpha_issues_in_functions(search_area, effective_primary) {
+    for (rel_offset, alpha_value) in find_alpha_issues_in_functions(search_area, effective_primary) {
         let abs_offset = if decl_end <= ctx.source.len() && decl_start < decl_end {
             decl_start + rel_offset
         } else {
@@ -85,10 +85,14 @@ fn check_declaration(
         };
         let msg = match effective_primary {
             PrimaryOption::Percentage => {
-                format!("Expected percentage notation for alpha value in {func_name}()")
+                // Convert decimal to percentage: "0.3" -> "30%"
+                let pct = format_as_percentage(&alpha_value);
+                format!("Expected \"{alpha_value}\" to be \"{pct}\"")
             }
             PrimaryOption::Number => {
-                format!("Expected number notation for alpha value in {func_name}()")
+                // Convert percentage to decimal: "30%" -> "0.3"
+                let num = format_as_number(&alpha_value);
+                format!("Expected \"{alpha_value}\" to be \"{num}\"")
             }
         };
         diags.push(
@@ -227,7 +231,7 @@ const COLOR_FUNCTIONS: &[&str] = &[
 ];
 
 /// Find alpha value issues in color function calls.
-/// Returns (byte_offset, function_name) for each issue found.
+/// Returns (byte_offset, alpha_value_string) for each issue found.
 fn find_alpha_issues_in_functions(value: &str, expected: PrimaryOption) -> Vec<(usize, String)> {
     let mut results = Vec::new();
     let lower = value.to_ascii_lowercase();
@@ -258,7 +262,7 @@ fn find_alpha_issues_in_functions(value: &str, expected: PrimaryOption) -> Vec<(
                         };
 
                         if should_report {
-                            results.push((args_start + alpha_offset, func.to_string()));
+                            results.push((args_start + alpha_offset, trimmed.to_string()));
                         }
                     }
                 }
@@ -269,6 +273,37 @@ fn find_alpha_issues_in_functions(value: &str, expected: PrimaryOption) -> Vec<(
         }
     }
     results
+}
+
+/// Format a decimal alpha value as a percentage string: "0.3" -> "30%"
+fn format_as_percentage(value: &str) -> String {
+    if let Ok(f) = value.parse::<f64>() {
+        let pct = f * 100.0;
+        // Round to avoid floating-point noise (e.g., 29.999999 -> 30)
+        let rounded = (pct * 1000.0).round() / 1000.0;
+        if rounded.fract() == 0.0 {
+            format!("{}%", rounded as i64)
+        } else {
+            // Remove trailing zeros
+            let s = format!("{}", rounded);
+            format!("{s}%")
+        }
+    } else {
+        format!("{value}%")
+    }
+}
+
+/// Format a percentage alpha value as a decimal number string: "30%" -> "0.3"
+fn format_as_number(value: &str) -> String {
+    let trimmed = value.trim_end_matches('%');
+    if let Ok(f) = trimmed.parse::<f64>() {
+        let num = f / 100.0;
+        // Format with minimal decimals
+        let s = format!("{}", num);
+        s
+    } else {
+        value.to_string()
+    }
 }
 
 /// Find the matching closing parenthesis, handling nested parens.

@@ -1,7 +1,12 @@
-use gale_css_parser::CssNode;
+use gale_css_parser::{CssNode, Declaration};
 use gale_diagnostics::{Diagnostic, Severity, Span};
 
 use crate::rule::{Rule, RuleContext};
+
+/// CSS-wide basic keywords that prevent shorthand combination.
+/// When any longhand has one of these values, the declarations cannot
+/// be safely combined into a shorthand (Stylelint skips such declarations).
+const BASIC_KEYWORDS: &[&str] = &["initial", "inherit", "revert", "revert-layer", "unset"];
 
 /// Reports when all longhand properties of a shorthand are present and could be
 /// combined (e.g. margin-top + margin-right + margin-bottom + margin-left → margin).
@@ -114,6 +119,58 @@ const SHORTHAND_MAPPINGS: &[ShorthandMapping] = &[
             "border-bottom-left-radius",
         ],
     },
+    ShorthandMapping {
+        shorthand: "border-top",
+        longhands: &["border-top-width", "border-top-style", "border-top-color"],
+    },
+    ShorthandMapping {
+        shorthand: "border-bottom",
+        longhands: &["border-bottom-width", "border-bottom-style", "border-bottom-color"],
+    },
+    ShorthandMapping {
+        shorthand: "border-left",
+        longhands: &["border-left-width", "border-left-style", "border-left-color"],
+    },
+    ShorthandMapping {
+        shorthand: "border-right",
+        longhands: &["border-right-width", "border-right-style", "border-right-color"],
+    },
+    ShorthandMapping {
+        shorthand: "flex-flow",
+        longhands: &["flex-direction", "flex-wrap"],
+    },
+    ShorthandMapping {
+        shorthand: "padding-inline",
+        longhands: &["padding-inline-start", "padding-inline-end"],
+    },
+    ShorthandMapping {
+        shorthand: "padding-block",
+        longhands: &["padding-block-start", "padding-block-end"],
+    },
+    ShorthandMapping {
+        shorthand: "margin-inline",
+        longhands: &["margin-inline-start", "margin-inline-end"],
+    },
+    ShorthandMapping {
+        shorthand: "margin-block",
+        longhands: &["margin-block-start", "margin-block-end"],
+    },
+    ShorthandMapping {
+        shorthand: "inset-inline",
+        longhands: &["inset-inline-start", "inset-inline-end"],
+    },
+    ShorthandMapping {
+        shorthand: "inset-block",
+        longhands: &["inset-block-start", "inset-block-end"],
+    },
+    ShorthandMapping {
+        shorthand: "text-decoration",
+        longhands: &[
+            "text-decoration-line",
+            "text-decoration-style",
+            "text-decoration-color",
+        ],
+    },
 ];
 
 impl Rule for DeclarationBlockNoRedundantLonghandProperties {
@@ -130,40 +187,90 @@ impl Rule for DeclarationBlockNoRedundantLonghandProperties {
     }
 
     fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
-        let CssNode::Style(rule) = node else {
-            return vec![];
-        };
-
-        let props: Vec<String> = rule
-            .declarations
-            .iter()
-            .map(|d| d.property.to_ascii_lowercase())
-            .collect();
-
-        let mut diags = Vec::new();
-
-        for mapping in SHORTHAND_MAPPINGS {
-            let all_present = mapping
-                .longhands
-                .iter()
-                .all(|lh| props.contains(&lh.to_string()));
-            if all_present {
-                diags.push(
-                    Diagnostic::new(
-                        self.name(),
-                        format!(
-                            "Expected shorthand property \"{}\" instead of its longhands",
-                            mapping.shorthand,
-                        ),
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(rule.span.offset, rule.span.length)),
-                );
+        match node {
+            CssNode::Style(rule) => {
+                check_declarations(self, &rule.declarations, rule.span)
             }
+            CssNode::AtRule(at_rule) => {
+                // Also check bare declarations inside SCSS at-rule bodies (e.g. @mixin).
+                let decls: Vec<&Declaration> = at_rule
+                    .children
+                    .iter()
+                    .filter_map(|c| {
+                        if let CssNode::Declaration(d) = c {
+                            Some(d)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                if decls.is_empty() {
+                    return vec![];
+                }
+                check_declarations_slice(self, &decls, at_rule.span)
+            }
+            _ => vec![],
         }
-
-        diags
     }
+}
+
+fn check_declarations(
+    rule_impl: &DeclarationBlockNoRedundantLonghandProperties,
+    declarations: &[Declaration],
+    fallback_span: gale_css_parser::Span,
+) -> Vec<Diagnostic> {
+    let refs: Vec<&Declaration> = declarations.iter().collect();
+    check_declarations_slice(rule_impl, &refs, fallback_span)
+}
+
+fn check_declarations_slice(
+    rule_impl: &DeclarationBlockNoRedundantLonghandProperties,
+    declarations: &[&Declaration],
+    fallback_span: gale_css_parser::Span,
+) -> Vec<Diagnostic> {
+    // Build the set of effective longhand properties, skipping any declarations
+    // whose value is a CSS-wide basic keyword (initial, inherit, unset, etc.)
+    // because those cannot be safely combined into a shorthand.
+    let props: Vec<String> = declarations
+        .iter()
+        .filter(|d| {
+            let val = d.value.trim().to_ascii_lowercase();
+            !BASIC_KEYWORDS.contains(&val.as_str())
+        })
+        .map(|d| d.property.to_ascii_lowercase())
+        .collect();
+
+    let mut diags = Vec::new();
+
+    for mapping in SHORTHAND_MAPPINGS {
+        let all_present = mapping
+            .longhands
+            .iter()
+            .all(|lh| props.contains(&lh.to_string()));
+        if all_present {
+            // Report at the last matching longhand declaration, matching Stylelint behavior.
+            let last_longhand_span = declarations
+                .iter()
+                .filter(|d| {
+                    mapping
+                        .longhands
+                        .contains(&d.property.to_ascii_lowercase().as_str())
+                })
+                .last()
+                .map(|d| Span::new(d.span.offset, d.span.length))
+                .unwrap_or_else(|| Span::new(fallback_span.offset, fallback_span.length));
+            diags.push(
+                Diagnostic::new(
+                    rule_impl.name(),
+                    format!("Expected shorthand property \"{}\"", mapping.shorthand),
+                )
+                .severity(rule_impl.default_severity())
+                .span(last_longhand_span),
+            );
+        }
+    }
+
+    diags
 }
 
 #[cfg(test)]

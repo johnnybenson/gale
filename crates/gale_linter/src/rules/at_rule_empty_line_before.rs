@@ -422,6 +422,36 @@ fn has_empty_line_before(before: &str) -> bool {
     pos == 0 || bytes[pos - 1] == b'\n'
 }
 
+/// Byte-slice version of `find_line_comment_start`.  Operates on raw bytes so
+/// it is safe on source files that contain non-ASCII (multi-byte) characters.
+fn find_line_comment_start_bytes(line: &[u8]) -> Option<usize> {
+    let len = line.len();
+    let mut i = 0;
+    let mut in_single_quote = false;
+    let mut in_double_quote = false;
+
+    while i < len {
+        let ch = line[i];
+        if in_single_quote {
+            if ch == b'\'' && (i == 0 || line[i - 1] != b'\\') {
+                in_single_quote = false;
+            }
+        } else if in_double_quote {
+            if ch == b'"' && (i == 0 || line[i - 1] != b'\\') {
+                in_double_quote = false;
+            }
+        } else if ch == b'\'' {
+            in_single_quote = true;
+        } else if ch == b'"' {
+            in_double_quote = true;
+        } else if ch == b'/' && i + 1 < len && line[i + 1] == b'/' {
+            return Some(i);
+        }
+        i += 1;
+    }
+    None
+}
+
 /// Find the position of an inline `//` comment in a line, skipping `//` inside strings.
 /// Returns `None` if no inline comment is found.
 fn find_line_comment_start(line: &str) -> Option<usize> {
@@ -455,9 +485,13 @@ fn find_line_comment_start(line: &str) -> Option<usize> {
 
 /// Check if the at-rule is the first meaningful content in a block,
 /// i.e. it immediately follows `{` (possibly with whitespace/comments).
+///
+/// All indexing is done on bytes (not chars) to avoid panics on non-ASCII
+/// characters in source files.  This is safe because every pattern we search
+/// for (`*/`, `/*`, `\n`, `//`, `{`) consists solely of ASCII bytes.
 fn is_first_in_block(before: &str) -> bool {
     let bytes = before.as_bytes();
-    let mut pos = before.len();
+    let mut pos = bytes.len();
 
     loop {
         // Skip trailing whitespace
@@ -469,24 +503,39 @@ fn is_first_in_block(before: &str) -> bool {
             return true;
         }
         // Check for end of a block comment `*/`
-        if pos >= 2 && &before[pos - 2..pos] == "*/" {
-            if let Some(open) = before[..pos - 2].rfind("/*") {
-                pos = open;
+        if pos >= 2 && bytes[pos - 2] == b'*' && bytes[pos - 1] == b'/' {
+            // Find the matching `/*` by scanning bytes backward.
+            let search_end = pos.saturating_sub(2);
+            let open = (0..search_end)
+                .rev()
+                .find(|&i| bytes[i] == b'/' && bytes[i + 1] == b'*');
+            if let Some(o) = open {
+                pos = o;
                 continue;
             }
             return false;
         }
-        // Check for SCSS line comment (both standalone and inline)
-        let line_start = before[..pos].rfind('\n').map(|p| p + 1).unwrap_or(0);
-        let line = before[line_start..pos].trim();
-        if line.starts_with("//") {
+        // Find start of current line (byte-safe)
+        let line_start = bytes[..pos]
+            .iter()
+            .rposition(|&b| b == b'\n')
+            .map(|p| p + 1)
+            .unwrap_or(0);
+        let line_bytes = &bytes[line_start..pos];
+        // Trim leading whitespace
+        let trimmed_offset = line_bytes
+            .iter()
+            .position(|&b| b != b' ' && b != b'\t')
+            .unwrap_or(line_bytes.len());
+        let trimmed = &line_bytes[trimmed_offset..];
+
+        if trimmed.starts_with(b"//") {
             // Entire line is a comment — skip past it
             pos = line_start;
             continue;
         }
-        // Check for inline `//` comment on the same line as code (e.g., `{ // comment`)
-        // We need to find `//` that isn't inside a string
-        if let Some(comment_pos) = find_line_comment_start(&before[line_start..pos]) {
+        // Check for inline `//` comment on the same line as code
+        if let Some(comment_pos) = find_line_comment_start_bytes(line_bytes) {
             pos = line_start + comment_pos;
             // Re-skip whitespace before the comment
             while pos > 0 && matches!(bytes[pos - 1], b' ' | b'\t') {

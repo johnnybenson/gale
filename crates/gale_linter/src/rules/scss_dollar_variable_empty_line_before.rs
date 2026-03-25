@@ -232,23 +232,25 @@ impl Rule for ScssDollarVariableEmptyLineBefore {
                 .map(|l| l.len() + 1) // +1 for newline
                 .sum();
 
+            // Point to the `$` variable, not the start of the line.
+            let leading_ws = line.len() - line.trim_start().len();
             if expect_empty_line && !has_empty_line_before && !is_first_line {
                 diagnostics.push(
                     Diagnostic::new(
                         self.name(),
-                        "Expected empty line before $-variable declaration",
+                        "Expected an empty line before $-variable",
                     )
                     .severity(self.default_severity())
-                    .span(Span::new(byte_offset, trimmed.len())),
+                    .span(Span::new(byte_offset + leading_ws, trimmed.len())),
                 );
             } else if !expect_empty_line && has_empty_line_before {
                 diagnostics.push(
                     Diagnostic::new(
                         self.name(),
-                        "Unexpected empty line before $-variable declaration",
+                        "Unexpected empty line before $-variable",
                     )
                     .severity(self.default_severity())
-                    .span(Span::new(byte_offset, trimmed.len())),
+                    .span(Span::new(byte_offset + leading_ws, trimmed.len())),
                 );
             }
         }
@@ -299,7 +301,7 @@ mod tests {
         let ctx = scss_ctx_with_options(src, &opts);
         let d = ScssDollarVariableEmptyLineBefore.check_root(&[], &ctx);
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("Expected empty line"));
+        assert!(d[0].message.contains("Expected an empty line"));
     }
 
     #[test]
@@ -318,7 +320,7 @@ mod tests {
         let ctx = scss_ctx_with_options(src, &opts);
         let d = ScssDollarVariableEmptyLineBefore.check_root(&[], &ctx);
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("Unexpected empty line"));
+        assert!(d[0].message.contains("Unexpected empty line before $-variable"));
     }
 
     #[test]

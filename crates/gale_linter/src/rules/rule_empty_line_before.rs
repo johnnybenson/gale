@@ -541,13 +541,10 @@ fn check_nodes(
             check_children(rule_impl, style, ctx, opts, diags);
         }
 
-        // Recurse into at-rules (but skip @keyframes — Stylelint does not
-        // check rule-empty-line-before inside keyframe blocks).
+        // Recurse into at-rules (including @keyframes — Stylelint checks
+        // rule-empty-line-before inside keyframe blocks via root.walkRules()).
         if let CssNode::AtRule(at_rule) = node {
-            let at_name = at_rule.name.to_lowercase();
-            if at_name != "keyframes" && !at_name.ends_with("-keyframes") {
-                check_nodes(rule_impl, &at_rule.children, ctx, opts, false, diags);
-            }
+            check_nodes(rule_impl, &at_rule.children, ctx, opts, false, diags);
         }
     }
 }
@@ -571,10 +568,7 @@ fn check_children(
     // style rule) which may contain style rules that need checking.
     for at_node in &style.nested_at_rules {
         if let CssNode::AtRule(at_rule) = at_node {
-            let at_name = at_rule.name.to_lowercase();
-            if at_name != "keyframes" && !at_name.ends_with("-keyframes") {
-                check_nodes(rule_impl, &at_rule.children, ctx, opts, false, diags);
-            }
+            check_nodes(rule_impl, &at_rule.children, ctx, opts, false, diags);
         }
     }
 }
@@ -944,5 +938,16 @@ mod tests {
         let d = RuleEmptyLineBefore.check_root(&nodes, &make_ctx_with_options(src, &opts));
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("Unexpected"));
+    }
+
+    #[test]
+    fn keyframes_second_rule_requires_empty_line() {
+        use gale_css_parser::{parse, Syntax};
+        let source = "@keyframes foo {\n  0% {\n    opacity: 0;\n  }\n  100% {\n    opacity: 1;\n  }\n}";
+        let opts = serde_json::json!(["always", {"except": ["first-nested"]}]);
+        let parsed = parse(source, Syntax::Scss).expect("parse");
+        let ctx = make_ctx_with_options(source, &opts);
+        let d = RuleEmptyLineBefore.check_root(&parsed.nodes, &ctx);
+        assert_eq!(d.len(), 1, "Expected 1 diagnostic for 100% without empty line. Got: {:?}", d);
     }
 }

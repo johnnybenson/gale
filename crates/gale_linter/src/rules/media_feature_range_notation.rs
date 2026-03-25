@@ -74,22 +74,46 @@ impl Rule for MediaFeatureRangeNotation {
             return vec![];
         }
 
+        // Determine the notation option string for the message
+        let notation_str = ctx
+            .options
+            .and_then(|v| v.as_str())
+            .or_else(|| {
+                ctx.options
+                    .and_then(|v| v.as_array())
+                    .and_then(|a| a.first())
+                    .and_then(|v| v.as_str())
+            })
+            .unwrap_or("context");
+
         let params_lower = at.params.to_ascii_lowercase();
         let mut diags = Vec::new();
 
+        let at_src_end = (at.span.offset + at.span.length).min(ctx.source.len());
+        let at_src = &ctx.source[at.span.offset..at_src_end];
+        let at_src_lower = at_src.to_ascii_lowercase();
         for &prefix in RANGE_PREFIXES {
             for &feature in RANGE_FEATURES {
                 let prefixed = format!("{prefix}{feature}");
                 if params_lower.contains(&prefixed) {
+                    // Stylelint points to the `(` before the min-/max- feature name.
+                    let paren_search = format!("({prefixed}");
+                    let paren_off = at_src_lower
+                        .find(&paren_search)
+                        .or_else(|| {
+                            // fallback: find `(` before the feature in source
+                            at_src_lower.find(&prefixed).and_then(|p| {
+                                at_src_lower[..p].rfind('(')
+                            })
+                        })
+                        .unwrap_or(0);
                     diags.push(
                         Diagnostic::new(
                             self.name(),
-                            format!(
-                                "Expected range notation instead of \"{prefixed}\" prefix notation"
-                            ),
+                            format!("Expected \"{notation_str}\" media feature range notation"),
                         )
                         .severity(self.default_severity())
-                        .span(Span::new(at.span.offset, at.span.length)),
+                        .span(Span::new(at.span.offset + paren_off, 1)),
                     );
                 }
             }
@@ -155,7 +179,7 @@ mod tests {
     fn reports_min_width_prefix() {
         let d = MediaFeatureRangeNotation.check(&media("(min-width: 768px)"), &ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("min-width"));
+        assert!(d[0].message.contains("media feature range notation"));
     }
 
     #[test]
