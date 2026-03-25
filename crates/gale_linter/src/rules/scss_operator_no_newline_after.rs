@@ -50,7 +50,8 @@ impl Rule for ScssOperatorNoNewlineAfter {
                 if OPERATORS.contains(&last_char) {
                     // Check if it looks binary: preceded by a closing character
                     // or identifier/digit character (not another operator or space).
-                    let before_op = &content_trimmed[..content_trimmed.len() - last_char.len_utf8()];
+                    let before_op =
+                        &content_trimmed[..content_trimmed.len() - last_char.len_utf8()];
                     let before_trimmed = before_op.trim_end();
                     if let Some(prev) = before_trimmed.chars().last() {
                         if is_value_end_char(prev)
@@ -125,7 +126,11 @@ fn is_css_color_channel_separator(op: char, before_trimmed: &str) -> bool {
         .split_ascii_whitespace()
         .next_back()
         .unwrap_or("");
-    last_word.len() == 1 && last_word.chars().next().map_or(false, |c| c.is_ascii_lowercase())
+    last_word.len() == 1
+        && last_word
+            .chars()
+            .next()
+            .map_or(false, |c| c.is_ascii_lowercase())
 }
 
 #[cfg(test)]

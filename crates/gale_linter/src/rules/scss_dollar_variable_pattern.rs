@@ -132,11 +132,9 @@ impl ScssDollarVariablePattern {
                 }
 
                 if !re.is_match(var_name) {
-                    let message = custom_message
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| {
-                            "Expected $ variable name to match specified pattern".to_string()
-                        });
+                    let message = custom_message.map(|s| s.to_string()).unwrap_or_else(|| {
+                        "Expected $ variable name to match specified pattern".to_string()
+                    });
                     diagnostics.push(
                         Diagnostic::new(self.name(), message)
                             .severity(self.default_severity())

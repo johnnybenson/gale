@@ -125,15 +125,27 @@ const SHORTHAND_MAPPINGS: &[ShorthandMapping] = &[
     },
     ShorthandMapping {
         shorthand: "border-bottom",
-        longhands: &["border-bottom-width", "border-bottom-style", "border-bottom-color"],
+        longhands: &[
+            "border-bottom-width",
+            "border-bottom-style",
+            "border-bottom-color",
+        ],
     },
     ShorthandMapping {
         shorthand: "border-left",
-        longhands: &["border-left-width", "border-left-style", "border-left-color"],
+        longhands: &[
+            "border-left-width",
+            "border-left-style",
+            "border-left-color",
+        ],
     },
     ShorthandMapping {
         shorthand: "border-right",
-        longhands: &["border-right-width", "border-right-style", "border-right-color"],
+        longhands: &[
+            "border-right-width",
+            "border-right-style",
+            "border-right-color",
+        ],
     },
     ShorthandMapping {
         shorthand: "flex-flow",
@@ -188,9 +200,7 @@ impl Rule for DeclarationBlockNoRedundantLonghandProperties {
 
     fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
         match node {
-            CssNode::Style(rule) => {
-                check_declarations(self, &rule.declarations, rule.span)
-            }
+            CssNode::Style(rule) => check_declarations(self, &rule.declarations, rule.span),
             CssNode::AtRule(at_rule) => {
                 // Also check bare declarations inside SCSS at-rule bodies (e.g. @mixin).
                 let decls: Vec<&Declaration> = at_rule

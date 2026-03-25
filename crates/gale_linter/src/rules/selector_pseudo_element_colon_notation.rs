@@ -207,7 +207,10 @@ mod tests {
         let (node, ctx) = style_with_selector_and_source("a::before", source);
         let d = SelectorPseudoElementColonNotation.check(&node, &ctx);
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("double colon pseudo-element notation"));
+        assert!(
+            d[0].message
+                .contains("double colon pseudo-element notation")
+        );
     }
 
     #[test]

@@ -942,12 +942,18 @@ mod tests {
 
     #[test]
     fn keyframes_second_rule_requires_empty_line() {
-        use gale_css_parser::{parse, Syntax};
-        let source = "@keyframes foo {\n  0% {\n    opacity: 0;\n  }\n  100% {\n    opacity: 1;\n  }\n}";
+        use gale_css_parser::{Syntax, parse};
+        let source =
+            "@keyframes foo {\n  0% {\n    opacity: 0;\n  }\n  100% {\n    opacity: 1;\n  }\n}";
         let opts = serde_json::json!(["always", {"except": ["first-nested"]}]);
         let parsed = parse(source, Syntax::Scss).expect("parse");
         let ctx = make_ctx_with_options(source, &opts);
         let d = RuleEmptyLineBefore.check_root(&parsed.nodes, &ctx);
-        assert_eq!(d.len(), 1, "Expected 1 diagnostic for 100% without empty line. Got: {:?}", d);
+        assert_eq!(
+            d.len(),
+            1,
+            "Expected 1 diagnostic for 100% without empty line. Got: {:?}",
+            d
+        );
     }
 }

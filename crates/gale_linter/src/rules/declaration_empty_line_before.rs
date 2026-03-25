@@ -464,7 +464,10 @@ fn is_after_declaration(source: &str, offset: usize) -> bool {
         // SCSS interpolation at end of value (e.g. `prop: #{$var};`).
         // A real block-close has a `{` that is NOT preceded by `#`.
         let stripped_no_semi = stripped.strip_suffix(';').unwrap_or(stripped);
-        if stripped_no_semi.ends_with('}') && paren_depth == 0 && is_real_block_close(stripped_no_semi) {
+        if stripped_no_semi.ends_with('}')
+            && paren_depth == 0
+            && is_real_block_close(stripped_no_semi)
+        {
             return false;
         }
         // If the line ends with `{`, it's a selector/at-rule

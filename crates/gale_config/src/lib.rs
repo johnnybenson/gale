@@ -2361,8 +2361,7 @@ fn replace_arrow_functions(s: &str) -> String {
             result.truncate(trimmed);
 
             // Capture the parameter name while removing it from result.
-            let param_name: String;
-            if result.ends_with(')') {
+            let param_name: String = if result.ends_with(')') {
                 // Remove the parenthesized parameter list by finding the matching `(`.
                 let mut removed = Vec::new();
                 let mut depth = 0i32;
@@ -2380,7 +2379,7 @@ fn replace_arrow_functions(s: &str) -> String {
                     }
                 }
                 removed.reverse();
-                param_name = removed.iter().collect::<String>().trim().to_string();
+                removed.iter().collect::<String>().trim().to_string()
             } else {
                 // Bare identifier: remove word characters
                 let mut removed = Vec::new();
@@ -2391,8 +2390,8 @@ fn replace_arrow_functions(s: &str) -> String {
                     }
                 }
                 removed.reverse();
-                param_name = removed.iter().collect();
-            }
+                removed.iter().collect()
+            };
 
             // Skip past `=>`
             i += 2;
@@ -3265,10 +3264,10 @@ fn resolve_npm_config(package_name: &str, base_dir: &Path) -> Option<ConfigFile>
         let nm = dir.join("node_modules");
         if nm.is_dir() {
             let pkg_dir = nm.join(pkg_name);
-            if pkg_dir.is_dir() {
-                if let Some(config) = try_load_npm_pkg(&pkg_dir, subpath) {
-                    return Some(config);
-                }
+            if pkg_dir.is_dir()
+                && let Some(config) = try_load_npm_pkg(&pkg_dir, subpath)
+            {
+                return Some(config);
             }
         }
         if !dir.pop() {

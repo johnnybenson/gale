@@ -102,9 +102,9 @@ impl Rule for MediaFeatureRangeNotation {
                         .find(&paren_search)
                         .or_else(|| {
                             // fallback: find `(` before the feature in source
-                            at_src_lower.find(&prefixed).and_then(|p| {
-                                at_src_lower[..p].rfind('(')
-                            })
+                            at_src_lower
+                                .find(&prefixed)
+                                .and_then(|p| at_src_lower[..p].rfind('('))
                         })
                         .unwrap_or(0);
                     diags.push(

@@ -38,9 +38,7 @@ impl Rule for KeyframesNamePattern {
             return vec![];
         }
 
-        let pattern_str = ctx
-            .primary_option_str()
-            .unwrap_or(DEFAULT_PATTERN);
+        let pattern_str = ctx.primary_option_str().unwrap_or(DEFAULT_PATTERN);
 
         let re = match Regex::new(pattern_str) {
             Ok(r) => r,
@@ -75,9 +73,7 @@ impl Rule for KeyframesNamePattern {
             let message = if let Some(tmpl) = custom_message {
                 tmpl.replace("${name}", name)
             } else {
-                format!(
-                    "Expected keyframes name \"{name}\" to match pattern \"{pattern_str}\""
-                )
+                format!("Expected keyframes name \"{name}\" to match pattern \"{pattern_str}\"")
             };
 
             // Compute the offset of the keyframes name in the source.

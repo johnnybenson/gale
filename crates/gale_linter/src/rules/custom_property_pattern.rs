@@ -157,7 +157,8 @@ impl Rule for CustomPropertyPattern {
                     // skip — non-standard syntax
                 } else if !re.is_match(name) {
                     let full_name = format!("--{name}");
-                    let message = build_message(&full_name, custom_message, pattern_str, stylelint_major);
+                    let message =
+                        build_message(&full_name, custom_message, pattern_str, stylelint_major);
                     diags.push(
                         Diagnostic::new(self.name(), message)
                             .severity(self.default_severity())
@@ -180,12 +181,19 @@ impl Rule for CustomPropertyPattern {
                             if !skip && !re.is_match(name) {
                                 // Compute absolute byte offset of the token in the source.
                                 let decl_start = decl.span.offset;
-                                let decl_end = (decl.span.offset + decl.span.length).min(ctx.source.len());
+                                let decl_end =
+                                    (decl.span.offset + decl.span.length).min(ctx.source.len());
                                 let decl_text = &ctx.source[decl_start..decl_end];
                                 let value_pos_in_decl = decl_text.find(&decl.value).unwrap_or(0);
-                                let token_abs_offset = decl_start + value_pos_in_decl + token_offset_in_value;
+                                let token_abs_offset =
+                                    decl_start + value_pos_in_decl + token_offset_in_value;
 
-                                let message = build_message(prop_name, custom_message, pattern_str, stylelint_major);
+                                let message = build_message(
+                                    prop_name,
+                                    custom_message,
+                                    pattern_str,
+                                    stylelint_major,
+                                );
                                 diags.push(
                                     Diagnostic::new(self.name(), message)
                                         .severity(self.default_severity())

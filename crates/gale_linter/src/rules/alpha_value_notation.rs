@@ -77,7 +77,8 @@ fn check_declaration(
     };
 
     // Check alpha values in color functions
-    for (rel_offset, alpha_value) in find_alpha_issues_in_functions(search_area, effective_primary) {
+    for (rel_offset, alpha_value) in find_alpha_issues_in_functions(search_area, effective_primary)
+    {
         let abs_offset = if decl_end <= ctx.source.len() && decl_start < decl_end {
             decl_start + rel_offset
         } else {

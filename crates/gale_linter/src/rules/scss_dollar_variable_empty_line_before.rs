@@ -165,7 +165,8 @@ impl Rule for ScssDollarVariableEmptyLineBefore {
                     // find the statement's opening line and check if it's a $var.
                     let is_multi_line_end = prev.ends_with(") !default;")
                         || prev.ends_with(");")
-                        || (prev.starts_with(')') && (prev.ends_with(';') || prev.ends_with("!default;")));
+                        || (prev.starts_with(')')
+                            && (prev.ends_with(';') || prev.ends_with("!default;")));
 
                     if is_multi_line_end && line_idx > 0 {
                         // Count unmatched closing parens to find where multi-line
@@ -236,21 +237,15 @@ impl Rule for ScssDollarVariableEmptyLineBefore {
             let leading_ws = line.len() - line.trim_start().len();
             if expect_empty_line && !has_empty_line_before && !is_first_line {
                 diagnostics.push(
-                    Diagnostic::new(
-                        self.name(),
-                        "Expected an empty line before $-variable",
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(byte_offset + leading_ws, trimmed.len())),
+                    Diagnostic::new(self.name(), "Expected an empty line before $-variable")
+                        .severity(self.default_severity())
+                        .span(Span::new(byte_offset + leading_ws, trimmed.len())),
                 );
             } else if !expect_empty_line && has_empty_line_before {
                 diagnostics.push(
-                    Diagnostic::new(
-                        self.name(),
-                        "Unexpected empty line before $-variable",
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(byte_offset + leading_ws, trimmed.len())),
+                    Diagnostic::new(self.name(), "Unexpected empty line before $-variable")
+                        .severity(self.default_severity())
+                        .span(Span::new(byte_offset + leading_ws, trimmed.len())),
                 );
             }
         }
@@ -320,7 +315,10 @@ mod tests {
         let ctx = scss_ctx_with_options(src, &opts);
         let d = ScssDollarVariableEmptyLineBefore.check_root(&[], &ctx);
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("Unexpected empty line before $-variable"));
+        assert!(
+            d[0].message
+                .contains("Unexpected empty line before $-variable")
+        );
     }
 
     #[test]

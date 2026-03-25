@@ -286,9 +286,7 @@ mod tests {
         // [true, { ignoreAtRules: ["mixin"] }] — nesting inside @mixin should
         // be silenced.
         static OPTS: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
-        let opts = OPTS.get_or_init(|| {
-            serde_json::json!([true, { "ignoreAtRules": ["mixin"] }])
-        });
+        let opts = OPTS.get_or_init(|| serde_json::json!([true, { "ignoreAtRules": ["mixin"] }]));
         let nodes = vec![CssNode::AtRule(AtRule {
             name: "mixin".to_string(),
             params: "onebox-favicon($class, $image)".to_string(),
@@ -303,9 +301,7 @@ mod tests {
     fn still_reports_non_ignored_at_rule() {
         // @layer is not in the ignore list — should still fire.
         static OPTS: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
-        let opts = OPTS.get_or_init(|| {
-            serde_json::json!([true, { "ignoreAtRules": ["mixin"] }])
-        });
+        let opts = OPTS.get_or_init(|| serde_json::json!([true, { "ignoreAtRules": ["mixin"] }]));
         let nodes = vec![CssNode::AtRule(AtRule {
             name: "layer".to_string(),
             params: "utilities".to_string(),
@@ -320,9 +316,7 @@ mod tests {
     fn ignore_at_rules_is_case_insensitive() {
         // Option says "mixin" (lowercase), at-rule name "Mixin" — should be ignored.
         static OPTS: std::sync::OnceLock<serde_json::Value> = std::sync::OnceLock::new();
-        let opts = OPTS.get_or_init(|| {
-            serde_json::json!([true, { "ignoreAtRules": ["mixin"] }])
-        });
+        let opts = OPTS.get_or_init(|| serde_json::json!([true, { "ignoreAtRules": ["mixin"] }]));
         let nodes = vec![CssNode::AtRule(AtRule {
             name: "Mixin".to_string(),
             params: "foo".to_string(),
@@ -330,6 +324,9 @@ mod tests {
             children: vec![style("& .bar")],
         })];
         let d = NestingSelectorNoMissingScopingRoot.check_root(&nodes, &ctx_with_options(opts));
-        assert!(d.is_empty(), "case-insensitive match should suppress diagnostic");
+        assert!(
+            d.is_empty(),
+            "case-insensitive match should suppress diagnostic"
+        );
     }
 }

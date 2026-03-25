@@ -83,10 +83,7 @@ impl Rule for DeclarationPropertyValueKeywordNoDeprecated {
                 // Find the keyword in the source to report the correct column.
                 let decl_src_end = (decl.span.offset + decl.span.length).min(ctx.source.len());
                 let decl_src = &ctx.source[decl.span.offset..decl_src_end];
-                let kw_off = decl_src
-                    .to_ascii_lowercase()
-                    .find(keyword)
-                    .unwrap_or(0);
+                let kw_off = decl_src.to_ascii_lowercase().find(keyword).unwrap_or(0);
                 diags.push(
                     Diagnostic::new(
                         self.name(),

@@ -208,30 +208,28 @@ mod tests {
     #[test]
     fn skips_rgba_with_scss_variable() {
         // rgba($color, 0.7) — SCSS variable as first arg, not standard syntax
-        let d = ColorFunctionAliasNotation.check(
-            &style_with_value("rgba($danger, 0.7)"),
-            &ctx(),
+        let d = ColorFunctionAliasNotation.check(&style_with_value("rgba($danger, 0.7)"), &ctx());
+        assert!(
+            d.is_empty(),
+            "rgba() with SCSS variable arg should be skipped"
         );
-        assert!(d.is_empty(), "rgba() with SCSS variable arg should be skipped");
     }
 
     #[test]
     fn skips_rgba_with_scss_interpolation() {
         // rgba(0, 0, 0, #{$opacity}) — SCSS interpolation in args
-        let d = ColorFunctionAliasNotation.check(
-            &style_with_value("rgba(0, 0, 0, #{$opacity})"),
-            &ctx(),
+        let d = ColorFunctionAliasNotation
+            .check(&style_with_value("rgba(0, 0, 0, #{$opacity})"), &ctx());
+        assert!(
+            d.is_empty(),
+            "rgba() with SCSS interpolation should be skipped"
         );
-        assert!(d.is_empty(), "rgba() with SCSS interpolation should be skipped");
     }
 
     #[test]
     fn still_reports_plain_rgba() {
         // Plain rgba() without SCSS args should still be reported
-        let d = ColorFunctionAliasNotation.check(
-            &style_with_value("rgba(0, 0, 0, 0.5)"),
-            &ctx(),
-        );
+        let d = ColorFunctionAliasNotation.check(&style_with_value("rgba(0, 0, 0, 0.5)"), &ctx());
         assert_eq!(d.len(), 1);
     }
 }

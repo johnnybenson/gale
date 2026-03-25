@@ -1062,13 +1062,20 @@ mod tests {
     #[test]
     fn allows_currentcolor_lowercase() {
         let d = ValueKeywordCase.check(&style_with_decl("color", "currentcolor"), &ctx());
-        assert!(d.is_empty(), "currentcolor (lowercase) should not be flagged");
+        assert!(
+            d.is_empty(),
+            "currentcolor (lowercase) should not be flagged"
+        );
     }
 
     #[test]
     fn reports_current_color_in_border_lower_mode() {
         let d = ValueKeywordCase.check(&style_with_decl("border-color", "currentColor"), &ctx());
-        assert_eq!(d.len(), 1, "currentColor in border-color should be flagged in lower mode");
+        assert_eq!(
+            d.len(),
+            1,
+            "currentColor in border-color should be flagged in lower mode"
+        );
     }
 
     #[test]
@@ -1077,10 +1084,17 @@ mod tests {
         let opts = serde_json::json!(["lower", { "camelCaseSvgKeywords": true }]);
         let ctx = ctx_with_opts(&opts);
         let d = ValueKeywordCase.check(&style_with_decl("color", "currentColor"), &ctx);
-        assert!(d.is_empty(), "currentColor should be allowed when camelCaseSvgKeywords:true");
+        assert!(
+            d.is_empty(),
+            "currentColor should be allowed when camelCaseSvgKeywords:true"
+        );
         // Lowercase should be flagged
         let d2 = ValueKeywordCase.check(&style_with_decl("color", "currentcolor"), &ctx);
-        assert_eq!(d2.len(), 1, "currentcolor should be flagged when camelCaseSvgKeywords:true");
+        assert_eq!(
+            d2.len(),
+            1,
+            "currentcolor should be flagged when camelCaseSvgKeywords:true"
+        );
     }
 
     #[test]

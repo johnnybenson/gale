@@ -161,7 +161,9 @@ fn collect_selectors(
                 // Only check standard selectors (matching Stylelint's isStandardSyntaxRule).
                 // Also skip if any expanded selector contains SCSS interpolation — postcss-selector-parser
                 // fails to parse such selectors in Stylelint, causing no-duplicate-selectors to skip them.
-                let expanded_is_standard = !expanded.iter().any(|s| s.contains("#{") || s.contains("@{"));
+                let expanded_is_standard = !expanded
+                    .iter()
+                    .any(|s| s.contains("#{") || s.contains("@{"));
                 if is_standard && expanded_is_standard && !expanded.is_empty() {
                     let normalized_key = normalize_expanded(&expanded);
                     let (line, _) = line_index.offset_to_location(style_rule.span.offset);
@@ -391,10 +393,12 @@ mod tests {
             options: None,
         };
         let diags = rule.check_root(&result.nodes, &ctx);
+        // Each `& {}` expands to `.parent`, which duplicates the parent rule.
+        // Stylelint reports both as duplicates, so we expect 2 diagnostics.
         assert_eq!(
             diags.len(),
-            1,
-            "nested & in same parent should be flagged as duplicate"
+            2,
+            "each nested & should be flagged as duplicate of parent"
         );
     }
 }

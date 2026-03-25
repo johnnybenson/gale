@@ -342,7 +342,9 @@ fn walk_scss_nodes(
                 for orig_part in &orig_parts {
                     // orig_part may have leading whitespace (not trimmed by split_selector_list);
                     // use .trim() for display, checks, and key computations.
-                    if orig_part.trim().is_empty() { continue; }
+                    if orig_part.trim().is_empty() {
+                        continue;
+                    }
 
                     // Expansions used for CHECKING (stored in comparison_ctx as prior selectors).
                     // Uses `expand_scss_selector_for_check` which preserves leading whitespace
@@ -357,7 +359,10 @@ fn walk_scss_nodes(
                         }
                     } else {
                         let expanded = expand_scss_selector_for_check(parent_selectors, orig_part);
-                        if expanded.iter().any(|s| has_remaining_preprocessor_constructs(s)) {
+                        if expanded
+                            .iter()
+                            .any(|s| has_remaining_preprocessor_constructs(s))
+                        {
                             // Any non-standard expansion → skip the whole rule (Stylelint behaviour)
                             vec![]
                         } else {
@@ -396,19 +401,23 @@ fn walk_scss_nodes(
                                 // that e.g. "\n  &-header + &-body" finds the correct
                                 // occurrence rather than the earlier "&-header + &-body-collapse"
                                 // substring match.
-                                source[style.span.offset..]
-                                    .find(orig_part)
-                                    .map(|o| style.span.offset + o + leading_len)
-                                    .or_else(|| {
-                                        source[style.span.offset..]
-                                            .find(part_trimmed)
-                                            .map(|o| style.span.offset + o)
+                                source
+                                    .get(style.span.offset..)
+                                    .and_then(|s| {
+                                        s.find(orig_part)
+                                            .map(|o| style.span.offset + o + leading_len)
+                                            .or_else(|| {
+                                                s.find(part_trimmed)
+                                                    .map(|o| style.span.offset + o)
+                                            })
                                     })
                                     .unwrap_or(style.span.offset)
                             } else {
-                                source[style.span.offset..]
-                                    .find(part_trimmed)
-                                    .map(|o| style.span.offset + o)
+                                source
+                                    .get(style.span.offset..)
+                                    .and_then(|s| {
+                                        s.find(part_trimmed).map(|o| style.span.offset + o)
+                                    })
                                     .unwrap_or(style.span.offset)
                             };
                             let span = gale_diagnostics::Span::new(part_offset, part_trimmed.len());
@@ -427,9 +436,27 @@ fn walk_scss_nodes(
 
                 // Recurse into children with the UNFILTERED expansions so that
                 // children inherit non-standard (interpolated) parent context.
-                let children_nodes: Vec<CssNode> = style.children.iter().map(|c| CssNode::Style(c.clone())).collect();
-                walk_scss_nodes(&children_nodes, &all_expanded_for_children, comparison_ctx, diagnostics, rule_impl, source);
-                walk_scss_nodes(&style.nested_at_rules, &all_expanded_for_children, comparison_ctx, diagnostics, rule_impl, source);
+                let children_nodes: Vec<CssNode> = style
+                    .children
+                    .iter()
+                    .map(|c| CssNode::Style(c.clone()))
+                    .collect();
+                walk_scss_nodes(
+                    &children_nodes,
+                    &all_expanded_for_children,
+                    comparison_ctx,
+                    diagnostics,
+                    rule_impl,
+                    source,
+                );
+                walk_scss_nodes(
+                    &style.nested_at_rules,
+                    &all_expanded_for_children,
+                    comparison_ctx,
+                    diagnostics,
+                    rule_impl,
+                    source,
+                );
             }
             CssNode::AtRule(at_rule) => {
                 // Each at-rule establishes a new comparison context — matching
@@ -663,19 +690,26 @@ fn check_one_selector_with_src(
     rule: &NoDescendingSpecificity,
 ) {
     for individual in split_selector_list(selector) {
-        if individual.is_empty() { continue; }
-        if has_vendor_prefixed_pseudo_class(individual) { continue; }
+        if individual.is_empty() {
+            continue;
+        }
+        if has_vendor_prefixed_pseudo_class(individual) {
+            continue;
+        }
 
         let spec = calculate_specificity(individual);
         let key = last_compound_selector_without_pseudo_classes(individual);
-        if key.is_empty() { continue; }
+        if key.is_empty() {
+            continue;
+        }
 
         if let Some(priors) = comparison_ctx.get(&key) {
             for (prior_spec, prior_selector) in priors {
                 if spec < *prior_spec {
                     let msg = format!(
                         "Expected selector \"{}\" to come before selector \"{}\"",
-                        display_selector.trim(), prior_selector
+                        display_selector.trim(),
+                        prior_selector
                     );
                     diagnostics.push(
                         Diagnostic::new(rule.name(), msg)
@@ -1044,23 +1078,34 @@ mod tests {
     fn less_uses_same_selective_approach() {
         let rule = NoDescendingSpecificity;
         // Same last compound selector `.bar` — should report in Less
+        let source = ".foo .bar { color: red; }\n.bar { color: blue; }";
         let nodes = vec![
             CssNode::Style(StyleRule {
                 selector: ".foo .bar".to_string(),
-                declarations: vec![],
-                span: ParserSpan::new(0, 20),
+                declarations: vec![Declaration {
+                    property: "color".to_string(),
+                    value: "red".to_string(),
+                    span: ParserSpan::new(12, 10),
+                    important: false,
+                }],
+                span: ParserSpan::new(0, 25),
                 ..Default::default()
             }),
             CssNode::Style(StyleRule {
                 selector: ".bar".to_string(),
-                declarations: vec![],
-                span: ParserSpan::new(21, 12),
+                declarations: vec![Declaration {
+                    property: "color".to_string(),
+                    value: "blue".to_string(),
+                    span: ParserSpan::new(33, 11),
+                    important: false,
+                }],
+                span: ParserSpan::new(26, 21),
                 ..Default::default()
             }),
         ];
         let less_context = RuleContext {
             file_path: "test.less",
-            source: "",
+            source,
             syntax: Syntax::Less,
             options: None,
         };

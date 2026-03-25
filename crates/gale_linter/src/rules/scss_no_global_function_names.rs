@@ -13,13 +13,27 @@ pub struct ScssNoGlobalFunctionNames;
 fn function_message(name: &str) -> &'static str {
     match name {
         // rule_mapping entries: have specific argument transformations
-        "darken" => "Expected color.adjust($color, $lightness: -$amount) instead of darken($color, $amount)",
-        "lighten" => "Expected color.adjust($color, $lightness: $amount) instead of lighten($color, $amount)",
-        "adjust-hue" => "Expected color.adjust($color, $hue: $amount) instead of adjust-hue($color, $amount)",
-        "desaturate" => "Expected color.adjust($color, $saturation: -$amount) instead of desaturate($color, $amount)",
-        "opacify" => "Expected color.adjust($color, $alpha: -$amount) instead of opacify($color, $amount)",
-        "saturate" => "Expected color.adjust($color, $saturation: $amount) instead of saturate($color, $amount)",
-        "transparentize" => "Expected color.adjust($color, $alpha: -$amount) instead of transparentize($color, $amount)",
+        "darken" => {
+            "Expected color.adjust($color, $lightness: -$amount) instead of darken($color, $amount)"
+        }
+        "lighten" => {
+            "Expected color.adjust($color, $lightness: $amount) instead of lighten($color, $amount)"
+        }
+        "adjust-hue" => {
+            "Expected color.adjust($color, $hue: $amount) instead of adjust-hue($color, $amount)"
+        }
+        "desaturate" => {
+            "Expected color.adjust($color, $saturation: -$amount) instead of desaturate($color, $amount)"
+        }
+        "opacify" => {
+            "Expected color.adjust($color, $alpha: -$amount) instead of opacify($color, $amount)"
+        }
+        "saturate" => {
+            "Expected color.adjust($color, $saturation: $amount) instead of saturate($color, $amount)"
+        }
+        "transparentize" => {
+            "Expected color.adjust($color, $alpha: -$amount) instead of transparentize($color, $amount)"
+        }
         // new_rule_names entries (no rule_mapping): Expected module.new_name instead of name
         "adjust-color" => "Expected color.adjust instead of adjust-color",
         "scale-color" => "Expected color.scale instead of scale-color",
@@ -74,7 +88,9 @@ fn function_message(name: &str) -> &'static str {
         "index" => "Expected list.index instead of index",
         "feature-exists" => "Expected meta.feature-exists instead of feature-exists",
         "variable-exists" => "Expected meta.variable-exists instead of variable-exists",
-        "global-variable-exists" => "Expected meta.global-variable-exists instead of global-variable-exists",
+        "global-variable-exists" => {
+            "Expected meta.global-variable-exists instead of global-variable-exists"
+        }
         "function-exists" => "Expected meta.function-exists instead of function-exists",
         "mixin-exists" => "Expected meta.mixin-exists instead of mixin-exists",
         "inspect" => "Expected meta.inspect instead of inspect",
@@ -213,8 +229,7 @@ fn scan_value_for_global_functions(
 
         // Collect function name
         let start = i;
-        while i < len
-            && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
+        while i < len && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'-' || bytes[i] == b'_')
         {
             i += 1;
         }
