@@ -27,7 +27,7 @@ Real-world benchmarks using [hyperfine](https://github.com/sharkdp/hyperfine) (1
 | [Angular Components](https://github.com/angular/components) | 620 | 1.843s | 0.021s | **88x** |
 | [Discourse](https://github.com/discourse/discourse) | 355 | 1.438s | 0.021s | **69x** |
 
-**Parity: 0 false positives and 0 false negatives across all 16 tested repositories (6,673 files).**
+**Parity: 0 false positives and 0 false negatives across all 22 tested repositories (5,790 files).**
 
 Reproduce these results: `./benchmarks/benchmark.sh`
 
@@ -92,9 +92,9 @@ Download pre-built binaries from [GitHub Releases](https://github.com/LyricalStr
 
 ## What's supported
 
-### 250 built-in rules
+### 260+ built-in rules
 
-Gale ships 250 built-in rules across four categories:
+Gale ships 260+ built-in rules across four categories:
 
 | Category | Count | Examples |
 |----------|------:|---------|
@@ -216,10 +216,6 @@ gale [OPTIONS] [FILES]...
 
 ## Editor integration
 
-### VS Code
-
-A VS Code extension is included at [`editors/vscode/`](editors/vscode/).
-
 ### Any LSP-compatible editor
 
 ```bash
@@ -276,7 +272,7 @@ python tests/differential/run.py --css-only   # Skip SCSS/Less
 python tests/differential/run.py --skip-build # Use existing binary
 ```
 
-The test corpus includes Bootstrap, Gutenberg, Carbon, Angular Components, wp-calypso, Discourse, GOV.UK Frontend, Spectrum CSS, Docusaurus, Grafana, Material UI, freeCodeCamp, PatternFly, Primer CSS, Elastic EUI, and Mattermost.
+The test corpus includes Bootstrap, Gutenberg, Carbon, Angular Components, wp-calypso, Discourse, GOV.UK Frontend, Spectrum CSS, Docusaurus, Grafana, Material UI, freeCodeCamp, PatternFly, Primer CSS, Elastic EUI, Mattermost, Mastodon, JupyterLab, Joomla, SLDS, rsuite, and Fundamental Styles.
 
 ### Benchmarks
 
@@ -299,7 +295,7 @@ git push && git push --tags
 
 The [release workflow](.github/workflows/release.yml) will:
 
-1. Build binaries for Linux x64 and arm64
+1. Build binaries for Linux (x64, arm64) and macOS (x64, arm64)
 2. Create a GitHub Release with the binaries
 3. Publish the npm package (`@lyricalstring/gale`) with the matching version
 
@@ -327,7 +323,7 @@ gale (binary)
 gale_cli         CLI definition (clap), file discovery, orchestration
   |
   +-- gale_config       Config loading, resolution, presets
-  +-- gale_linter       Rule trait, registry, runner, 250 built-in rules
+  +-- gale_linter       Rule trait, registry, runner, 260+ built-in rules
   |     +-- gale_css_parser    CSS/SCSS/Less parser (lightningcss + raffia)
   |     +-- gale_diagnostics   Span, Diagnostic, LintResult, Fix/Edit types
   +-- gale_formatter    Output formatters (text, json, compact)
