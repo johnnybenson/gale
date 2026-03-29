@@ -1049,7 +1049,10 @@ mod tests {
         // Stylelint does not enforce lowercase for CSS system colors (e.g. GrayText, ButtonText).
         // These are defined with mixed case in the CSS spec.
         let d = ValueKeywordCase.check(&style_with_decl("color", "InactiveCaptionText"), &ctx());
-        assert!(d.is_empty(), "system color InactiveCaptionText should not be flagged");
+        assert!(
+            d.is_empty(),
+            "system color InactiveCaptionText should not be flagged"
+        );
     }
 
     #[test]
@@ -1152,7 +1155,10 @@ mod tests {
         // PostCSS-SCSS does NOT treat `///` (triple-slash Sass doc comments) as line comments.
         // Identifiers after `///` remain visible to value-keyword-case.
         let tokens = tokenize_value("(\n  /// Prevent blah\n  inherit\n)");
-        let ident_tokens: Vec<_> = tokens.iter().filter(|t| t.kind == TokenKind::Ident).collect();
+        let ident_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.kind == TokenKind::Ident)
+            .collect();
         let texts: Vec<&str> = ident_tokens.iter().map(|t| t.text.as_str()).collect();
         assert!(
             texts.contains(&"Prevent"),
@@ -1171,7 +1177,10 @@ mod tests {
         // Regular `//` SCSS comments ARE skipped by the tokenizer.
         // Identifiers after `//` should NOT be flagged.
         let tokens = tokenize_value("(\n  // Prevent blah\n  inherit\n)");
-        let ident_tokens: Vec<_> = tokens.iter().filter(|t| t.kind == TokenKind::Ident).collect();
+        let ident_tokens: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.kind == TokenKind::Ident)
+            .collect();
         let texts: Vec<&str> = ident_tokens.iter().map(|t| t.text.as_str()).collect();
         assert!(
             !texts.contains(&"Prevent"),

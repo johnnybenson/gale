@@ -2003,8 +2003,10 @@ fn debug_custom_property_span() {
                 } else {
                     "(empty span)"
                 };
-                eprintln!("DECL: prop={:?} value={:?} span=({}, {}) text={:?}",
-                    decl.property, decl.value, decl.span.offset, decl.span.length, span_text);
+                eprintln!(
+                    "DECL: prop={:?} value={:?} span=({}, {}) text={:?}",
+                    decl.property, decl.value, decl.span.offset, decl.span.length, span_text
+                );
             }
         }
     }
@@ -2021,7 +2023,10 @@ fn test_custom_property_spans() {
         assert_eq!(serif.property, "--font-serif");
         assert!(serif.span.length > 0, "span should be set");
         let span_text = &css[serif.span.offset..serif.span.offset + serif.span.length];
-        assert!(span_text.contains("Georgia"), "source span should contain Georgia");
+        assert!(
+            span_text.contains("Georgia"),
+            "source span should contain Georgia"
+        );
     } else {
         panic!("expected StyleRule");
     }

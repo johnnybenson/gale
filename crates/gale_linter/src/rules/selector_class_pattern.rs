@@ -89,12 +89,9 @@ impl Rule for SelectorClassPattern {
                         format!("Expected \".{class}\" to match pattern \"{pattern_str}\"")
                     };
                     diags.push(
-                        Diagnostic::new(
-                            self.name(),
-                            msg,
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(offset, class.len() + 1)), // +1 for the dot
+                        Diagnostic::new(self.name(), msg)
+                            .severity(self.default_severity())
+                            .span(Span::new(offset, class.len() + 1)), // +1 for the dot
                     );
                 }
             }

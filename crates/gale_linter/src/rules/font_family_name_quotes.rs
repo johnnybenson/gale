@@ -477,19 +477,13 @@ impl FontFamilyNameQuotes {
                 if is_kw {
                     if family.quoted {
                         diagnostics.push(self.make_diag(
-                            format!(
-                                "Unexpected quotes around \"{}\"",
-                                family.name
-                            ),
+                            format!("Unexpected quotes around \"{}\"", family.name),
                             family,
                         ));
                     }
                 } else if !family.quoted {
                     diagnostics.push(self.make_diag(
-                        format!(
-                            "Expected quotes around \"{}\"",
-                            family.name
-                        ),
+                        format!("Expected quotes around \"{}\"", family.name),
                         family,
                     ));
                 }
@@ -498,27 +492,18 @@ impl FontFamilyNameQuotes {
                 if is_kw {
                     if family.quoted {
                         diagnostics.push(self.make_diag(
-                            format!(
-                                "Unexpected quotes around \"{}\"",
-                                family.name
-                            ),
+                            format!("Unexpected quotes around \"{}\"", family.name),
                             family,
                         ));
                     }
                 } else if !family.quoted && strictly_requires_quoting(&family.name) {
                     diagnostics.push(self.make_diag(
-                        format!(
-                            "Expected quotes around \"{}\"",
-                            family.name
-                        ),
+                        format!("Expected quotes around \"{}\"", family.name),
                         family,
                     ));
                 } else if family.quoted && !strictly_requires_quoting(&family.name) {
                     diagnostics.push(self.make_diag(
-                        format!(
-                            "Unexpected quotes around \"{}\"",
-                            family.name
-                        ),
+                        format!("Unexpected quotes around \"{}\"", family.name),
                         family,
                     ));
                 }
@@ -528,28 +513,19 @@ impl FontFamilyNameQuotes {
                 if is_kw {
                     if family.quoted {
                         diagnostics.push(self.make_diag(
-                            format!(
-                                "Unexpected quotes around \"{}\"",
-                                family.name
-                            ),
+                            format!("Unexpected quotes around \"{}\"", family.name),
                             family,
                         ));
                     }
                 } else if !family.quoted && needs_quoting_recommended(&family.name) {
                     diagnostics.push(self.make_diag(
-                        format!(
-                            "Expected quotes around \"{}\"",
-                            family.name
-                        ),
+                        format!("Expected quotes around \"{}\"", family.name),
                         family,
                     ));
                 } else if family.quoted && !needs_quoting_recommended(&family.name) {
                     // Unnecessarily quoted single-word name like "Arial"
                     diagnostics.push(self.make_diag(
-                        format!(
-                            "Unexpected quotes around \"{}\"",
-                            family.name
-                        ),
+                        format!("Unexpected quotes around \"{}\"", family.name),
                         family,
                     ));
                 }

@@ -775,7 +775,8 @@ fn check_value_inner(
         // ── Comparison operators: ==, !=, >=, <=, <, > ──
         // Treat newline as equivalent to a space (Stylelint allows operators at end of line).
         if ch == b'=' && i + 1 < len && b[i + 1] == b'=' {
-            let ok = (i > 0 && is_space_or_nl(b[i - 1])) && (i + 2 < len && is_space_or_nl(b[i + 2]));
+            let ok =
+                (i > 0 && is_space_or_nl(b[i - 1])) && (i + 2 < len && is_space_or_nl(b[i + 2]));
             if !ok {
                 emit(rule, diags, base_offset + i, 2, "==");
             }
@@ -783,7 +784,8 @@ fn check_value_inner(
             continue;
         }
         if ch == b'!' && i + 1 < len && b[i + 1] == b'=' {
-            let ok = (i > 0 && is_space_or_nl(b[i - 1])) && (i + 2 < len && is_space_or_nl(b[i + 2]));
+            let ok =
+                (i > 0 && is_space_or_nl(b[i - 1])) && (i + 2 < len && is_space_or_nl(b[i + 2]));
             if !ok {
                 emit(rule, diags, base_offset + i, 2, "!=");
             }
@@ -791,7 +793,8 @@ fn check_value_inner(
             continue;
         }
         if ch == b'>' && i + 1 < len && b[i + 1] == b'=' {
-            let ok = (i > 0 && is_space_or_nl(b[i - 1])) && (i + 2 < len && is_space_or_nl(b[i + 2]));
+            let ok =
+                (i > 0 && is_space_or_nl(b[i - 1])) && (i + 2 < len && is_space_or_nl(b[i + 2]));
             if !ok {
                 emit(rule, diags, base_offset + i, 2, ">=");
             }
@@ -799,7 +802,8 @@ fn check_value_inner(
             continue;
         }
         if ch == b'<' && i + 1 < len && b[i + 1] == b'=' {
-            let ok = (i > 0 && is_space_or_nl(b[i - 1])) && (i + 2 < len && is_space_or_nl(b[i + 2]));
+            let ok =
+                (i > 0 && is_space_or_nl(b[i - 1])) && (i + 2 < len && is_space_or_nl(b[i + 2]));
             if !ok {
                 emit(rule, diags, base_offset + i, 2, "<=");
             }
@@ -807,7 +811,8 @@ fn check_value_inner(
             continue;
         }
         if ch == b'<' && is_comparison_ctx(b, i) {
-            let ok = (i > 0 && is_space_or_nl(b[i - 1])) && (i + 1 < len && is_space_or_nl(b[i + 1]));
+            let ok =
+                (i > 0 && is_space_or_nl(b[i - 1])) && (i + 1 < len && is_space_or_nl(b[i + 1]));
             if !ok {
                 emit(rule, diags, base_offset + i, 1, "<");
             }
@@ -815,7 +820,8 @@ fn check_value_inner(
             continue;
         }
         if ch == b'>' && is_comparison_ctx(b, i) {
-            let ok = (i > 0 && is_space_or_nl(b[i - 1])) && (i + 1 < len && is_space_or_nl(b[i + 1]));
+            let ok =
+                (i > 0 && is_space_or_nl(b[i - 1])) && (i + 1 < len && is_space_or_nl(b[i + 1]));
             if !ok {
                 emit(rule, diags, base_offset + i, 1, ">");
             }
@@ -826,7 +832,8 @@ fn check_value_inner(
         // ── Modulo % ──
         if ch == b'%' {
             if is_modulo(b, i) {
-                let ok = (i > 0 && is_space_or_nl(b[i - 1])) && (i + 1 < len && is_space_or_nl(b[i + 1]));
+                let ok = (i > 0 && is_space_or_nl(b[i - 1]))
+                    && (i + 1 < len && is_space_or_nl(b[i + 1]));
                 if !ok {
                     emit(rule, diags, base_offset + i, 1, "%");
                 }

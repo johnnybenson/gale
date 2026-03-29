@@ -101,18 +101,16 @@ impl Rule for MediaFeatureRangeNotation {
                 let paren_search = format!("({prefixed}");
                 let paren_off = at_src_lower.find(&paren_search).or_else(|| {
                     // Try with whitespace between `(` and feature name
-                    at_src_lower
-                        .find(&prefixed)
-                        .and_then(|p| {
-                            // Walk backwards from the match to find `(`
-                            let before = &at_src_lower[..p];
-                            let trimmed = before.trim_end();
-                            if trimmed.ends_with('(') {
-                                Some(trimmed.len() - 1)
-                            } else {
-                                None
-                            }
-                        })
+                    at_src_lower.find(&prefixed).and_then(|p| {
+                        // Walk backwards from the match to find `(`
+                        let before = &at_src_lower[..p];
+                        let trimmed = before.trim_end();
+                        if trimmed.ends_with('(') {
+                            Some(trimmed.len() - 1)
+                        } else {
+                            None
+                        }
+                    })
                 });
                 if let Some(paren_off) = paren_off {
                     let abs_offset = at.span.offset + paren_off;
@@ -120,9 +118,7 @@ impl Rule for MediaFeatureRangeNotation {
                         diags.push(
                             Diagnostic::new(
                                 self.name(),
-                                format!(
-                                    "Expected \"{notation_str}\" media feature range notation"
-                                ),
+                                format!("Expected \"{notation_str}\" media feature range notation"),
                             )
                             .severity(self.default_severity())
                             .span(Span::new(abs_offset, 1)),

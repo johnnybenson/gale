@@ -1,4 +1,4 @@
-use gale_css_parser::{CssNode, Syntax};
+use gale_css_parser::CssNode;
 use gale_diagnostics::{Diagnostic, Severity, Span};
 
 use crate::data::is_known_at_rule_for_syntax;
@@ -90,9 +90,7 @@ mod tests {
         // Stylelint runs scss/at-rule-no-unknown on CSS files too when enabled
         // (typically via stylelint-config-standard-scss).
         assert_eq!(
-            ScssAtRuleNoUnknown
-                .check(&at("tailwind"), &css_ctx())
-                .len(),
+            ScssAtRuleNoUnknown.check(&at("tailwind"), &css_ctx()).len(),
             1
         );
     }

@@ -101,9 +101,7 @@ impl Rule for ColorFunctionNotation {
 
                         if should_report {
                             // Skip if ignore: ["with-var-inside"] and args contain var(
-                            if ignore_with_var
-                                && args.to_ascii_lowercase().contains("var(")
-                            {
+                            if ignore_with_var && args.to_ascii_lowercase().contains("var(") {
                                 search_from = abs_pos + 1;
                                 continue;
                             }
@@ -224,5 +222,9 @@ fn debug_detect_rgb_comma() {
     for diag in &d {
         eprintln!("  {}: {}", diag.rule_name, diag.message);
     }
-    assert!(d.len() >= 2, "Expected at least 2 diagnostics, got {}", d.len());
+    assert!(
+        d.len() >= 2,
+        "Expected at least 2 diagnostics, got {}",
+        d.len()
+    );
 }

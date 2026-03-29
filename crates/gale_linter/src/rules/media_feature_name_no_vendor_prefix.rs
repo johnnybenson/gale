@@ -58,32 +58,28 @@ impl Rule for MediaFeatureNameNoVendorPrefix {
                 let feature_len = feature.len();
 
                 // Try to find the feature name in the source text for accurate positioning
-                let (feat_offset, feat_len) = if rule.span.offset + rule.span.length
-                    <= ctx.source.len()
-                {
-                    let rule_src =
-                        &ctx.source[rule.span.offset..rule.span.offset + rule.span.length];
-                    let rule_lower = rule_src.to_ascii_lowercase();
-                    if let Some(pos) = rule_lower.find(feature) {
-                        (rule.span.offset + pos, feature_len)
+                let (feat_offset, feat_len) =
+                    if rule.span.offset + rule.span.length <= ctx.source.len() {
+                        let rule_src =
+                            &ctx.source[rule.span.offset..rule.span.offset + rule.span.length];
+                        let rule_lower = rule_src.to_ascii_lowercase();
+                        if let Some(pos) = rule_lower.find(feature) {
+                            (rule.span.offset + pos, feature_len)
+                        } else {
+                            // Fallback: compute from params offset
+                            // @media + space = 7 bytes, then params start
+                            let params_offset = rule.span.offset + 7; // "@media "
+                            (params_offset + feature_pos_in_params, feature_len)
+                        }
                     } else {
-                        // Fallback: compute from params offset
-                        // @media + space = 7 bytes, then params start
-                        let params_offset = rule.span.offset + 7; // "@media "
-                        (params_offset + feature_pos_in_params, feature_len)
-                    }
-                } else {
-                    // Fallback if source is unavailable
-                    (rule.span.offset, rule.span.length)
-                };
+                        // Fallback if source is unavailable
+                        (rule.span.offset, rule.span.length)
+                    };
 
                 diags.push(
-                    Diagnostic::new(
-                        self.name(),
-                        "Unexpected vendor-prefix".to_string(),
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(feat_offset, feat_len)),
+                    Diagnostic::new(self.name(), "Unexpected vendor-prefix".to_string())
+                        .severity(self.default_severity())
+                        .span(Span::new(feat_offset, feat_len)),
                 );
                 break; // one diagnostic per at-rule
             }
