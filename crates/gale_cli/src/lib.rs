@@ -243,17 +243,18 @@ fn convert_extglob(pattern: &str) -> String {
         }
 
         // Check for bare (alt|alt) at path-segment boundary
-        if bytes[i] == b'(' && (i == 0 || bytes[i - 1] == b'/') {
-            if let Some(close) = find_matching_paren(pattern, i) {
-                let inner = &pattern[i + 1..close];
-                if inner.contains('|') && !inner.contains('/') {
-                    let converted = inner.replace('|', ",");
-                    result.push('{');
-                    result.push_str(&converted);
-                    result.push('}');
-                    i = close + 1;
-                    continue;
-                }
+        if bytes[i] == b'('
+            && (i == 0 || bytes[i - 1] == b'/')
+            && let Some(close) = find_matching_paren(pattern, i)
+        {
+            let inner = &pattern[i + 1..close];
+            if inner.contains('|') && !inner.contains('/') {
+                let converted = inner.replace('|', ",");
+                result.push('{');
+                result.push_str(&converted);
+                result.push('}');
+                i = close + 1;
+                continue;
             }
         }
 
