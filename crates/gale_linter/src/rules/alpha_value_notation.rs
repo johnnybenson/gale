@@ -34,12 +34,13 @@ impl Rule for AlphaValueNotation {
                 }
             }
             CssNode::Declaration(decl) => {
-                // Top-level declarations (e.g. SCSS variables like `$a: rgb(...)`)
                 check_declaration(self, decl, &opts, ctx, &mut diags);
             }
             _ => {}
         }
 
+        // Deduplicate: keyframe declarations may have overlapping source spans.
+        diags.dedup_by(|a, b| a.span == b.span && a.message == b.message);
         diags
     }
 }

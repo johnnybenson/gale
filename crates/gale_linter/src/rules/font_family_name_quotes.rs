@@ -197,19 +197,34 @@ fn parse_font_families_from_source(
             }
             i += 2; // skip */
         } else {
-            // Unquoted name — spans multiple words until comma, semicolon, or comment end
+            // Unquoted name — spans multiple words until comma, semicolon, or comment end.
+            // Track paren depth so function calls like var(...) are consumed as a unit
+            // and the closing `)` is never included in the family name.
             let start = i;
-            while i < len && bytes[i] != b',' && bytes[i] != b';' && bytes[i] != b'}' {
-                // Stop at block comments (e.g. `serif/*rtl:...*/`)
-                if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
-                    break;
-                }
-                // Stop at `!important`
-                if bytes[i] == b'!' {
-                    // Check if this is `!important`
-                    let rest = &region[i..];
-                    if rest.to_ascii_lowercase().starts_with("!important") {
-                        break;
+            let mut paren_depth: usize = 0;
+            while i < len {
+                match bytes[i] {
+                    b'(' => paren_depth += 1,
+                    b')' => {
+                        if paren_depth > 0 {
+                            paren_depth -= 1;
+                        } else {
+                            break; // unmatched closing paren — stop
+                        }
+                    }
+                    b',' | b';' | b'}' if paren_depth == 0 => break,
+                    _ => {
+                        // Stop at block comments (e.g. `serif/*rtl:...*/`)
+                        if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+                            break;
+                        }
+                        // Stop at `!important`
+                        if bytes[i] == b'!' {
+                            let rest = &region[i..];
+                            if rest.to_ascii_lowercase().starts_with("!important") {
+                                break;
+                            }
+                        }
                     }
                 }
                 i += 1;
@@ -463,7 +478,7 @@ impl FontFamilyNameQuotes {
                     if family.quoted {
                         diagnostics.push(self.make_diag(
                             format!(
-                                "Unexpected quotes around generic font family \"{}\"",
+                                "Unexpected quotes around \"{}\"",
                                 family.name
                             ),
                             family,
@@ -472,7 +487,7 @@ impl FontFamilyNameQuotes {
                 } else if !family.quoted {
                     diagnostics.push(self.make_diag(
                         format!(
-                            "Expected quotes around font family name \"{}\"",
+                            "Expected quotes around \"{}\"",
                             family.name
                         ),
                         family,
@@ -484,7 +499,7 @@ impl FontFamilyNameQuotes {
                     if family.quoted {
                         diagnostics.push(self.make_diag(
                             format!(
-                                "Unexpected quotes around generic font family \"{}\"",
+                                "Unexpected quotes around \"{}\"",
                                 family.name
                             ),
                             family,
@@ -493,7 +508,7 @@ impl FontFamilyNameQuotes {
                 } else if !family.quoted && strictly_requires_quoting(&family.name) {
                     diagnostics.push(self.make_diag(
                         format!(
-                            "Expected quotes around font family name \"{}\"",
+                            "Expected quotes around \"{}\"",
                             family.name
                         ),
                         family,
@@ -501,7 +516,7 @@ impl FontFamilyNameQuotes {
                 } else if family.quoted && !strictly_requires_quoting(&family.name) {
                     diagnostics.push(self.make_diag(
                         format!(
-                            "Unexpected quotes around font family name \"{}\"",
+                            "Unexpected quotes around \"{}\"",
                             family.name
                         ),
                         family,
@@ -514,7 +529,7 @@ impl FontFamilyNameQuotes {
                     if family.quoted {
                         diagnostics.push(self.make_diag(
                             format!(
-                                "Unexpected quotes around generic font family \"{}\"",
+                                "Unexpected quotes around \"{}\"",
                                 family.name
                             ),
                             family,
@@ -523,7 +538,7 @@ impl FontFamilyNameQuotes {
                 } else if !family.quoted && needs_quoting_recommended(&family.name) {
                     diagnostics.push(self.make_diag(
                         format!(
-                            "Expected quotes around font family name \"{}\"",
+                            "Expected quotes around \"{}\"",
                             family.name
                         ),
                         family,
@@ -532,7 +547,7 @@ impl FontFamilyNameQuotes {
                     // Unnecessarily quoted single-word name like "Arial"
                     diagnostics.push(self.make_diag(
                         format!(
-                            "Unexpected quotes around font family name \"{}\"",
+                            "Unexpected quotes around \"{}\"",
                             family.name
                         ),
                         family,
@@ -767,7 +782,7 @@ mod tests {
         let node = make_node("font-family", "\"serif\"");
         let diags = rule.check(&node, &make_context());
         assert_eq!(diags.len(), 1);
-        assert!(diags[0].message.contains("generic"));
+        assert!(diags[0].message.contains("Unexpected quotes around"));
     }
 
     #[test]

@@ -3,12 +3,21 @@ use gale_diagnostics::{Diagnostic, Severity, Span};
 
 use crate::rule::{Rule, RuleContext};
 
-/// Deprecated CSS properties (sorted for binary search).
-static DEPRECATED_PROPERTIES: &[&str] = &["azimuth", "clip", "ime-mode"];
+/// Deprecated CSS properties mapped to their replacements (sorted for binary search).
+/// `None` means no standard replacement exists.
+static DEPRECATED_PROPERTIES: &[(&str, Option<&str>)] = &[
+    ("azimuth", None),
+    ("clip", Some("clip-path")),
+    ("ime-mode", None),
+    ("word-wrap", Some("overflow-wrap")),
+];
 
-fn is_deprecated_property(name: &str) -> bool {
+fn find_deprecated_property(name: &str) -> Option<Option<&'static str>> {
     let lower = name.to_ascii_lowercase();
-    DEPRECATED_PROPERTIES.binary_search(&lower.as_str()).is_ok()
+    DEPRECATED_PROPERTIES
+        .binary_search_by_key(&lower.as_str(), |(k, _)| k)
+        .ok()
+        .map(|idx| DEPRECATED_PROPERTIES[idx].1)
 }
 
 pub struct PropertyNoDeprecated;
@@ -38,14 +47,15 @@ impl Rule for PropertyNoDeprecated {
             if prop.starts_with("--") || prop.starts_with('-') {
                 continue;
             }
-            if is_deprecated_property(prop) {
+            if let Some(replacement) = find_deprecated_property(prop) {
+                let message = match replacement {
+                    Some(repl) => format!("Expected \"{}\" to be \"{}\"", prop, repl),
+                    None => format!("Unexpected deprecated property \"{}\"", prop),
+                };
                 diags.push(
-                    Diagnostic::new(
-                        self.name(),
-                        format!("Unexpected deprecated property \"{}\"", prop),
-                    )
-                    .severity(self.default_severity())
-                    .span(Span::new(decl.span.offset, decl.span.length)),
+                    Diagnostic::new(self.name(), message)
+                        .severity(self.default_severity())
+                        .span(Span::new(decl.span.offset, decl.span.length)),
                 );
             }
         }
@@ -89,7 +99,7 @@ mod tests {
         let node = style_node("a", &[("clip", "rect(0, 0, 0, 0)")]);
         let d = PropertyNoDeprecated.check(&node, &ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("clip"));
+        assert_eq!(d[0].message, "Expected \"clip\" to be \"clip-path\"");
     }
 
     #[test]
@@ -97,7 +107,7 @@ mod tests {
         let node = style_node("a", &[("azimuth", "center")]);
         let d = PropertyNoDeprecated.check(&node, &ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("azimuth"));
+        assert_eq!(d[0].message, "Unexpected deprecated property \"azimuth\"");
     }
 
     #[test]

@@ -83,10 +83,15 @@ impl Rule for SelectorClassPattern {
             for (class, class_byte_offset) in extract_class_names_with_offsets(trimmed_part) {
                 if !re.is_match(&class) {
                     let offset = selector_start + part_start + class_byte_offset;
+                    let msg = if is_kebab_case_pattern(pattern_str) {
+                        format!("Expected class selector \".{class}\" to be kebab-case")
+                    } else {
+                        format!("Expected \".{class}\" to match pattern \"{pattern_str}\"")
+                    };
                     diags.push(
                         Diagnostic::new(
                             self.name(),
-                            format!("Expected \".{class}\" to match pattern \"{pattern_str}\""),
+                            msg,
                         )
                         .severity(self.default_severity())
                         .span(Span::new(offset, class.len() + 1)), // +1 for the dot
@@ -96,6 +101,13 @@ impl Rule for SelectorClassPattern {
         }
         diags
     }
+}
+
+/// Returns true if the pattern is the default kebab-case pattern.
+/// Stylelint uses "^([a-z][a-z0-9]*)(-[a-z0-9]+)*$" as the default,
+/// and produces a human-readable "to be kebab-case" message for it.
+fn is_kebab_case_pattern(pattern: &str) -> bool {
+    pattern == DEFAULT_PATTERN || pattern == "^([a-z][a-z0-9]*)(-[a-z0-9]+)*$"
 }
 
 /// Split a selector list by commas, respecting parentheses and brackets.

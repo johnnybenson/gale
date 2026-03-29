@@ -466,11 +466,21 @@ Bootstrap, Gutenberg, Carbon, Angular Components, wp-calypso, Discourse, GOV.UK 
 - Tracing is controlled via `GALE_LOG` env var
 - File ignore supports `.galeignore` files (gitignore syntax) in addition to `.gitignore`
 
+## Target compatibility
+
+Gale targets **Stylelint v16** (the current major version). Differential testing validates 0 FP / 0 FN against 22 real-world repos using Stylelint v16. Older Stylelint versions (v13, v14) may have behavioural differences that Gale does not replicate.
+
 ## Known gaps (bugs to fix, not acceptable limitations)
 
-Every gap here is a bug. Gale must produce identical output to Stylelint — "not yet supported" is not an acceptable answer.
+Every gap here is a bug. Gale must produce identical output to Stylelint v16 — "not yet supported" is not an acceptable answer.
 
 1. **Missing rules** -- Any rule Stylelint has that Gale skips with "not yet supported" is a bug. Run the differential test to find them. They must be implemented.
 2. **Custom JavaScript plugins** -- Gale cannot execute JS plugins, but it has built-in Rust implementations of all standard plugin rules (@stylistic, scss, order). If a repo uses a custom third-party JS plugin with rules Gale doesn't implement, those rules must be added.
 3. **Sass indented syntax** -- `.sass` files return `UnsupportedSyntax` error (`.scss` works fine).
-4. **macOS/Windows release binaries** -- The release workflow currently only builds Linux binaries.
+
+## Intentional non-support
+
+These are NOT bugs. They are deliberate scope decisions.
+
+1. **`prettier/prettier` plugin** -- This Stylelint plugin runs the entire Prettier formatter and reports formatting diffs as lint warnings. Replicating it would require reimplementing Prettier's CSS/SCSS formatter in Rust, which is a separate project-scale effort. The plugin is deprecated in Stylelint v16 (the recommendation is to run Prettier separately). None of the 22 differential test repos use it.
+2. **Stylelint ≤13 behavioural quirks** -- Some older Stylelint versions have different system color lists, different `camelCaseSvgKeywords` defaults, and different `declaration-block-no-redundant-longhand-properties` shorthand detection (e.g. `inset` was not recognized). Gale matches v16 behaviour only.

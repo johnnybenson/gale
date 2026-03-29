@@ -514,11 +514,19 @@ fn convert_rules(rules: &[LcssRule], source: &str, idx: &LineIndex) -> Vec<CssNo
                     .strip_prefix(&format!("@{name}"))
                     .map(|rest| rest.trim().trim_end_matches(';').trim().to_owned())
                     .unwrap_or_default();
+                let at_span = loc_to_span(unknown.loc, source, idx);
+
+                // Try to extract declarations from block body.
+                // PostCSS (used by Stylelint) parses unknown at-rule blocks
+                // into child nodes, so rules can inspect declarations inside
+                // `@theme`, `@apply`, etc.  lightningcss stores the block as
+                // raw tokens, so we re-parse the block body.
+                let children = extract_unknown_at_rule_children(source, at_span);
                 nodes.push(CssNode::AtRule(AtRule {
                     name,
                     params,
-                    span: loc_to_span(unknown.loc, source, idx),
-                    children: Vec::new(),
+                    span: at_span,
+                    children,
                 }));
             }
 
@@ -541,8 +549,9 @@ fn convert_keyframes(
     parent_span: Span,
 ) -> Vec<CssNode> {
     let mut children = Vec::new();
-    let search_start = parent_span.offset;
     let search_end = (parent_span.offset + parent_span.length).min(source.len());
+    // Cursor advances past each keyframe block so we don't re-match earlier ones.
+    let mut block_cursor = parent_span.offset;
 
     for kf in keyframes {
         let selector = kf
@@ -552,27 +561,21 @@ fn convert_keyframes(
             .collect::<Vec<_>>()
             .join(", ");
 
-        // Build declarations from the keyframe's declaration block.
-        let mut declarations = Vec::new();
-        let mut search_from = search_start;
-        for decl in &kf.declarations.declarations {
-            let (d, next) = convert_property(decl, false, source, search_from, search_end);
-            search_from = next;
-            declarations.push(d);
-        }
-        for decl in &kf.declarations.important_declarations {
-            let (d, next) = convert_property(decl, true, source, search_from, search_end);
-            search_from = next;
-            declarations.push(d);
-        }
-
-        // Find the span of this keyframe block in the source.
-        let selector_lower = selector.to_ascii_lowercase();
-        let area = &source[search_start..search_end];
+        // STEP 1: Find this keyframe block's span FIRST so we can constrain
+        // the declaration search to just this block.
+        // Use the first selector keyword (e.g. "0%") instead of the full joined
+        // selector because multi-line selectors like "0%,\n  100%" won't match
+        // the normalized "0%, 100%" string.
+        let first_selector = kf
+            .selectors
+            .first()
+            .map(|s| s.to_css_string(po()).unwrap_or_default())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let area = source.get(block_cursor..search_end).unwrap_or("");
         let lower_area = area.to_ascii_lowercase();
-        let kf_span = if let Some(rel) = lower_area.find(&selector_lower) {
-            let abs_start = search_start + rel;
-            // Find the closing brace for this keyframe block.
+        let kf_span = if let Some(rel) = lower_area.find(&first_selector) {
+            let abs_start = block_cursor + rel;
             let rest = &source[abs_start..search_end];
             let length = if let Some(open) = rest.find('{') {
                 let mut depth = 0i32;
@@ -596,6 +599,32 @@ fn convert_keyframes(
         } else {
             Span::empty()
         };
+
+        // STEP 2: Search for declarations WITHIN this keyframe block only.
+        let block_start = kf_span.offset;
+        let block_end = if kf_span.length > 0 {
+            kf_span.offset + kf_span.length
+        } else {
+            search_end
+        };
+
+        let mut declarations = Vec::new();
+        let mut search_from = block_start;
+        for decl in &kf.declarations.declarations {
+            let (d, next) = convert_property(decl, false, source, search_from, block_end);
+            search_from = next;
+            declarations.push(d);
+        }
+        for decl in &kf.declarations.important_declarations {
+            let (d, next) = convert_property(decl, true, source, search_from, block_end);
+            search_from = next;
+            declarations.push(d);
+        }
+
+        // Advance cursor past this block.
+        if kf_span.length > 0 {
+            block_cursor = kf_span.offset + kf_span.length;
+        }
 
         children.push(CssNode::Style(StyleRule {
             selector,
@@ -858,6 +887,75 @@ fn find_declaration_span(source: &str, from: usize, to: usize, property: &str) -
 
         search_from = after_name;
     }
+}
+
+/// Extract child nodes (declarations) from an unknown at-rule's block body.
+///
+/// lightningcss stores unknown at-rule blocks as raw tokens. PostCSS (used by
+/// Stylelint) parses them into child nodes.  To match Stylelint's behaviour,
+/// we find the `{...}` block in the source and extract `property: value;`
+/// declarations from it.
+fn extract_unknown_at_rule_children(source: &str, at_span: Span) -> Vec<CssNode> {
+    let end = (at_span.offset + at_span.length).min(source.len());
+    let area = source.get(at_span.offset..end).unwrap_or("");
+
+    // Find the block body (between first `{` and last `}`)
+    let Some(open_brace) = area.find('{') else {
+        return Vec::new();
+    };
+
+    // If a `;` appears before `{`, this is a blockless at-rule (e.g., `@tailwind base;`)
+    // and the `{` belongs to a subsequent rule.  Don't extract children.
+    let before_brace = &area[..open_brace];
+    if before_brace.contains(';') {
+        return Vec::new();
+    }
+
+    let Some(close_brace) = area.rfind('}') else {
+        return Vec::new();
+    };
+    if open_brace >= close_brace {
+        return Vec::new();
+    }
+
+    let body = &area[open_brace + 1..close_brace];
+    if body.trim().is_empty() {
+        return Vec::new();
+    }
+
+    // Try to re-parse the body as a stylesheet by wrapping in a dummy selector.
+    // This lets lightningcss handle complex values (var(), calc(), etc.) correctly.
+    let wrapper = format!("_x {{{body}}}");
+    let opts = ParserOptions {
+        flags: ParserFlags::NESTING,
+        error_recovery: true,
+        ..Default::default()
+    };
+    let Ok(sheet) = StyleSheet::parse(&wrapper, opts) else {
+        return Vec::new();
+    };
+
+    let body_abs_offset = at_span.offset + open_brace + 1;
+    let body_end = at_span.offset + close_brace;
+
+    // Extract declarations from the re-parsed style rule
+    let mut children = Vec::new();
+    for rule in sheet.rules.0.iter() {
+        if let LcssRule::Style(style) = rule {
+            let mut search_from = body_abs_offset;
+            for decl in style.declarations.declarations.iter() {
+                let (d, next) = convert_property(decl, false, source, search_from, body_end);
+                search_from = next;
+                children.push(CssNode::Declaration(d));
+            }
+            for decl in style.declarations.important_declarations.iter() {
+                let (d, next) = convert_property(decl, true, source, search_from, body_end);
+                search_from = next;
+                children.push(CssNode::Declaration(d));
+            }
+        }
+    }
+    children
 }
 
 /// Convert a 0-indexed line and 1-based column (as reported by lightningcss)
@@ -1889,5 +1987,42 @@ mod tests {
         } else {
             panic!("expected Style node");
         }
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn debug_custom_property_span() {
+    let css = ":root {\n  --my-color: rgb(248, 248, 247);\n  color: rgb(100, 200, 50);\n}\n";
+    let result = parse(css, Syntax::Css).unwrap();
+    for node in &result.nodes {
+        if let CssNode::Style(rule) = node {
+            for decl in &rule.declarations {
+                let span_text = if decl.span.length > 0 {
+                    &css[decl.span.offset..decl.span.offset + decl.span.length]
+                } else {
+                    "(empty span)"
+                };
+                eprintln!("DECL: prop={:?} value={:?} span=({}, {}) text={:?}",
+                    decl.property, decl.value, decl.span.offset, decl.span.length, span_text);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn test_custom_property_spans() {
+    let css = ":root {\n  --font-sans: var(--font-inter), ui-sans-serif, system-ui;\n  --font-serif: var(--font-roboto-serif), ui-serif, Georgia;\n}";
+    let result = parse(css, Syntax::Css).unwrap();
+    if let CssNode::Style(rule) = &result.nodes[0] {
+        assert_eq!(rule.declarations.len(), 2);
+        let serif = &rule.declarations[1];
+        assert_eq!(serif.property, "--font-serif");
+        assert!(serif.span.length > 0, "span should be set");
+        let span_text = &css[serif.span.offset..serif.span.offset + serif.span.length];
+        assert!(span_text.contains("Georgia"), "source span should contain Georgia");
+    } else {
+        panic!("expected StyleRule");
     }
 }

@@ -37,7 +37,7 @@ impl Rule for MediaFeatureNameNoVendorPrefix {
         Severity::Warning
     }
 
-    fn check(&self, node: &CssNode, _ctx: &RuleContext) -> Vec<Diagnostic> {
+    fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
         let CssNode::AtRule(rule) = node else {
             return vec![];
         };
@@ -51,17 +51,39 @@ impl Rule for MediaFeatureNameNoVendorPrefix {
         let mut diags = Vec::new();
 
         for feature in VENDOR_PREFIXED_FEATURES {
-            if params_lower.contains(feature) {
+            if let Some(feature_pos_in_params) = params_lower.find(feature) {
+                // Calculate the byte offset of the feature name in the source.
+                // The at-rule span starts at `@media`, and the params start after
+                // `@media `. We need to find where the params appear in the source.
+                let feature_len = feature.len();
+
+                // Try to find the feature name in the source text for accurate positioning
+                let (feat_offset, feat_len) = if rule.span.offset + rule.span.length
+                    <= ctx.source.len()
+                {
+                    let rule_src =
+                        &ctx.source[rule.span.offset..rule.span.offset + rule.span.length];
+                    let rule_lower = rule_src.to_ascii_lowercase();
+                    if let Some(pos) = rule_lower.find(feature) {
+                        (rule.span.offset + pos, feature_len)
+                    } else {
+                        // Fallback: compute from params offset
+                        // @media + space = 7 bytes, then params start
+                        let params_offset = rule.span.offset + 7; // "@media "
+                        (params_offset + feature_pos_in_params, feature_len)
+                    }
+                } else {
+                    // Fallback if source is unavailable
+                    (rule.span.offset, rule.span.length)
+                };
+
                 diags.push(
                     Diagnostic::new(
                         self.name(),
-                        format!(
-                            "Unexpected vendor-prefixed media feature name in \"@media {}\"",
-                            rule.params.trim()
-                        ),
+                        "Unexpected vendor-prefix".to_string(),
                     )
                     .severity(self.default_severity())
-                    .span(Span::new(rule.span.offset, rule.span.length)),
+                    .span(Span::new(feat_offset, feat_len)),
                 );
                 break; // one diagnostic per at-rule
             }
@@ -99,7 +121,7 @@ mod tests {
         let d = MediaFeatureNameNoVendorPrefix
             .check(&media_rule("(-webkit-min-device-pixel-ratio: 2)"), &ctx());
         assert_eq!(d.len(), 1);
-        assert!(d[0].message.contains("-webkit-"));
+        assert!(d[0].message.contains("vendor-prefix"));
     }
 
     #[test]

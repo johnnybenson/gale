@@ -6,14 +6,12 @@ use crate::rule::{Rule, RuleContext};
 /// Prefer modern color function notation (space-separated) over legacy (comma-separated).
 ///
 /// Equivalent to Stylelint's `color-function-notation` rule with "modern" option.
-/// Detects comma-separated arguments in rgb/rgba/hsl/hsla. Detection-only.
+/// Detects comma-separated arguments in rgb/rgba/hsl/hsla.
 pub struct ColorFunctionNotation;
 
 const COLOR_FUNCTIONS: &[&str] = &["rgb(", "rgba(", "hsl(", "hsla("];
 
 /// Find the position of the matching closing paren, handling nesting.
-/// Returns the offset relative to the start of `s` (which should begin
-/// right after the opening paren).
 fn find_matching_paren(s: &str) -> Option<usize> {
     let mut depth: i32 = 1;
     for (i, ch) in s.char_indices() {
@@ -45,8 +43,10 @@ impl Rule for ColorFunctionNotation {
     }
 
     fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
-        let CssNode::Style(rule) = node else {
-            return vec![];
+        let decls: Vec<&gale_css_parser::Declaration> = match node {
+            CssNode::Style(rule) => rule.declarations.iter().collect(),
+            CssNode::Declaration(decl) => vec![decl],
+            _ => return vec![],
         };
 
         // Read secondary options for `ignore: ["with-var-inside"]`
@@ -61,42 +61,68 @@ impl Rule for ColorFunctionNotation {
             })
             .unwrap_or(false);
 
-        let mut diags = Vec::new();
-        for decl in &rule.declarations {
-            let lower = decl.value.to_ascii_lowercase();
+        let primary = ctx.primary_option_str().unwrap_or("modern");
 
-            // Pre-compute: find where the value starts within the declaration source.
-            // This lets us map a byte-position in `decl.value` → byte-position in source.
-            let decl_src_end = (decl.span.offset + decl.span.length).min(ctx.source.len());
-            let decl_src = &ctx.source[decl.span.offset..decl_src_end];
-            let decl_src_lower = decl_src.to_ascii_lowercase();
-            // The value may not match exactly (multi-line whitespace differences), so fall back to 0.
-            let val_start_in_decl = decl_src_lower.find(lower.as_str()).unwrap_or(0);
+        let mut diags = Vec::new();
+        let mut seen_offsets: std::collections::HashSet<usize> = std::collections::HashSet::new();
+        for decl in decls {
+            // Use source text to avoid lightningcss normalization
+            let decl_start = decl.span.offset;
+            let decl_end = (decl_start + decl.span.length).min(ctx.source.len());
+            let search_area = if decl_end > decl_start && decl_end <= ctx.source.len() {
+                &ctx.source[decl_start..decl_end]
+            } else {
+                &decl.value
+            };
+            let lower = search_area.to_ascii_lowercase();
 
             for &func in COLOR_FUNCTIONS {
                 let mut search_from = 0;
                 while let Some(pos) = lower[search_from..].find(func) {
                     let abs_pos = search_from + pos;
+                    // Skip if preceded by an ident char (e.g. `hsv-to-rgb(` is not `rgb(`).
+                    if abs_pos > 0 {
+                        let prev = lower.as_bytes()[abs_pos - 1];
+                        if prev.is_ascii_alphanumeric() || prev == b'-' || prev == b'_' {
+                            search_from = abs_pos + 1;
+                            continue;
+                        }
+                    }
                     let args_start = abs_pos + func.len();
                     if let Some(close) = find_matching_paren(&lower[args_start..]) {
-                        let args = &decl.value[args_start..args_start + close];
-                        if args.contains(',') {
+                        let args = &search_area[args_start..args_start + close];
+                        let has_commas = args.contains(',');
+
+                        let should_report = match primary {
+                            "legacy" => !has_commas && !args.trim().is_empty(),
+                            // "modern" (default)
+                            _ => has_commas,
+                        };
+
+                        if should_report {
                             // Skip if ignore: ["with-var-inside"] and args contain var(
-                            if ignore_with_var && args.to_ascii_lowercase().contains("var(") {
+                            if ignore_with_var
+                                && args.to_ascii_lowercase().contains("var(")
+                            {
                                 search_from = abs_pos + 1;
                                 continue;
                             }
-                            let fn_name = &func[..func.len() - 1]; // strip trailing '('
-                            // Use abs_pos (position in value) to locate this specific occurrence.
-                            let fn_off = val_start_in_decl + abs_pos;
-                            diags.push(
-                                Diagnostic::new(
-                                    self.name(),
-                                    "Expected modern color-function notation".to_string(),
-                                )
-                                .severity(self.default_severity())
-                                .span(Span::new(decl.span.offset + fn_off, fn_name.len())),
-                            );
+                            let abs_offset = decl_start + abs_pos;
+                            // Deduplicate: keyframe declarations may have
+                            // overlapping source spans, producing duplicates.
+                            if seen_offsets.insert(abs_offset) {
+                                let fn_name = &func[..func.len() - 1];
+                                let msg = if primary == "legacy" {
+                                    "Expected legacy color-function notation".to_string()
+                                } else {
+                                    "Expected modern color-function notation".to_string()
+                                };
+                                diags.push(
+                                    Diagnostic::new(self.name(), msg)
+                                        .severity(self.default_severity())
+                                        .span(Span::new(abs_offset, fn_name.len())),
+                                );
+                            }
                         }
                     }
                     search_from = abs_pos + 1;
@@ -160,4 +186,43 @@ mod tests {
         let d = ColorFunctionNotation.check(&style_with_value("hsl(0 100% 50%)"), &ctx());
         assert!(d.is_empty());
     }
+}
+
+#[cfg(test)]
+#[test]
+fn debug_detect_rgb_comma() {
+    use gale_css_parser::{Declaration, Span as ParserSpan, StyleRule, Syntax};
+    let rule = ColorFunctionNotation;
+    let source = ":root {\n  --my-color: rgb(248, 248, 247);\n  color: rgb(100, 200, 50);\n}\n";
+    let node = CssNode::Style(StyleRule {
+        selector: ":root".to_string(),
+        declarations: vec![
+            Declaration {
+                property: "--my-color".to_string(),
+                value: "#f8f8f7".to_string(),
+                span: ParserSpan::new(10, 31),
+                important: false,
+            },
+            Declaration {
+                property: "color".to_string(),
+                value: "#64c832".to_string(),
+                span: ParserSpan::new(44, 25),
+                important: false,
+            },
+        ],
+        span: ParserSpan::new(0, source.len()),
+        ..Default::default()
+    });
+    let ctx = RuleContext {
+        file_path: "t.css",
+        source,
+        syntax: Syntax::Css,
+        options: None,
+    };
+    let d = rule.check(&node, &ctx);
+    eprintln!("Diagnostics: {:?}", d.len());
+    for diag in &d {
+        eprintln!("  {}: {}", diag.rule_name, diag.message);
+    }
+    assert!(d.len() >= 2, "Expected at least 2 diagnostics, got {}", d.len());
 }

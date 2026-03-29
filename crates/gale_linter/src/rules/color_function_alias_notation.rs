@@ -14,23 +14,7 @@ pub struct ColorFunctionAliasNotation;
 
 const ALIAS_FUNCTIONS: &[(&str, &str)] = &[("rgba(", "rgb"), ("hsla(", "hsl")];
 
-/// Find the byte offset in the source where the declaration value begins
-/// (after the property name, `:`, and any whitespace).
-fn find_value_offset(source: &str, decl_offset: usize, property_len: usize) -> usize {
-    let start = decl_offset + property_len;
-    if start >= source.len() {
-        return decl_offset;
-    }
-    let rest = &source[start..];
-    let mut off = 0;
-    let bytes = rest.as_bytes();
-    while off < bytes.len() && (bytes[off] == b':' || bytes[off].is_ascii_whitespace()) {
-        off += 1;
-    }
-    start + off
-}
-
-/// Check whether the function call starting at `fn_start` in `value` (lowercase)
+/// Check whether the function call starting at `fn_start` in `value`
 /// contains any SCSS-specific arguments that make it non-standard syntax.
 ///
 /// Stylelint's `isStandardSyntaxColorFunction` returns `false` when any
@@ -99,10 +83,18 @@ impl Rule for ColorFunctionAliasNotation {
             _ => return vec![],
         };
         let mut diags = Vec::new();
+        let mut seen_offsets: std::collections::HashSet<usize> = std::collections::HashSet::new();
         for decl in decls {
-            let lower = decl.value.to_ascii_lowercase();
-            // Find where the value starts in the source (after "property: ")
-            let value_offset = find_value_offset(ctx.source, decl.span.offset, decl.property.len());
+            // Use source text to avoid lightningcss normalization of color functions
+            let decl_start = decl.span.offset;
+            let decl_end = (decl_start + decl.span.length).min(ctx.source.len());
+            let search_area = if decl_end > decl_start && decl_end <= ctx.source.len() {
+                &ctx.source[decl_start..decl_end]
+            } else {
+                &decl.value
+            };
+            let lower = search_area.to_ascii_lowercase();
+
             for &(alias, modern) in ALIAS_FUNCTIONS {
                 let mut search_from = 0;
                 while let Some(pos) = lower[search_from..].find(alias) {
@@ -110,14 +102,16 @@ impl Rule for ColorFunctionAliasNotation {
                     let legacy = &alias[..alias.len() - 1]; // "rgba" or "hsla"
 
                     // Skip functions with SCSS-specific args (variables, interpolation).
-                    // Mirrors Stylelint's `isStandardSyntaxColorFunction` check which
-                    // returns false for args starting with `#` or `$`.
                     if has_scss_args(&lower, abs_pos) {
                         search_from = abs_pos + 1;
                         continue;
                     }
 
-                    let fn_offset = value_offset + abs_pos;
+                    let fn_offset = decl_start + abs_pos;
+                    if !seen_offsets.insert(fn_offset) {
+                        search_from = abs_pos + 1;
+                        continue;
+                    }
                     let fn_len = legacy.len();
                     diags.push(
                         Diagnostic::new(
@@ -207,7 +201,6 @@ mod tests {
 
     #[test]
     fn skips_rgba_with_scss_variable() {
-        // rgba($color, 0.7) — SCSS variable as first arg, not standard syntax
         let d = ColorFunctionAliasNotation.check(&style_with_value("rgba($danger, 0.7)"), &ctx());
         assert!(
             d.is_empty(),
@@ -217,7 +210,6 @@ mod tests {
 
     #[test]
     fn skips_rgba_with_scss_interpolation() {
-        // rgba(0, 0, 0, #{$opacity}) — SCSS interpolation in args
         let d = ColorFunctionAliasNotation
             .check(&style_with_value("rgba(0, 0, 0, #{$opacity})"), &ctx());
         assert!(
@@ -228,7 +220,6 @@ mod tests {
 
     #[test]
     fn still_reports_plain_rgba() {
-        // Plain rgba() without SCSS args should still be reported
         let d = ColorFunctionAliasNotation.check(&style_with_value("rgba(0, 0, 0, 0.5)"), &ctx());
         assert_eq!(d.len(), 1);
     }

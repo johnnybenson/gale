@@ -75,7 +75,7 @@ impl Rule for PropertyNoVendorPrefix {
 
                 let mut diag = Diagnostic::new(
                     self.name(),
-                    format!("Unexpected vendor-prefix \"{}\"", decl.property),
+                    format!("Unexpected vendor-prefixed property \"{}\"", decl.property),
                 )
                 .severity(self.default_severity())
                 .span(Span::new(decl.span.offset, decl.span.length));

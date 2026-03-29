@@ -86,8 +86,8 @@ impl Rule for MediaFeatureRangeNotation {
             })
             .unwrap_or("context");
 
-        let params_lower = at.params.to_ascii_lowercase();
         let mut diags = Vec::new();
+        let mut seen_offsets = std::collections::HashSet::new();
 
         let at_src_end = (at.span.offset + at.span.length).min(ctx.source.len());
         let at_src = &ctx.source[at.span.offset..at_src_end];
@@ -95,26 +95,39 @@ impl Rule for MediaFeatureRangeNotation {
         for &prefix in RANGE_PREFIXES {
             for &feature in RANGE_FEATURES {
                 let prefixed = format!("{prefix}{feature}");
-                if params_lower.contains(&prefixed) {
-                    // Stylelint points to the `(` before the min-/max- feature name.
-                    let paren_search = format!("({prefixed}");
-                    let paren_off = at_src_lower
-                        .find(&paren_search)
-                        .or_else(|| {
-                            // fallback: find `(` before the feature in source
-                            at_src_lower
-                                .find(&prefixed)
-                                .and_then(|p| at_src_lower[..p].rfind('('))
+                // Search for `(min-width` or `( min-width` — the prefixed feature
+                // MUST follow an opening paren to be a media feature (not a CSS
+                // property like `min-width: 100px` inside the rule body).
+                let paren_search = format!("({prefixed}");
+                let paren_off = at_src_lower.find(&paren_search).or_else(|| {
+                    // Try with whitespace between `(` and feature name
+                    at_src_lower
+                        .find(&prefixed)
+                        .and_then(|p| {
+                            // Walk backwards from the match to find `(`
+                            let before = &at_src_lower[..p];
+                            let trimmed = before.trim_end();
+                            if trimmed.ends_with('(') {
+                                Some(trimmed.len() - 1)
+                            } else {
+                                None
+                            }
                         })
-                        .unwrap_or(0);
-                    diags.push(
-                        Diagnostic::new(
-                            self.name(),
-                            format!("Expected \"{notation_str}\" media feature range notation"),
-                        )
-                        .severity(self.default_severity())
-                        .span(Span::new(at.span.offset + paren_off, 1)),
-                    );
+                });
+                if let Some(paren_off) = paren_off {
+                    let abs_offset = at.span.offset + paren_off;
+                    if seen_offsets.insert(abs_offset) {
+                        diags.push(
+                            Diagnostic::new(
+                                self.name(),
+                                format!(
+                                    "Expected \"{notation_str}\" media feature range notation"
+                                ),
+                            )
+                            .severity(self.default_severity())
+                            .span(Span::new(abs_offset, 1)),
+                        );
+                    }
                 }
             }
         }
@@ -157,53 +170,81 @@ mod tests {
     use super::*;
     use gale_css_parser::{AtRule, Span as ParserSpan, Syntax};
 
-    fn ctx() -> RuleContext<'static> {
+    /// Build a context whose `source` covers the at-rule text so the rule
+    /// can scan the original (un-normalised) source.
+    fn ctx_with_source(source: &str) -> RuleContext<'_> {
         RuleContext {
             file_path: "t.css",
-            source: "",
+            source,
             syntax: Syntax::Css,
             options: None,
         }
     }
 
-    fn media(params: &str) -> CssNode {
+    /// Build a media at-rule node whose span covers `[0..source.len()]`.
+    /// `params` may be the lightningcss-normalised form (e.g. `width >= 768px`),
+    /// while `source` is the original text the rule will scan.
+    fn media_with_source(params: &str, source_len: usize) -> CssNode {
         CssNode::AtRule(AtRule {
             name: "media".to_string(),
             params: params.to_string(),
-            span: ParserSpan::new(0, 0),
+            span: ParserSpan::new(0, source_len),
             children: vec![],
         })
     }
 
     #[test]
     fn reports_min_width_prefix() {
-        let d = MediaFeatureRangeNotation.check(&media("(min-width: 768px)"), &ctx());
+        // lightningcss normalises `(min-width: 768px)` → `(width >= 768px)` in params,
+        // but the source text still has the original prefix notation.
+        let source = "@media (min-width: 768px) {}";
+        let node = media_with_source("(width >= 768px)", source.len());
+        let ctx = ctx_with_source(source);
+        let d = MediaFeatureRangeNotation.check(&node, &ctx);
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("media feature range notation"));
     }
 
     #[test]
     fn allows_range_syntax() {
-        let d = MediaFeatureRangeNotation.check(&media("(width >= 768px)"), &ctx());
+        let source = "@media (width >= 768px) {}";
+        let node = media_with_source("(width >= 768px)", source.len());
+        let ctx = ctx_with_source(source);
+        let d = MediaFeatureRangeNotation.check(&node, &ctx);
         assert!(d.is_empty());
     }
 
     #[test]
     fn skips_scss_variables() {
-        let d = MediaFeatureRangeNotation.check(&media("(min-width: $breakpoint)"), &ctx());
+        let source = "@media (min-width: $breakpoint) {}";
+        let node = media_with_source("(min-width: $breakpoint)", source.len());
+        let ctx = ctx_with_source(source);
+        let d = MediaFeatureRangeNotation.check(&node, &ctx);
         assert!(d.is_empty());
     }
 
     #[test]
     fn prefix_notation_allows_prefix() {
+        let source = "@media (min-width: 768px) {}";
         let opts = serde_json::json!("prefix");
         let ctx = RuleContext {
             file_path: "t.css",
-            source: "",
+            source,
             syntax: Syntax::Css,
             options: Some(&opts),
         };
-        let d = MediaFeatureRangeNotation.check(&media("(min-width: 768px)"), &ctx);
+        let node = media_with_source("(width >= 768px)", source.len());
+        let d = MediaFeatureRangeNotation.check(&node, &ctx);
         assert!(d.is_empty());
+    }
+
+    #[test]
+    fn reports_max_height_prefix() {
+        let source = "@media (max-height: 500px) {}";
+        let node = media_with_source("(height <= 500px)", source.len());
+        let ctx = ctx_with_source(source);
+        let d = MediaFeatureRangeNotation.check(&node, &ctx);
+        assert_eq!(d.len(), 1);
+        assert!(d[0].message.contains("media feature range notation"));
     }
 }

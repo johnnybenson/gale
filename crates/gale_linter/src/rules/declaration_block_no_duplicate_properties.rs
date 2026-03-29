@@ -268,7 +268,12 @@ impl Rule for DeclarationBlockNoDuplicateProperties {
                             important: decl.important,
                             span: decl.span,
                         });
-                        // Do NOT update decl_map — keep pointing to the original decl.
+                        // For ignore_diff_values, update decl_map so the next entry
+                        // checks consecutiveness against this one (not the original).
+                        // This handles chains like `display:-webkit-box; display:-ms-flexbox; display:flex`.
+                        if ignore_diff_values {
+                            decl_map.insert(lower_prop.clone(), current_index);
+                        }
                         continue;
                     }
 

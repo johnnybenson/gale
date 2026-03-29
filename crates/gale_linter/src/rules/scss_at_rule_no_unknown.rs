@@ -25,9 +25,9 @@ impl Rule for ScssAtRuleNoUnknown {
     }
 
     fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
-        if !matches!(ctx.syntax, Syntax::Scss | Syntax::Sass) {
-            return vec![];
-        }
+        // Stylelint runs scss/at-rule-no-unknown on ALL file types (including
+        // plain CSS) when the rule is enabled — typically via
+        // stylelint-config-standard-scss.  Do not filter by syntax.
 
         let CssNode::AtRule(at) = node else {
             return vec![];
@@ -86,11 +86,14 @@ mod tests {
     }
 
     #[test]
-    fn skips_non_scss() {
-        assert!(
+    fn reports_unknown_in_css() {
+        // Stylelint runs scss/at-rule-no-unknown on CSS files too when enabled
+        // (typically via stylelint-config-standard-scss).
+        assert_eq!(
             ScssAtRuleNoUnknown
                 .check(&at("tailwind"), &css_ctx())
-                .is_empty()
+                .len(),
+            1
         );
     }
 

@@ -20,23 +20,17 @@ pub struct ValueKeywordCase;
 // Data tables
 // ---------------------------------------------------------------------------
 
-/// CSS system colors -- case-insensitive per spec, skip these entirely.
-const SYSTEM_COLORS: &[&str] = &[
+/// CSS2 system colors (deprecated) — used by Stylelint ≤13.
+const SYSTEM_COLORS_CSS2: &[&str] = &[
     "ActiveBorder",
     "ActiveCaption",
-    "ActiveText",
     "AppWorkspace",
     "Background",
-    "ButtonBorder",
     "ButtonFace",
     "ButtonHighlight",
     "ButtonShadow",
     "ButtonText",
-    "Canvas",
-    "CanvasText",
     "CaptionText",
-    "Field",
-    "FieldText",
     "GrayText",
     "Highlight",
     "HighlightText",
@@ -45,29 +39,46 @@ const SYSTEM_COLORS: &[&str] = &[
     "InactiveCaptionText",
     "InfoBackground",
     "InfoText",
-    "LinkText",
-    "Mark",
-    "MarkText",
     "Menu",
     "MenuText",
     "Scrollbar",
-    "SelectedItem",
-    "SelectedItemText",
     "ThreeDDarkShadow",
     "ThreeDFace",
     "ThreeDHighlight",
     "ThreeDLightShadow",
     "ThreeDShadow",
-    "VisitedText",
     "Window",
     "WindowFrame",
     "WindowText",
-    // Mozilla-specific system colors (used with -moz- prefix)
-    "NativeHyperlinkText",
+];
+
+/// CSS Color Level 4 system colors — added in Stylelint 14+.
+const SYSTEM_COLORS_CSS4: &[&str] = &[
+    "AccentColor",
+    "AccentColorText",
+    "ActiveText",
+    "ButtonBorder",
+    "Canvas",
+    "CanvasText",
+    "Field",
+    "FieldText",
+    "LinkText",
+    "Mark",
+    "MarkText",
+    "SelectedItem",
+    "SelectedItemText",
+    "VisitedText",
 ];
 
 fn is_system_color(s: &str) -> bool {
-    SYSTEM_COLORS.iter().any(|c| c.eq_ignore_ascii_case(s))
+    let v = stylelint_major_version();
+    if SYSTEM_COLORS_CSS2.iter().any(|c| c.eq_ignore_ascii_case(s)) {
+        return true;
+    }
+    if v >= 14 && SYSTEM_COLORS_CSS4.iter().any(|c| c.eq_ignore_ascii_case(s)) {
+        return true;
+    }
+    false
 }
 
 /// SVG keywords that have camelCase canonical forms.
@@ -373,11 +384,24 @@ fn tokenize_value(value: &str) -> Vec<ValueToken> {
             continue;
         }
 
-        // SCSS/Less single-line comment
+        // SCSS/Less single-line comment.
+        // Inside parenthesised expressions (SCSS maps), PostCSS-SCSS treats
+        // `//` (double slash) as a comment, but `///` (triple slash, SassDoc)
+        // is NOT treated as a comment — identifiers after `///` remain visible
+        // to rules like value-keyword-case.
         if b == b'/' && i + 1 < len && bytes[i + 1] == b'/' {
-            while i < len && bytes[i] != b'\n' {
-                i += 1;
+            let is_triple = i + 2 < len && bytes[i + 2] == b'/';
+            // At top level: always skip as comment.
+            // Inside parens: skip `//` (double) as comment, but NOT `///` (triple).
+            if func_stack.is_empty() || !is_triple {
+                while i < len && bytes[i] != b'\n' {
+                    i += 1;
+                }
+                continue;
             }
+            // `///` inside parens: skip the three slashes so the remaining
+            // `//` is not re-interpreted as a double-slash comment.
+            i += 3;
             continue;
         }
 
@@ -557,23 +581,12 @@ fn should_check_keyword(
     let prop_lower = property.to_ascii_lowercase();
     let prop_stripped = strip_vendor_prefix(&prop_lower);
 
-    // System colors -- skip
+    // System colors — skip (Stylelint skips them too).
     if is_system_color(token_text) {
         return false;
     }
 
-    // Vendor-prefixed system colors (e.g. -moz-NativeHyperlinkText)
     let lower_text = token_text.to_ascii_lowercase();
-    if lower_text.starts_with("-moz-")
-        || lower_text.starts_with("-webkit-")
-        || lower_text.starts_with("-ms-")
-        || lower_text.starts_with("-o-")
-    {
-        let stripped_val = strip_vendor_prefix(&lower_text);
-        if is_system_color(stripped_val) {
-            return false;
-        }
-    }
 
     // Custom ident properties
     if is_custom_ident_property(prop_stripped) {
@@ -1033,8 +1046,10 @@ mod tests {
 
     #[test]
     fn skips_system_colors() {
+        // Stylelint does not enforce lowercase for CSS system colors (e.g. GrayText, ButtonText).
+        // These are defined with mixed case in the CSS spec.
         let d = ValueKeywordCase.check(&style_with_decl("color", "InactiveCaptionText"), &ctx());
-        assert!(d.is_empty());
+        assert!(d.is_empty(), "system color InactiveCaptionText should not be flagged");
     }
 
     #[test]
@@ -1104,5 +1119,69 @@ mod tests {
             &ctx(),
         );
         assert!(d.is_empty());
+    }
+
+    #[test]
+    fn reports_georgia_in_custom_property() {
+        let source = ":root {\n  --font-serif: var(--font-roboto-serif), ui-serif, Georgia;\n}";
+        let var_offset = source.find("--font-serif:").unwrap();
+        let var_end = source.find("Georgia;").unwrap() + "Georgia;".len();
+        let node = CssNode::Style(StyleRule {
+            selector: ":root".to_string(),
+            declarations: vec![Declaration {
+                property: "--font-serif".to_string(),
+                value: "var(--font-roboto-serif), ui-serif, Georgia".to_string(),
+                span: ParserSpan::new(var_offset, var_end - var_offset),
+                important: false,
+            }],
+            span: ParserSpan::new(0, source.len()),
+            ..Default::default()
+        });
+        let ctx = RuleContext {
+            file_path: "t.css",
+            source,
+            syntax: Syntax::Css,
+            options: None,
+        };
+        let d = ValueKeywordCase.check(&node, &ctx);
+        assert!(d.iter().any(|diag| diag.message.contains("Georgia")));
+    }
+
+    #[test]
+    fn flags_uppercase_ident_after_triple_slash_in_value() {
+        // PostCSS-SCSS does NOT treat `///` (triple-slash Sass doc comments) as line comments.
+        // Identifiers after `///` remain visible to value-keyword-case.
+        let tokens = tokenize_value("(\n  /// Prevent blah\n  inherit\n)");
+        let ident_tokens: Vec<_> = tokens.iter().filter(|t| t.kind == TokenKind::Ident).collect();
+        let texts: Vec<&str> = ident_tokens.iter().map(|t| t.text.as_str()).collect();
+        assert!(
+            texts.contains(&"Prevent"),
+            "Prevent after /// should be tokenized as Ident (/// is not a comment), got: {:?}",
+            texts
+        );
+        assert!(
+            texts.contains(&"inherit"),
+            "inherit should be tokenized as Ident, got: {:?}",
+            texts
+        );
+    }
+
+    #[test]
+    fn skips_double_slash_comment_in_value() {
+        // Regular `//` SCSS comments ARE skipped by the tokenizer.
+        // Identifiers after `//` should NOT be flagged.
+        let tokens = tokenize_value("(\n  // Prevent blah\n  inherit\n)");
+        let ident_tokens: Vec<_> = tokens.iter().filter(|t| t.kind == TokenKind::Ident).collect();
+        let texts: Vec<&str> = ident_tokens.iter().map(|t| t.text.as_str()).collect();
+        assert!(
+            !texts.contains(&"Prevent"),
+            "Prevent after // should be skipped (// is a comment), got: {:?}",
+            texts
+        );
+        assert!(
+            texts.contains(&"inherit"),
+            "inherit after // comment should still be tokenized, got: {:?}",
+            texts
+        );
     }
 }

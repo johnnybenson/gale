@@ -29,6 +29,11 @@ impl Rule for DeclarationBlockSingleLineMaxDeclarations {
             return vec![];
         };
 
+        // Skip if span is unavailable (zero-length means parser didn't set it)
+        if rule.span.length == 0 {
+            return vec![];
+        }
+
         // Read configured max from options (primary option is a number).
         let max = ctx
             .options
@@ -132,5 +137,18 @@ mod tests {
         );
         let d = DeclarationBlockSingleLineMaxDeclarations.check(&node, &ctx_with_source(source));
         assert!(d.is_empty());
+    }
+
+    #[test]
+    fn skips_zero_length_span() {
+        // Simulates a parser-generated style node with no real span (e.g. from @tailwind directives)
+        let source = "@tailwind base;\n@tailwind components;\n@tailwind utilities;\n";
+        let node = style_with_decls(
+            vec![("color", "red"), ("font-size", "16px")],
+            0,
+            0, // zero-length span — parser didn't set it
+        );
+        let d = DeclarationBlockSingleLineMaxDeclarations.check(&node, &ctx_with_source(source));
+        assert!(d.is_empty(), "should not report on zero-length span");
     }
 }

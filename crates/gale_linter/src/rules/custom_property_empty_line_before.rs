@@ -26,13 +26,27 @@ impl Rule for CustomPropertyEmptyLineBefore {
     }
 
     fn check(&self, node: &CssNode, ctx: &RuleContext) -> Vec<Diagnostic> {
-        let CssNode::Style(rule) = node else {
-            return vec![];
+        // Collect declarations from style rules OR at-rules with declaration
+        // children (e.g. `@theme inline { --color-bg: ...; }`).
+        let decls: Vec<&gale_css_parser::Declaration> = match node {
+            CssNode::Style(rule) => rule.declarations.iter().collect(),
+            CssNode::AtRule(at) => at
+                .children
+                .iter()
+                .filter_map(|c| {
+                    if let CssNode::Declaration(d) = c {
+                        Some(d)
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => return vec![],
         };
         let opts = Options::from_ctx(ctx);
         let mut diags = Vec::new();
 
-        for decl in rule.declarations.iter() {
+        for decl in decls.iter() {
             // Only check custom properties (starting with --)
             if !decl.property.starts_with("--") {
                 continue;
@@ -47,7 +61,10 @@ impl Rule for CustomPropertyEmptyLineBefore {
 
             // Check conditions
             let is_first = is_first_in_block_by_source(ctx.source, decl_start);
-            let is_single_line = is_single_line_block(ctx.source, rule);
+            let is_single_line = match node {
+                CssNode::Style(rule) => is_single_line_block(ctx.source, rule),
+                _ => false,
+            };
             let after_comment = is_after_comment(ctx.source, decl_start);
             // Use source-based check for after-custom-property to avoid false
             // positives when a non-adjacent custom property (e.g. inside a

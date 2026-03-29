@@ -773,8 +773,9 @@ fn check_value_inner(
         }
 
         // ── Comparison operators: ==, !=, >=, <=, <, > ──
+        // Treat newline as equivalent to a space (Stylelint allows operators at end of line).
         if ch == b'=' && i + 1 < len && b[i + 1] == b'=' {
-            let ok = (i > 0 && b[i - 1] == b' ') && (i + 2 < len && b[i + 2] == b' ');
+            let ok = (i > 0 && is_space_or_nl(b[i - 1])) && (i + 2 < len && is_space_or_nl(b[i + 2]));
             if !ok {
                 emit(rule, diags, base_offset + i, 2, "==");
             }
@@ -782,7 +783,7 @@ fn check_value_inner(
             continue;
         }
         if ch == b'!' && i + 1 < len && b[i + 1] == b'=' {
-            let ok = (i > 0 && b[i - 1] == b' ') && (i + 2 < len && b[i + 2] == b' ');
+            let ok = (i > 0 && is_space_or_nl(b[i - 1])) && (i + 2 < len && is_space_or_nl(b[i + 2]));
             if !ok {
                 emit(rule, diags, base_offset + i, 2, "!=");
             }
@@ -790,7 +791,7 @@ fn check_value_inner(
             continue;
         }
         if ch == b'>' && i + 1 < len && b[i + 1] == b'=' {
-            let ok = (i > 0 && b[i - 1] == b' ') && (i + 2 < len && b[i + 2] == b' ');
+            let ok = (i > 0 && is_space_or_nl(b[i - 1])) && (i + 2 < len && is_space_or_nl(b[i + 2]));
             if !ok {
                 emit(rule, diags, base_offset + i, 2, ">=");
             }
@@ -798,7 +799,7 @@ fn check_value_inner(
             continue;
         }
         if ch == b'<' && i + 1 < len && b[i + 1] == b'=' {
-            let ok = (i > 0 && b[i - 1] == b' ') && (i + 2 < len && b[i + 2] == b' ');
+            let ok = (i > 0 && is_space_or_nl(b[i - 1])) && (i + 2 < len && is_space_or_nl(b[i + 2]));
             if !ok {
                 emit(rule, diags, base_offset + i, 2, "<=");
             }
@@ -806,7 +807,7 @@ fn check_value_inner(
             continue;
         }
         if ch == b'<' && is_comparison_ctx(b, i) {
-            let ok = (i > 0 && b[i - 1] == b' ') && (i + 1 < len && b[i + 1] == b' ');
+            let ok = (i > 0 && is_space_or_nl(b[i - 1])) && (i + 1 < len && is_space_or_nl(b[i + 1]));
             if !ok {
                 emit(rule, diags, base_offset + i, 1, "<");
             }
@@ -814,7 +815,7 @@ fn check_value_inner(
             continue;
         }
         if ch == b'>' && is_comparison_ctx(b, i) {
-            let ok = (i > 0 && b[i - 1] == b' ') && (i + 1 < len && b[i + 1] == b' ');
+            let ok = (i > 0 && is_space_or_nl(b[i - 1])) && (i + 1 < len && is_space_or_nl(b[i + 1]));
             if !ok {
                 emit(rule, diags, base_offset + i, 1, ">");
             }
@@ -825,7 +826,7 @@ fn check_value_inner(
         // ── Modulo % ──
         if ch == b'%' {
             if is_modulo(b, i) {
-                let ok = (i > 0 && b[i - 1] == b' ') && (i + 1 < len && b[i + 1] == b' ');
+                let ok = (i > 0 && is_space_or_nl(b[i - 1])) && (i + 1 < len && is_space_or_nl(b[i + 1]));
                 if !ok {
                     emit(rule, diags, base_offset + i, 1, "%");
                 }
@@ -880,8 +881,10 @@ fn check_value_inner(
                 continue;
             }
 
-            let sp_before = i > 0 && b[i - 1] == b' ';
-            let sp_after = i + 1 < len && b[i + 1] == b' ';
+            // Treat newlines as spaces so that operators at end-of-line are not flagged.
+            // Stylelint allows `4 *\n  $y` as a valid multi-line expression.
+            let sp_before = i > 0 && is_space_or_nl(b[i - 1]);
+            let sp_after = i + 1 < len && is_space_or_nl(b[i + 1]);
             let ws_before = i > 0 && b[i - 1].is_ascii_whitespace();
             let ws_after = i + 1 < len && b[i + 1].is_ascii_whitespace();
             let next = if i + 1 < len { b[i + 1] } else { 0 };
@@ -1056,6 +1059,14 @@ fn emit(
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
+
+/// Returns true if the byte is a space, tab, newline, or carriage return.
+/// Stylelint treats a newline adjacent to an operator (e.g. `4 *\n  $y`) as
+/// "spaced", so we must do the same to avoid false positives.
+#[inline]
+fn is_space_or_nl(b: u8) -> bool {
+    b == b' ' || b == b'\t' || b == b'\n' || b == b'\r'
+}
 
 /// Hyphen inside an identifier: `sans-serif`, `border-top`, `#{$var}-suffix`, `$var-name`.
 fn is_ident_hyphen(b: &[u8], i: usize) -> bool {
@@ -1929,6 +1940,48 @@ mod tests {
         assert!(
             rule.check(&node, &scss_context()).is_empty(),
             "Stars inside block comments should not be flagged"
+        );
+    }
+
+    #[test]
+    fn accepts_operator_at_end_of_line() {
+        // Operator at end of line with value on next line — Stylelint allows this.
+        // This pattern appears in multi-line SCSS expressions.
+        let scss = "$x: 4 *\n  $y;";
+        let rule = ScssOperatorNoUnspaced;
+        let result = gale_css_parser::parse(scss, Syntax::Scss).unwrap();
+        let ctx = RuleContext {
+            file_path: "test.scss",
+            source: scss,
+            syntax: Syntax::Scss,
+            options: None,
+        };
+        let diags: Vec<_> = rule.check_root(&result.nodes, &ctx);
+        assert!(
+            diags.is_empty(),
+            "operator at end of line should not be flagged, got: {:?}",
+            diags
+        );
+    }
+
+    #[test]
+    fn accepts_comparison_operator_followed_by_newline() {
+        // `== \n    'string'` pattern from _density.scss — the space before `==` is present,
+        // and a newline follows — Stylelint does not flag this.
+        let scss = "$x: $a ==\n  'string';";
+        let rule = ScssOperatorNoUnspaced;
+        let result = gale_css_parser::parse(scss, Syntax::Scss).unwrap();
+        let ctx = RuleContext {
+            file_path: "test.scss",
+            source: scss,
+            syntax: Syntax::Scss,
+            options: None,
+        };
+        let diags: Vec<_> = rule.check_root(&result.nodes, &ctx);
+        assert!(
+            diags.is_empty(),
+            "== followed by newline should not be flagged, got: {:?}",
+            diags
         );
     }
 }
