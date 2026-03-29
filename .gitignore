@@ -20,5 +20,7 @@ tests/differential/results/
 .DS_Store
 dist/
 .claude/
+!.claude/skills/
+!.claude/skills/**
 __pycache__/
 tests/differential/repos/

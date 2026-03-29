@@ -28,7 +28,7 @@ SCRIPT_DIR = Path(__file__).parent
 REPOS_JSON = SCRIPT_DIR / "repos.json"
 CLONES_DIR = SCRIPT_DIR / ".clones"
 GALE_ROOT = SCRIPT_DIR.parent.parent
-GALE_VERSION = "0.1.3"
+GALE_VERSION = "0.1.4"
 GALE_NPM_PACKAGE = "@lyricalstring/gale"
 GALE_GITHUB = "https://github.com/LyricalString/gale"
 
