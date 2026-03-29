@@ -20,17 +20,25 @@
     "lint",
     "gale"
   ],
-  "main": "index.js",
+  "type": "module",
+  "main": "index.mjs",
+  "exports": {
+    ".": {
+      "import": "./index.mjs",
+      "require": "./index.cjs"
+    }
+  },
   "bin": {
     "gale": "bin/gale"
   },
   "scripts": {
-    "postinstall": "node install.js"
+    "postinstall": "node install.cjs"
   },
   "files": [
     "bin/",
-    "index.js",
-    "install.js",
+    "index.cjs",
+    "index.mjs",
+    "install.cjs",
     "README.md"
   ],
   "engines": {

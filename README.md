@@ -10,6 +10,8 @@ Gale reads your existing `.stylelintrc`, runs the same rules, and produces the s
 
 One line change in your `package.json`. No config migration.
 
+> **Compatibility note:** Gale targets **Stylelint v17** semantics. If your project uses Stylelint v16 or earlier, you may see minor differences in edge cases (e.g., how `selector-max-*` rules count selectors inside `:is()`, `:has()`, `:where()`). These match the behavior you would get after upgrading to Stylelint v17.
+
 ## Benchmarks
 
 Real-world benchmarks using [hyperfine](https://github.com/sharkdp/hyperfine) (10 runs, 3 warmup) on an Apple M4 Max. Each repo uses its own Stylelint config. Results vary by machine -- run `./benchmarks/benchmark.sh` to reproduce on yours.
@@ -27,7 +29,7 @@ Real-world benchmarks using [hyperfine](https://github.com/sharkdp/hyperfine) (1
 | [PatternFly](https://github.com/patternfly/patternfly) | 204 | 0.377s | 0.013s | **29x** |
 | [SLDS](https://github.com/salesforce-ux/design-system) | 446 | 0.323s | 0.014s | **24x** |
 
-**Parity: 0 false positives and 0 false negatives across all 22 tested repositories (5,790 files).**
+**Parity: 0 false positives and 0 false negatives across 22 tested repositories (5,790+ files).**
 
 ## Quick start
 
@@ -90,18 +92,19 @@ Download pre-built binaries from [GitHub Releases](https://github.com/LyricalStr
 
 ## What's supported
 
-### 260+ built-in rules
+### 270+ built-in rules
 
-Gale ships 260+ built-in rules across four categories:
+Gale ships 270+ built-in rules across five categories:
 
 | Category | Count | Examples |
 |----------|------:|---------|
-| Core Stylelint | 144 | `block-no-empty`, `color-no-invalid-hex`, `property-no-unknown` |
+| Core Stylelint | 146 | `block-no-empty`, `color-no-invalid-hex`, `property-no-unknown`, `display-notation` |
 | SCSS (`scss/*`) | 44 | `scss/at-rule-no-unknown`, `scss/no-duplicate-mixins`, `scss/dollar-variable-pattern` |
 | Stylistic (`@stylistic/*`) | 59 | `stylistic/indentation`, `stylistic/declaration-colon-space-after`, `stylistic/no-eol-whitespace` |
 | Order (`order/*`) | 3 | `order/order`, `order/properties-order`, `order/properties-alphabetical-order` |
+| Plugin (`plugin/*`) | 4 | `plugin/enforce-variable-for-property`, `plugin/no-unknown-custom-properties`, `plugin/no-unused-custom-properties`, `plugin/require-file-header-comment` |
 
-SCSS and stylistic rules are built in -- no extra plugins required.
+SCSS, stylistic, and plugin rules are built in -- no extra plugins required.
 
 ### Config compatibility
 
@@ -124,14 +127,41 @@ All Stylelint config formats are supported:
 - **LSP server** for editor integration (`--lsp`)
 - **Parallel linting** using all CPU cores
 - **Inline disable comments** (`stylelint-disable` and `gale-disable`)
-- **JSON, text, and compact** output formatters matching Stylelint's format
+- **JSON, text, compact, verbose, TAP, and unix** output formatters matching Stylelint's format
+- **Custom JS formatters** via `--custom-formatter`
+- **Programmatic Node.js API** (`lint()`, `resolveConfig()`, `formatters`) compatible with `stylelint.lint()`
 - **`extends`** with built-in presets, npm packages, and relative paths
 - **`.galeignore`** files (gitignore syntax) for custom exclusions
 
+### Declarative plugin rules
+
+Gale includes 4 built-in plugin meta-rules that cover the most common custom plugin patterns (design token enforcement, custom property analysis, file header checks). These replace the need for JS plugins like `stylelint-plugin-carbon-tokens`, Primer's custom plugins, and `stylelint-copyright`:
+
+| Rule | Description |
+|------|-------------|
+| `plugin/enforce-variable-for-property` | Enforce design token/variable usage for configured properties |
+| `plugin/no-unknown-custom-properties` | Report usage of undefined CSS custom properties |
+| `plugin/no-unused-custom-properties` | Report defined but unused CSS custom properties |
+| `plugin/require-file-header-comment` | Require a file header comment matching a pattern |
+
+### Programmatic API
+
+```javascript
+import { lint, resolveConfig, formatters } from '@lyricalstring/gale';
+
+const result = await lint({
+  files: 'src/**/*.css',
+  config: { rules: { 'block-no-empty': true } },
+});
+
+console.log(result.errored);        // boolean
+console.log(result.results);        // LintResult[]
+console.log(result.report);         // formatted string
+```
+
 ### Not yet supported
 
-- **Custom JavaScript plugins.** Third-party rule packages (community plugins) are not supported. Gale only runs its built-in rules.
-- **`package.json` config.** The `"stylelint"` field in `package.json` is not read.
+- **Arbitrary JavaScript plugins.** Gale cannot execute JS plugins, but its 270+ built-in rules and 4 plugin meta-rules cover the vast majority of real-world configs. See [Declarative plugin rules](#declarative-plugin-rules) above.
 - **Sass indented syntax.** `.sass` files are not supported (`.scss` works fine).
 
 ## Configuration
@@ -197,9 +227,11 @@ gale [OPTIONS] [FILES]...
 | Flag | Description |
 |------|-------------|
 | `<files>` | Files, directories, or glob patterns to lint |
-| `--fix` | Automatically fix problems |
+| `--fix` | Automatically fix problems (default: strict mode) |
+| `--fix=lax` | Fix problems even in files with parse errors |
 | `-q, --quiet` | Only report errors |
-| `-f, --formatter <type>` | Output: `text` (default), `json`, `compact` |
+| `-f, --formatter <type>` | Output: `text` (default), `string`, `json`, `compact`, `verbose`, `tap`, `unix` |
+| `--custom-formatter <module>` | Path or npm package name for a custom JS formatter |
 | `-c, --config <path>` | Config file path |
 | `--max-warnings <n>` | Error if warnings exceed threshold |
 | `--cache` | Skip unchanged files |
@@ -324,7 +356,7 @@ gale_cli         CLI definition (clap), file discovery, orchestration
   +-- gale_linter       Rule trait, registry, runner, 260+ built-in rules
   |     +-- gale_css_parser    CSS/SCSS/Less parser (lightningcss + raffia)
   |     +-- gale_diagnostics   Span, Diagnostic, LintResult, Fix/Edit types
-  +-- gale_formatter    Output formatters (text, json, compact)
+  +-- gale_formatter    Output formatters (text, json, compact, verbose, tap, unix)
   +-- gale_lsp          Language Server Protocol server
 ```
 
@@ -334,7 +366,7 @@ gale_cli         CLI definition (clap), file discovery, orchestration
 | `gale_diagnostics` | Core types: `Span`, `Diagnostic`, `LintResult`, `Fix`, `Edit` |
 | `gale_linter` | `Rule` trait, `RuleRegistry`, `LintRunner`, inline disable comments, all rule implementations |
 | `gale_config` | Config file discovery, parsing (JSON/YAML/TOML/JS), `extends` resolution, built-in presets |
-| `gale_formatter` | `TextFormatter`, `JsonFormatter`, `CompactFormatter` matching Stylelint output |
+| `gale_formatter` | `TextFormatter`, `JsonFormatter`, `CompactFormatter`, `VerboseFormatter`, `TapFormatter`, `UnixFormatter` matching Stylelint output |
 | `gale_cli` | Clap CLI, file discovery with ignore support, cache layer, `--fix` orchestration |
 | `gale_lsp` | LSP server for real-time editor diagnostics |
 

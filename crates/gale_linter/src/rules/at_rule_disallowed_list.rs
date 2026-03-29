@@ -32,13 +32,12 @@ impl Rule for AtRuleDisallowedList {
         let disallowed: Vec<String> = match ctx.options {
             Some(serde_json::Value::Array(arr)) => arr
                 .iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_ascii_lowercase()))
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
                 .collect(),
             _ => return vec![],
         };
 
-        let name_lower = at_rule.name.to_ascii_lowercase();
-        if disallowed.contains(&name_lower) {
+        if disallowed.iter().any(|d| d == &at_rule.name) {
             vec![
                 Diagnostic::new(
                     self.name(),
@@ -101,10 +100,17 @@ mod tests {
     }
 
     #[test]
-    fn case_insensitive() {
+    fn case_sensitive() {
         let ctx = ctx_with_options(Some(serde_json::json!(["extend"])));
         let d = AtRuleDisallowedList.check(&at_rule_node("Extend"), &ctx);
-        assert_eq!(d.len(), 1);
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn vendor_prefixed_not_matched_by_unprefixed() {
+        let ctx = ctx_with_options(Some(serde_json::json!(["keyframes"])));
+        let d = AtRuleDisallowedList.check(&at_rule_node("-webkit-keyframes"), &ctx);
+        assert!(d.is_empty());
     }
 
     #[test]

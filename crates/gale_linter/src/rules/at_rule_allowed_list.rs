@@ -43,8 +43,7 @@ impl Rule for AtRuleAllowedList {
         let CssNode::AtRule(at_rule) = node else {
             return vec![];
         };
-        let name_lower = at_rule.name.to_ascii_lowercase();
-        if ALLOWED.contains(&name_lower.as_str()) {
+        if ALLOWED.contains(&at_rule.name.as_str()) {
             vec![]
         } else {
             vec![
@@ -109,11 +108,16 @@ mod tests {
     }
 
     #[test]
-    fn case_insensitive() {
-        assert!(
-            AtRuleAllowedList
-                .check(&at_rule_node("Media"), &ctx())
-                .is_empty()
-        );
+    fn case_sensitive() {
+        let d = AtRuleAllowedList.check(&at_rule_node("Media"), &ctx());
+        assert_eq!(d.len(), 1);
+        assert!(d[0].message.contains("@Media"));
+    }
+
+    #[test]
+    fn vendor_prefixed_not_matched_by_unprefixed() {
+        let d = AtRuleAllowedList.check(&at_rule_node("-webkit-keyframes"), &ctx());
+        assert_eq!(d.len(), 1);
+        assert!(d[0].message.contains("@-webkit-keyframes"));
     }
 }

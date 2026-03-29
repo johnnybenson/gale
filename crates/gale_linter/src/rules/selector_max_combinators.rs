@@ -57,6 +57,9 @@ impl Rule for SelectorMaxCombinators {
 }
 
 /// Count combinators in a selector (>, +, ~, descendant whitespace).
+/// Skips content inside attribute selectors `[...]` but NOT inside
+/// pseudo-class function arguments — matching Stylelint v17 behavior
+/// where selectors are evaluated as-written.
 fn count_combinators(selector: &str) -> usize {
     if selector.is_empty() {
         return 0;
@@ -66,7 +69,7 @@ fn count_combinators(selector: &str) -> usize {
     let chars: Vec<char> = selector.chars().collect();
     let len = chars.len();
     let mut i = 0;
-    let mut in_brackets = 0i32;
+    let mut in_brackets = 0i32; // only tracks [ ]
 
     while i < len {
         // Skip SCSS line comments
@@ -77,12 +80,12 @@ fn count_combinators(selector: &str) -> usize {
             continue;
         }
 
-        if chars[i] == '[' || chars[i] == '(' {
+        if chars[i] == '[' {
             in_brackets += 1;
             i += 1;
             continue;
         }
-        if chars[i] == ']' || chars[i] == ')' {
+        if chars[i] == ']' {
             in_brackets -= 1;
             i += 1;
             continue;
@@ -107,7 +110,7 @@ fn count_combinators(selector: &str) -> usize {
             while i < len && chars[i].is_ascii_whitespace() {
                 i += 1;
             }
-            if i < len && chars[i] != '>' && chars[i] != '+' && chars[i] != '~' {
+            if i < len && chars[i] != '>' && chars[i] != '+' && chars[i] != '~' && chars[i] != ')' {
                 count += 1;
             }
             continue;
@@ -187,5 +190,23 @@ mod tests {
     #[test]
     fn rule_name_is_correct() {
         assert_eq!(SelectorMaxCombinators.name(), "selector-max-combinators");
+    }
+
+    #[test]
+    fn counts_combinators_inside_is() {
+        // Stylelint v17: combinators inside :is() ARE counted.
+        // `:is(.a .b)` has 1 descendant combinator.
+        let ctx = ctx_with_options(serde_json::json!(0));
+        let d = SelectorMaxCombinators.check(&style_with_selector(":is(.a .b)"), &ctx);
+        assert_eq!(d.len(), 1, "expected 1 diagnostic for combinator inside :is()");
+    }
+
+    #[test]
+    fn counts_combinators_inside_has() {
+        // Stylelint v17: combinators inside :has() ARE counted.
+        // `.foo:has(.bar > .baz)` has 1 child combinator inside :has().
+        let ctx = ctx_with_options(serde_json::json!(0));
+        let d = SelectorMaxCombinators.check(&style_with_selector(".foo:has(.bar > .baz)"), &ctx);
+        assert_eq!(d.len(), 1);
     }
 }

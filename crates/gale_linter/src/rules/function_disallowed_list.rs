@@ -55,8 +55,7 @@ fn find_disallowed_functions(
     if DISALLOWED.is_empty() {
         return;
     }
-    let lower = value.to_ascii_lowercase();
-    let bytes = lower.as_bytes();
+    let bytes = value.as_bytes();
     let len = bytes.len();
     let mut i = 0;
 
@@ -73,7 +72,7 @@ fn find_disallowed_functions(
                 start -= 1;
             }
             if start < end {
-                let fname = &lower[start..end];
+                let fname = &value[start..end];
                 if DISALLOWED.contains(&fname) {
                     diags.push(
                         Diagnostic::new(rule.name(), format!("Unexpected function \"{fname}\""))

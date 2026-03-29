@@ -40,6 +40,7 @@ pub mod declaration_empty_line_before;
 pub mod declaration_no_important;
 pub mod declaration_property_unit_allowed_list;
 pub mod declaration_property_unit_disallowed_list;
+pub mod declaration_property_max_values;
 pub mod declaration_property_value_allowed_list;
 pub mod declaration_property_value_disallowed_list;
 pub mod declaration_property_value_keyword_no_deprecated;
@@ -98,6 +99,10 @@ pub mod order_order;
 pub mod order_properties_alphabetical_order;
 pub mod order_properties_order;
 pub mod plugin_browser_compat;
+pub mod plugin_enforce_variable_for_property;
+pub mod plugin_no_unknown_custom_properties;
+pub mod plugin_no_unused_custom_properties;
+pub mod plugin_require_file_header_comment;
 pub mod property_allowed_list;
 pub mod property_disallowed_list;
 pub mod property_no_deprecated;
@@ -344,6 +349,9 @@ pub fn register_all(registry: &mut RuleRegistry) {
         declaration_property_unit_disallowed_list::DeclarationPropertyUnitDisallowedList,
     ));
     registry.register(Box::new(
+        declaration_property_max_values::DeclarationPropertyMaxValues,
+    ));
+    registry.register(Box::new(
         declaration_property_value_allowed_list::DeclarationPropertyValueAllowedList,
     ));
     registry.register(Box::new(
@@ -458,6 +466,18 @@ pub fn register_all(registry: &mut RuleRegistry) {
     ));
     registry.register(Box::new(order_properties_order::OrderPropertiesOrder));
     registry.register(Box::new(plugin_browser_compat::PluginBrowserCompat));
+    registry.register(Box::new(
+        plugin_enforce_variable_for_property::PluginEnforceVariableForProperty,
+    ));
+    registry.register(Box::new(
+        plugin_no_unknown_custom_properties::PluginNoUnknownCustomProperties,
+    ));
+    registry.register(Box::new(
+        plugin_no_unused_custom_properties::PluginNoUnusedCustomProperties,
+    ));
+    registry.register(Box::new(
+        plugin_require_file_header_comment::PluginRequireFileHeaderComment,
+    ));
     registry.register(Box::new(number_max_precision::NumberMaxPrecision));
     registry.register(Box::new(property_allowed_list::PropertyAllowedList));
     registry.register(Box::new(property_disallowed_list::PropertyDisallowedList));

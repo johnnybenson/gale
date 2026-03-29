@@ -66,9 +66,9 @@ pub struct Cli {
     #[arg(long)]
     max_warnings: Option<usize>,
 
-    /// Automatically fix problems
-    #[arg(long)]
-    fix: bool,
+    /// Automatically fix problems (default: strict, or specify =lax)
+    #[arg(long, num_args = 0..=1, default_missing_value = "strict", value_name = "MODE")]
+    fix: Option<String>,
 
     /// Only report errors
     #[arg(short, long)]
@@ -1274,9 +1274,19 @@ pub fn run() -> Result<()> {
     };
 
     // Apply fixes when --fix is set.
-    if cli.fix {
+    if let Some(fix_mode) = &cli.fix {
+        let is_strict = fix_mode != "lax";
         let mut total_fixed = 0usize;
         for result in &mut results {
+            // In strict mode, skip files that have parse errors.
+            if is_strict
+                && result
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.rule_name == "parse-error")
+            {
+                continue;
+            }
             let (fixed_source, count) = apply_fixes(&result.source, &result.diagnostics);
             if count > 0 {
                 if cli.stdin {

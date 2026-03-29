@@ -28,7 +28,7 @@ impl Rule for PropertyAllowedList {
         let allowed: Vec<String> = match ctx.options {
             Some(serde_json::Value::Array(arr)) => arr
                 .iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_ascii_lowercase()))
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
                 .collect(),
             _ => return vec![],
         };
@@ -42,8 +42,7 @@ impl Rule for PropertyAllowedList {
         let mut diags = Vec::new();
 
         for decl in declarations {
-            let prop_lower = decl.property.to_ascii_lowercase();
-            if !allowed.contains(&prop_lower) {
+            if !allowed.iter().any(|a| a == &decl.property) {
                 diags.push(
                     Diagnostic::new(
                         self.name(),
@@ -111,10 +110,20 @@ mod tests {
     }
 
     #[test]
-    fn case_insensitive() {
+    fn case_sensitive() {
         let ctx = ctx_with_options(Some(serde_json::json!(["color"])));
         let d = PropertyAllowedList.check(&style_with_prop("Color", "red"), &ctx);
-        assert!(d.is_empty());
+        // "color" does not match "Color" -- strict matching
+        assert_eq!(d.len(), 1);
+    }
+
+    #[test]
+    fn vendor_prefixed_not_matched_by_unprefixed() {
+        let ctx = ctx_with_options(Some(serde_json::json!(["transform"])));
+        let d =
+            PropertyAllowedList.check(&style_with_prop("-webkit-transform", "rotate(45deg)"), &ctx);
+        // "-webkit-transform" is not "transform" -- strict matching
+        assert_eq!(d.len(), 1);
     }
 
     #[test]

@@ -70,6 +70,9 @@ impl Rule for SelectorMaxCompoundSelectors {
 }
 
 /// Count compound selectors by splitting on combinators (whitespace, `>`, `+`, `~`).
+/// Only skips content inside attribute selectors `[...]`, NOT inside pseudo-class
+/// function arguments — matching Stylelint v17 behavior where selectors are
+/// evaluated as-written.
 fn count_compound_selectors(selector: &str) -> usize {
     if selector.is_empty() {
         return 0;
@@ -79,16 +82,16 @@ fn count_compound_selectors(selector: &str) -> usize {
     let chars: Vec<char> = selector.chars().collect();
     let len = chars.len();
     let mut i = 0;
-    let mut in_brackets = 0i32;
+    let mut in_brackets = 0i32; // only tracks [ ]
 
     while i < len {
-        // Skip attribute selectors and pseudo-function arguments
-        if chars[i] == '[' || chars[i] == '(' {
+        // Skip attribute selectors only
+        if chars[i] == '[' {
             in_brackets += 1;
             i += 1;
             continue;
         }
-        if chars[i] == ']' || chars[i] == ')' {
+        if chars[i] == ']' {
             in_brackets -= 1;
             i += 1;
             continue;
@@ -116,8 +119,8 @@ fn count_compound_selectors(selector: &str) -> usize {
             while i < len && chars[i].is_ascii_whitespace() {
                 i += 1;
             }
-            // If not at end and next char is not a combinator, it's a descendant combinator
-            if i < len && chars[i] != '>' && chars[i] != '+' && chars[i] != '~' {
+            // If not at end and next char is not a combinator or closing paren, it's a descendant combinator
+            if i < len && chars[i] != '>' && chars[i] != '+' && chars[i] != '~' && chars[i] != ')' {
                 count += 1;
             }
             continue;
@@ -262,5 +265,24 @@ mod tests {
         let sel = "// This is a comment\n.foo .bar";
         let d = SelectorMaxCompoundSelectors.check(&style_with_selector(sel), &scss_ctx());
         assert!(d.is_empty());
+    }
+
+    #[test]
+    fn counts_compounds_inside_is() {
+        // Stylelint v17: compound selectors inside :is() ARE counted.
+        // `:is(.a .b .c .d)` has 4 compound selectors.
+        let d =
+            SelectorMaxCompoundSelectors.check(&style_with_selector(":is(.a .b .c .d)"), &ctx());
+        assert_eq!(d.len(), 1, "expected 1 diagnostic for 4 compounds inside :is()");
+        assert!(d[0].message.contains("found 4"));
+    }
+
+    #[test]
+    fn counts_compounds_inside_has() {
+        // Stylelint v17: `.foo:has(.bar > .baz > .qux > .quux)` has compounds
+        // counted across the whole selector as-written.
+        let d = SelectorMaxCompoundSelectors
+            .check(&style_with_selector(".foo:has(.bar > .baz > .qux > .quux)"), &ctx());
+        assert_eq!(d.len(), 1);
     }
 }

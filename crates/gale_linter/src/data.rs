@@ -778,6 +778,8 @@ static KNOWN_HTML_ELEMENTS: &[&str] = &[
     "animate",
     "animatemotion",
     "animatetransform",
+    "annotation",
+    "annotation-xml",
     "applet",
     "area",
     "article",
@@ -863,17 +865,46 @@ static KNOWN_HTML_ELEMENTS: &[&str] = &[
     "line",
     "lineargradient",
     "link",
+    "maction",
     "main",
     "map",
     "mark",
     "marker",
     "mask",
     "math",
+    "menclose",
     "menu",
+    "merror",
     "meta",
     "metadata",
     "meter",
+    "mfenced",
+    "mfrac",
+    "mi",
+    "mmultiscripts",
+    "mn",
+    "mo",
+    "mover",
+    "mpadded",
+    "mphantom",
+    "mprescripts",
+    "mroot",
+    "mrow",
+    "ms",
+    "mspace",
+    "msqrt",
+    "mstyle",
+    "msub",
+    "msubsup",
+    "msup",
+    "mtable",
+    "mtd",
+    "mtext",
+    "mtr",
+    "munder",
+    "munderover",
     "nav",
+    "none",
     "noscript",
     "object",
     "ol",
@@ -901,6 +932,7 @@ static KNOWN_HTML_ELEMENTS: &[&str] = &[
     "search",
     "section",
     "select",
+    "semantics",
     "set",
     "slot",
     "small",
@@ -1029,6 +1061,44 @@ mod tests {
         assert!(is_known_html_element("a"));
         assert!(is_known_html_element("section"));
         assert!(!is_known_html_element("fakeelement"));
+    }
+
+    #[test]
+    fn known_mathml_elements() {
+        // MathML 4 tags added for Stylelint v17 compatibility
+        assert!(is_known_html_element("math"));
+        assert!(is_known_html_element("annotation"));
+        assert!(is_known_html_element("annotation-xml"));
+        assert!(is_known_html_element("maction"));
+        assert!(is_known_html_element("menclose"));
+        assert!(is_known_html_element("merror"));
+        assert!(is_known_html_element("mfenced"));
+        assert!(is_known_html_element("mfrac"));
+        assert!(is_known_html_element("mi"));
+        assert!(is_known_html_element("mmultiscripts"));
+        assert!(is_known_html_element("mn"));
+        assert!(is_known_html_element("mo"));
+        assert!(is_known_html_element("mover"));
+        assert!(is_known_html_element("mpadded"));
+        assert!(is_known_html_element("mphantom"));
+        assert!(is_known_html_element("mprescripts"));
+        assert!(is_known_html_element("mroot"));
+        assert!(is_known_html_element("mrow"));
+        assert!(is_known_html_element("ms"));
+        assert!(is_known_html_element("mspace"));
+        assert!(is_known_html_element("msqrt"));
+        assert!(is_known_html_element("mstyle"));
+        assert!(is_known_html_element("msub"));
+        assert!(is_known_html_element("msup"));
+        assert!(is_known_html_element("msubsup"));
+        assert!(is_known_html_element("mtable"));
+        assert!(is_known_html_element("mtd"));
+        assert!(is_known_html_element("mtext"));
+        assert!(is_known_html_element("mtr"));
+        assert!(is_known_html_element("munder"));
+        assert!(is_known_html_element("munderover"));
+        assert!(is_known_html_element("none"));
+        assert!(is_known_html_element("semantics"));
     }
 
     #[test]

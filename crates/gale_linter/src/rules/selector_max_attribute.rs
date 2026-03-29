@@ -63,24 +63,21 @@ impl Rule for SelectorMaxAttribute {
 }
 
 /// Count attribute selectors `[...]` in a selector string.
-/// Skips `[` inside quoted strings and inside pseudo-class function
-/// arguments (`:not()`, `:is()`, `:where()`, `:has()`, etc.), matching
-/// Stylelint's behavior where attribute selectors inside pseudo-class
-/// functions don't count toward the maximum.
+/// Skips `[` inside quoted strings.
+/// Counts attribute selectors inside pseudo-class function arguments
+/// (`:not()`, `:is()`, `:where()`, `:has()`, etc.) — matching Stylelint v17
+/// behavior where selectors are evaluated as-written.
 fn count_attribute_selectors(selector: &str) -> usize {
     let mut count = 0;
     let mut in_single_quote = false;
     let mut in_double_quote = false;
-    let mut paren_depth = 0;
     let mut chars = selector.chars().peekable();
 
     while let Some(ch) = chars.next() {
         match ch {
             '\'' if !in_double_quote => in_single_quote = !in_single_quote,
             '"' if !in_single_quote => in_double_quote = !in_double_quote,
-            '(' if !in_single_quote && !in_double_quote => paren_depth += 1,
-            ')' if !in_single_quote && !in_double_quote && paren_depth > 0 => paren_depth -= 1,
-            '[' if !in_single_quote && !in_double_quote && paren_depth == 0 => count += 1,
+            '[' if !in_single_quote && !in_double_quote => count += 1,
             '\\' => {
                 // skip escaped char
                 chars.next();
@@ -148,9 +145,9 @@ mod tests {
     }
 
     #[test]
-    fn skips_attributes_inside_not() {
-        // Attribute selectors inside :not() should not be counted.
-        // Only `[list]` is at the top level; the 5 inside :not() are excluded.
+    fn counts_attributes_inside_not() {
+        // Stylelint v17: attribute selectors inside :not() ARE counted (as-written).
+        // `[list]` + 5 inside :not() = 6 total attribute selectors.
         let options = serde_json::json!(2);
         let ctx = RuleContext {
             file_path: "t.css",
@@ -164,7 +161,20 @@ mod tests {
             ),
             &ctx,
         );
-        assert!(d.is_empty(), "expected 0 diagnostics but got {}", d.len());
+        assert_eq!(d.len(), 1, "expected 1 diagnostic for 6 attributes with max 2");
+        assert!(d[0].message.contains("found 6"));
+    }
+
+    #[test]
+    fn counts_attributes_inside_has() {
+        // Stylelint v17: attribute selectors inside :has() ARE counted.
+        // `.foo:has([disabled][required])` has 2 attribute selectors.
+        let d = SelectorMaxAttribute.check(
+            &style_with_selector(".foo:has([disabled][required])"),
+            &ctx(),
+        );
+        assert_eq!(d.len(), 1, "expected 1 diagnostic for 2 attributes with max 1");
+        assert!(d[0].message.contains("found 2"));
     }
 
     #[test]

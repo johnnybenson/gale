@@ -181,6 +181,22 @@ mod tests {
     }
 
     #[test]
+    fn case_sensitive() {
+        let ctx = ctx_with_options(serde_json::json!(["hover"]));
+        let d = SelectorPseudoClassDisallowedList.check(&style_with_selector("a:Hover"), &ctx);
+        // "hover" does not match "Hover" -- strict matching
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn vendor_prefixed_not_matched_by_unprefixed() {
+        let ctx = ctx_with_options(serde_json::json!(["placeholder"]));
+        let d = SelectorPseudoClassDisallowedList
+            .check(&style_with_selector("input:-webkit-placeholder"), &ctx);
+        assert!(d.is_empty());
+    }
+
+    #[test]
     fn rule_name_is_correct() {
         assert_eq!(
             SelectorPseudoClassDisallowedList.name(),

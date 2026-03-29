@@ -48,14 +48,7 @@ impl Rule for MediaFeatureNameValueAllowedList {
         let mut diags = Vec::new();
 
         for (feature, value) in extract_media_features(&at_rule.params) {
-            let feature_lower = feature.to_ascii_lowercase();
-            // Strip min-/max- prefix for matching.
-            let base_feature = feature_lower
-                .strip_prefix("min-")
-                .or_else(|| feature_lower.strip_prefix("max-"))
-                .unwrap_or(&feature_lower);
-
-            if let Some(allowed_values) = allowed_map.get(base_feature) {
+            if let Some(allowed_values) = allowed_map.get(&feature) {
                 let value_trimmed = value.trim();
                 let is_allowed = allowed_values.iter().any(|pattern| {
                     if let Some(regex_body) =
@@ -66,8 +59,8 @@ impl Rule for MediaFeatureNameValueAllowedList {
                             .map(|re| re.is_match(value_trimmed))
                             .unwrap_or(false)
                     } else {
-                        // Exact match (case-insensitive).
-                        pattern.eq_ignore_ascii_case(value_trimmed)
+                        // Exact match (strict).
+                        pattern == value_trimmed
                     }
                 });
 
@@ -100,7 +93,7 @@ fn parse_options(options: Option<&serde_json::Value>) -> Option<HashMap<String, 
                 .iter()
                 .filter_map(|v| v.as_str().map(|s| s.to_string()))
                 .collect();
-            map.insert(key.to_ascii_lowercase(), values);
+            map.insert(key.to_string(), values);
         }
     }
     Some(map)
@@ -164,7 +157,7 @@ mod tests {
             syntax: Syntax::Css,
             options: Some(&opts),
         };
-        let node = media_at_rule("(min-width: 50px)");
+        let node = media_at_rule("(width: 50px)");
         let d = MediaFeatureNameValueAllowedList.check(&node, &ctx);
         assert_eq!(d.len(), 1);
         assert!(d[0].message.contains("50px"));
@@ -179,6 +172,21 @@ mod tests {
             syntax: Syntax::Css,
             options: Some(&opts),
         };
+        let node = media_at_rule("(width: 100px)");
+        let d = MediaFeatureNameValueAllowedList.check(&node, &ctx);
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn min_max_prefix_not_stripped() {
+        let opts = serde_json::json!({ "width": ["100px"] });
+        let ctx = RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: Some(&opts),
+        };
+        // "min-width" does not match "width" -- strict matching, no constraint = no diagnostic
         let node = media_at_rule("(min-width: 100px)");
         let d = MediaFeatureNameValueAllowedList.check(&node, &ctx);
         assert!(d.is_empty());

@@ -9,7 +9,8 @@ use crate::rule::{Rule, RuleContext};
 /// Options: an array of function names (strings) or regex patterns
 /// (strings that start and end with `/`). All other functions are flagged.
 ///
-/// Vendor-prefixed functions are matched against their unprefixed name.
+/// Matching is strict: only exact string matches or regex patterns match.
+/// Vendor-prefixed functions are NOT implicitly matched by unprefixed names.
 ///
 /// Equivalent to Stylelint's `function-allowed-list` rule.
 pub struct FunctionAllowedList;
@@ -63,7 +64,7 @@ impl Rule for FunctionAllowedList {
                     regex_patterns.push(re);
                 }
             } else {
-                plain_names.push(val.to_ascii_lowercase());
+                plain_names.push((*val).to_string());
             }
         }
 
@@ -113,30 +114,15 @@ impl Rule for FunctionAllowedList {
     }
 }
 
-/// Strip vendor prefix from a function name and return the unprefixed name.
-/// E.g., "-webkit-calc" -> "calc", "-moz-transform" -> "transform".
-fn strip_vendor_prefix(name: &str) -> &str {
-    const PREFIXES: &[&str] = &["-webkit-", "-moz-", "-ms-", "-o-"];
-    for prefix in PREFIXES {
-        if let Some(stripped) = name.strip_prefix(prefix) {
-            return stripped;
-        }
-    }
-    name
-}
-
 fn is_function_allowed(fname: &str, plain_names: &[String], regex_patterns: &[Regex]) -> bool {
-    let lower = fname.to_ascii_lowercase();
-    let unprefixed = strip_vendor_prefix(&lower);
-
-    // Check plain names (case-insensitive, also match unprefixed)
-    if plain_names.contains(&lower) || plain_names.contains(&unprefixed.to_string()) {
+    // Strict matching: exact string match or regex pattern match only.
+    // No vendor prefix stripping, no implicit case-insensitive matching.
+    if plain_names.iter().any(|n| n == fname) {
         return true;
     }
 
-    // Check regex patterns against both the original and unprefixed name
     for re in regex_patterns {
-        if re.is_match(fname) || re.is_match(unprefixed) {
+        if re.is_match(fname) {
             return true;
         }
     }
@@ -170,11 +156,10 @@ fn find_disallowed_functions(
             if start < end {
                 let fname = &value[start..end];
                 if !is_function_allowed(fname, plain_names, regex_patterns) {
-                    let fname_lower = fname.to_ascii_lowercase();
                     diags.push(
                         Diagnostic::new(
                             rule.name(),
-                            format!("Unexpected function \"{fname_lower}\""),
+                            format!("Unexpected function \"{fname}\""),
                         )
                         .severity(rule.default_severity())
                         .span(Span::new(base_offset + start, end - start)),
@@ -245,17 +230,19 @@ mod tests {
     }
 
     #[test]
-    fn case_insensitive() {
+    fn case_sensitive() {
         let ctx = ctx_with_options(Some(serde_json::json!(["rgb"])));
         let d = FunctionAllowedList.check(&style_with_value("RGB(0, 0, 0)"), &ctx);
-        assert!(d.is_empty());
+        // "rgb" does not match "RGB" -- strict matching
+        assert_eq!(d.len(), 1);
     }
 
     #[test]
-    fn vendor_prefixed_function_matches_unprefixed() {
+    fn vendor_prefixed_function_not_matched_by_unprefixed() {
         let ctx = ctx_with_options(Some(serde_json::json!(["calc"])));
         let d = FunctionAllowedList.check(&style_with_value("-webkit-calc(100% - 10px)"), &ctx);
-        assert!(d.is_empty());
+        // "calc" does not match "-webkit-calc" -- strict matching
+        assert_eq!(d.len(), 1);
     }
 
     #[test]

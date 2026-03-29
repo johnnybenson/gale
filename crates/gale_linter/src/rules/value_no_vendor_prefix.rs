@@ -81,10 +81,6 @@ impl Rule for ValueNoVendorPrefix {
                         continue;
                     }
 
-                    // Check if the unprefixed value is in the ignore list
-                    if ignore_values.iter().any(|v| v == &unprefixed) {
-                        continue;
-                    }
                     // Build the vendor-prefixed identifier (e.g. "-moz-radial-gradient")
                     let prefixed_ident = {
                         let pos = lower.find(prefix).unwrap();
@@ -99,6 +95,14 @@ impl Rule for ValueNoVendorPrefix {
                         let orig_end = pos + prefix.len() + ident_end;
                         decl.value[orig_pos..orig_end].to_string()
                     };
+
+                    // Check if the value is in the ignore list.
+                    // v17: ignoreValues checks values as-is (no prefix stripping).
+                    // E.g. ignoreValues: ["-webkit-flex"] matches, but ["flex"] does NOT.
+                    let prefixed_lower = prefixed_ident.to_ascii_lowercase();
+                    if ignore_values.iter().any(|v| v == &prefixed_lower) {
+                        continue;
+                    }
 
                     // Try to find the prefixed value in source for span + fix
                     let decl_start = decl.span.offset;
@@ -306,5 +310,40 @@ mod tests {
         let expected_offset = decl_offset + "background: ".len();
         assert_eq!(d[0].span.offset, expected_offset);
         assert_eq!(d[0].span.length, "-moz-radial-gradient".len());
+    }
+
+    #[test]
+    fn ignore_values_checks_as_is_not_unprefixed() {
+        // v17: ignoreValues: ["flex"] should NOT match -webkit-flex
+        let opts = serde_json::json!(["true", {"ignoreValues": ["flex"]}]);
+        let ctx = RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: Some(&opts),
+        };
+        let d = ValueNoVendorPrefix.check(&style_decl("-webkit-flex"), &ctx);
+        assert_eq!(
+            d.len(),
+            1,
+            "ignoreValues: [\"flex\"] should NOT ignore -webkit-flex in v17"
+        );
+    }
+
+    #[test]
+    fn ignore_values_matches_full_prefixed_value() {
+        // v17: ignoreValues: ["-webkit-flex"] SHOULD match -webkit-flex
+        let opts = serde_json::json!(["true", {"ignoreValues": ["-webkit-flex"]}]);
+        let ctx = RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: Some(&opts),
+        };
+        let d = ValueNoVendorPrefix.check(&style_decl("-webkit-flex"), &ctx);
+        assert!(
+            d.is_empty(),
+            "ignoreValues: [\"-webkit-flex\"] SHOULD ignore -webkit-flex"
+        );
     }
 }

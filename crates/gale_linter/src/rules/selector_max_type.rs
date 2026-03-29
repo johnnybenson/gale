@@ -228,6 +228,9 @@ fn is_type_name(name: &str) -> bool {
 }
 
 /// Parse a single (non-comma-separated) selector into segments.
+/// Does NOT skip pseudo-class function arguments — type selectors inside
+/// `:is()`, `:not()`, `:has()`, `:where()` are counted, matching Stylelint v17
+/// as-written behavior.
 fn parse_selector_segments(selector: &str) -> Vec<SelectorSegment> {
     let mut segments: Vec<SelectorSegment> = Vec::new();
     let chars: Vec<char> = selector.chars().collect();
@@ -296,18 +299,9 @@ fn parse_selector_segments(selector: &str) -> Vec<SelectorSegment> {
                 while i < len && is_ident_char(chars[i]) {
                     i += 1;
                 }
-                if i < len && chars[i] == '(' {
-                    let mut depth = 1;
-                    i += 1;
-                    while i < len && depth > 0 {
-                        if chars[i] == '(' {
-                            depth += 1;
-                        } else if chars[i] == ')' {
-                            depth -= 1;
-                        }
-                        i += 1;
-                    }
-                }
+                // Do NOT skip parenthesized arguments — continue scanning so that
+                // type selectors inside functional pseudo-classes (e.g. `:is(div)`)
+                // are also counted. Matching Stylelint v17 as-written behavior.
                 last_combinator = None;
             }
             '[' => {
@@ -327,6 +321,11 @@ fn parse_selector_segments(selector: &str) -> Vec<SelectorSegment> {
                     i += 1;
                 }
                 last_combinator = None;
+            }
+            '(' | ')' => {
+                // Skip parentheses themselves (from pseudo-class functions)
+                // without skipping their contents
+                i += 1;
             }
             _ if chars[i].is_ascii_alphabetic() || !chars[i].is_ascii() => {
                 let start = i;
@@ -575,5 +574,36 @@ mod tests {
         let c = ctx_with_options(&opts);
         let d = SelectorMaxType.check(&style_with_selector("my-type"), &c);
         assert!(d.is_empty());
+    }
+
+    #[test]
+    fn counts_types_inside_is() {
+        // Stylelint v17: type selectors inside :is() ARE counted.
+        // `:is(div)` has 1 type selector.
+        let opts = serde_json::json!([0]);
+        let c = ctx_with_options(&opts);
+        let d = SelectorMaxType.check(&style_with_selector(":is(div)"), &c);
+        assert_eq!(d.len(), 1, "expected 1 diagnostic for type inside :is()");
+    }
+
+    #[test]
+    fn counts_types_inside_not() {
+        // Stylelint v17: `.foo:not(div)` counts `div` as a type selector.
+        let opts = serde_json::json!([0]);
+        let c = ctx_with_options(&opts);
+        let d = SelectorMaxType.check(&style_with_selector(".foo:not(div)"), &c);
+        assert_eq!(d.len(), 1);
+    }
+
+    #[test]
+    fn counts_types_inside_has() {
+        // Stylelint v17: `div:has(span a)` has 3 type selectors total.
+        let d = SelectorMaxType.check(&style_with_selector("div:has(span a)"), &ctx());
+        assert!(d.is_empty(), "3 types within default max of 3 should pass");
+
+        let opts = serde_json::json!([2]);
+        let c = ctx_with_options(&opts);
+        let d = SelectorMaxType.check(&style_with_selector("div:has(span a)"), &c);
+        assert_eq!(d.len(), 1, "3 types with max 2 should fail");
     }
 }

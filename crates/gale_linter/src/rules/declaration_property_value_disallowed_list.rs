@@ -254,18 +254,18 @@ impl PropertyMatcher {
                 }
             }
         }
-        Self::Exact(pattern.to_ascii_lowercase())
+        Self::Exact(pattern.to_string())
     }
 
     fn matches(&self, property: &str) -> bool {
         match self {
-            Self::Exact(s) => property.to_ascii_lowercase() == *s,
+            Self::Exact(s) => property == s.as_str(),
             Self::Regex(re) => re.is_match(property),
         }
     }
 }
 
-/// Matches a value — either exact string (case-insensitive) or regex pattern.
+/// Matches a value — either exact string or regex pattern.
 enum ValueMatcher {
     Exact(String),
     Regex(Regex),
@@ -287,12 +287,12 @@ impl ValueMatcher {
                 }
             }
         }
-        Self::Exact(pattern.to_ascii_lowercase())
+        Self::Exact(pattern.to_string())
     }
 
     fn matches(&self, value: &str) -> bool {
         match self {
-            Self::Exact(s) => value.to_ascii_lowercase() == *s,
+            Self::Exact(s) => value == s.as_str(),
             Self::Regex(re) => re.is_match(value),
         }
     }

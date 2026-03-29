@@ -143,6 +143,23 @@ mod tests {
     }
 
     #[test]
+    fn case_sensitive() {
+        let ctx = ctx_with_options(serde_json::json!(["before"]));
+        let d =
+            SelectorPseudoElementDisallowedList.check(&style_with_selector("a::Before"), &ctx);
+        // "before" does not match "Before" -- strict matching
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn vendor_prefixed_not_matched_by_unprefixed() {
+        let ctx = ctx_with_options(serde_json::json!(["placeholder"]));
+        let d = SelectorPseudoElementDisallowedList
+            .check(&style_with_selector("input::-webkit-placeholder"), &ctx);
+        assert!(d.is_empty());
+    }
+
+    #[test]
     fn rule_name_is_correct() {
         assert_eq!(
             SelectorPseudoElementDisallowedList.name(),

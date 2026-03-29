@@ -8,9 +8,12 @@ Gale is a **perfect substitute for [Stylelint](https://stylelint.io/)**, written
 
 The bar: `bunx gale 'src/**/*.scss'` must produce **byte-for-byte identical warnings** to `bunx stylelint 'src/**/*.scss'`. Same rules, same config, same warnings, same severity, same line/column. If Stylelint says it, Gale says it. If Stylelint doesn't say it, Gale doesn't say it. Zero false positives, zero false negatives.
 
-**Current state (v0.1.2):**
-- 260+ built-in rules (144 core, 44 SCSS, 64 stylistic, 3 order)
-- Differential tested against 20 real-world repos with ZERO rule filters
+**Current state (v0.1.5):**
+- 270+ built-in rules (146 core, 44 SCSS, 64 stylistic, 3 order, 4 plugin meta-rules)
+- Targets **Stylelint v17** semantics
+- Differential tested against 22 real-world repos with ZERO rule filters
+- 6 output formatters (text, json, compact, verbose, tap, unix) + `--custom-formatter`
+- Programmatic Node.js API (`lint()`, `resolveConfig()`, `formatters`)
 - Published on npm as `@lyricalstring/gale`
 - Published on crates.io as `gale-lint` (binary name is `gale`)
 
@@ -65,7 +68,7 @@ gale_cli        CLI definition (clap), file discovery, orchestration
     +-- gale_linter       Rule trait, registry, runner, built-in rules
     |       +-- gale_css_parser    CSS/SCSS/Less parser wrapper
     |       +-- gale_diagnostics   Span, Diagnostic, LintResult, Fix/Edit types
-    +-- gale_formatter    Output formatters (text, json, compact)
+    +-- gale_formatter    Output formatters (text, json, compact, verbose, tap, unix)
     +-- gale_lsp          Language Server Protocol server
 ```
 
@@ -95,7 +98,7 @@ CLI args
 | **gale_diagnostics** | `crates/gale_diagnostics/` | Core types: `Span`, `SourceLocation`, `SourceLineIndex`, `Severity`, `Diagnostic`, `LintResult`, `Fix`, `Edit`. Also provides `apply_fixes()`. |
 | **gale_linter** | `crates/gale_linter/` | The `Rule` trait, `RuleRegistry`, `LintRunner`, inline disable-comment processing, known-identifier data tables, and all 250 built-in rule implementations. |
 | **gale_config** | `crates/gale_config/` | Config file discovery (walks up directories), parsing (JSON/YAML/TOML), `extends` resolution (built-in presets, npm packages, relative paths), preset definitions (`gale:recommended`, `gale:all`). |
-| **gale_formatter** | `crates/gale_formatter/` | `Formatter` trait with `TextFormatter` (Stylelint-like), `JsonFormatter` (Stylelint-compatible JSON), and `CompactFormatter`. Factory function `create_formatter()`. |
+| **gale_formatter** | `crates/gale_formatter/` | `Formatter` trait with `TextFormatter` (Stylelint-like), `JsonFormatter` (Stylelint-compatible JSON), `CompactFormatter`, `VerboseFormatter`, `TapFormatter`, and `UnixFormatter`. Factory function `create_formatter()`. |
 | **gale_cli** | `crates/gale_cli/` | Clap-based CLI, file discovery with `.galeignore`/`.gitignore` support, cache layer, `--fix` orchestration, `--init` scaffolding, `--lsp` delegation. |
 | **gale_lsp** | `crates/gale_lsp/` | LSP server for editor integration. Invoked via `gale --lsp`. |
 
@@ -468,19 +471,32 @@ Bootstrap, Gutenberg, Carbon, Angular Components, wp-calypso, Discourse, GOV.UK 
 
 ## Target compatibility
 
-Gale targets **Stylelint v16** (the current major version). Differential testing validates 0 FP / 0 FN against 22 real-world repos using Stylelint v16. Older Stylelint versions (v13, v14) may have behavioural differences that Gale does not replicate.
+Gale targets **Stylelint v17** (the latest major version). Key v17 changes implemented:
+
+- `selector-max-*` rules lint selectors as-written (no desugaring of CSS nesting or functional pseudo-classes)
+- `*-list` rules use strict matching (no implicit vendor-prefix or case-insensitive matching)
+- `*-no-vendor-prefix` ignore options match as-is (no prefix stripping)
+- `&` nesting selector specificity uses `:is()` semantics
+- `--fix` defaults to strict mode (use `--fix=lax` for old behavior)
+- `display-notation` rule (v17.1.0)
+- `github` formatter removed (use `--custom-formatter @csstools/stylelint-formatter-github`)
+
+Repos using Stylelint v16 may see minor differences in edge cases (selector counting inside `:is()`, `:has()`, `:where()`). These match the behavior they would get after upgrading to Stylelint v17.
+
+Differential testing validates 0 FP / 0 FN against 22 real-world repos. Older Stylelint versions (v13, v14) may have behavioural differences that Gale does not replicate.
 
 ## Known gaps (bugs to fix, not acceptable limitations)
 
-Every gap here is a bug. Gale must produce identical output to Stylelint v16 — "not yet supported" is not an acceptable answer.
+Every gap here is a bug. Gale must produce identical output to Stylelint v17 — "not yet supported" is not an acceptable answer.
 
 1. **Missing rules** -- Any rule Stylelint has that Gale skips with "not yet supported" is a bug. Run the differential test to find them. They must be implemented.
-2. **Custom JavaScript plugins** -- Gale cannot execute JS plugins, but it has built-in Rust implementations of all standard plugin rules (@stylistic, scss, order). If a repo uses a custom third-party JS plugin with rules Gale doesn't implement, those rules must be added.
+2. **Arbitrary JavaScript plugins** -- Gale cannot execute JS plugins, but it has built-in Rust implementations of all standard plugin rules (@stylistic, scss, order) plus 4 declarative plugin meta-rules (`plugin/enforce-variable-for-property`, `plugin/no-unknown-custom-properties`, `plugin/no-unused-custom-properties`, `plugin/require-file-header-comment`) that cover the most common custom plugin patterns.
 3. **Sass indented syntax** -- `.sass` files return `UnsupportedSyntax` error (`.scss` works fine).
 
 ## Intentional non-support
 
 These are NOT bugs. They are deliberate scope decisions.
 
-1. **`prettier/prettier` plugin** -- This Stylelint plugin runs the entire Prettier formatter and reports formatting diffs as lint warnings. Replicating it would require reimplementing Prettier's CSS/SCSS formatter in Rust, which is a separate project-scale effort. The plugin is deprecated in Stylelint v16 (the recommendation is to run Prettier separately). None of the 22 differential test repos use it.
-2. **Stylelint ≤13 behavioural quirks** -- Some older Stylelint versions have different system color lists, different `camelCaseSvgKeywords` defaults, and different `declaration-block-no-redundant-longhand-properties` shorthand detection (e.g. `inset` was not recognized). Gale matches v16 behaviour only.
+1. **`prettier/prettier` plugin** -- This Stylelint plugin runs the entire Prettier formatter and reports formatting diffs as lint warnings. Both the Stylelint and Prettier teams recommend running Prettier separately (`prettier --check`). The plugin pattern is in decline (~720K downloads/week but falling). Implementing it would require embedding a JS runtime or subprocess, negating Gale's speed advantage.
+2. **Stylelint ≤15 behavioural quirks** -- Gale matches v17 behaviour only. Older versions have different vendor prefix handling, selector counting, and specificity calculations.
+3. **Stylelint v16 compat mode** -- Gale does not provide a v16 compatibility mode. Projects using v16 may see minor differences in ~25 rules related to nesting, vendor prefixes, and specificity. These are the same changes they would encounter upgrading to Stylelint v17.

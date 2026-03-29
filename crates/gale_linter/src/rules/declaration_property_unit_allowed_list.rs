@@ -70,9 +70,9 @@ fn parse_options(options: Option<&serde_json::Value>) -> HashMap<String, Vec<Str
         if let Some(arr) = units_val.as_array() {
             let units: Vec<String> = arr
                 .iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_ascii_lowercase()))
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
                 .collect();
-            map.insert(prop.to_ascii_lowercase(), units);
+            map.insert(prop.to_string(), units);
         }
     }
     map
@@ -105,12 +105,10 @@ impl Rule for DeclarationPropertyUnitAllowedList {
         };
 
         for decl in declarations {
-            let prop_lower = decl.property.to_ascii_lowercase();
-            if let Some(allowed_units) = allowed_map.get(&prop_lower) {
+            if let Some(allowed_units) = allowed_map.get(&decl.property) {
                 let units = extract_units(&decl.value);
                 for unit in units {
-                    let unit_lower = unit.to_ascii_lowercase();
-                    if !allowed_units.contains(&unit_lower) {
+                    if !allowed_units.contains(&unit) {
                         diags.push(
                             Diagnostic::new(
                                 self.name(),
@@ -197,13 +195,25 @@ mod tests {
     }
 
     #[test]
-    fn case_insensitive_property_match() {
+    fn case_sensitive_property_match() {
         let opts = json!({"Font-Size": ["rem"]});
         let d = DeclarationPropertyUnitAllowedList.check(
             &style_with_decl("font-size", "16px"),
             &ctx_with_options(&opts),
         );
-        assert_eq!(d.len(), 1);
+        // "Font-Size" does not match "font-size" -- strict matching
+        assert!(d.is_empty());
+    }
+
+    #[test]
+    fn vendor_prefixed_property_not_matched() {
+        let opts = json!({"font-size": ["rem"]});
+        let d = DeclarationPropertyUnitAllowedList.check(
+            &style_with_decl("-webkit-font-size", "16px"),
+            &ctx_with_options(&opts),
+        );
+        // "-webkit-font-size" is not "font-size", so the rule does not apply
+        assert!(d.is_empty());
     }
 
     #[test]

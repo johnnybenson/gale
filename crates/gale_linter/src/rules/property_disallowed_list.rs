@@ -33,8 +33,7 @@ impl Rule for PropertyDisallowedList {
             _ => return vec![],
         };
         for decl in declarations {
-            let prop_lower = decl.property.to_ascii_lowercase();
-            if DISALLOWED.contains(&prop_lower.as_str()) {
+            if DISALLOWED.contains(&decl.property.as_str()) {
                 diags.push(
                     Diagnostic::new(
                         self.name(),

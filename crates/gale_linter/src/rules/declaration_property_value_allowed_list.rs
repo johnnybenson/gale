@@ -26,9 +26,9 @@ fn parse_options(options: Option<&serde_json::Value>) -> HashMap<String, Vec<Str
         if let Some(arr) = values_val.as_array() {
             let values: Vec<String> = arr
                 .iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_ascii_lowercase()))
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
                 .collect();
-            map.insert(prop.to_ascii_lowercase(), values);
+            map.insert(prop.to_string(), values);
         }
     }
     map
@@ -61,12 +61,10 @@ impl Rule for DeclarationPropertyValueAllowedList {
         };
 
         for decl in declarations {
-            let prop_lower = decl.property.to_ascii_lowercase();
-            if let Some(allowed_values) = allowed_map.get(&prop_lower) {
-                let val_lower = decl.value.to_ascii_lowercase();
+            if let Some(allowed_values) = allowed_map.get(&decl.property) {
                 let is_allowed = allowed_values
                     .iter()
-                    .any(|pattern| val_lower.contains(pattern.as_str()));
+                    .any(|pattern| decl.value.contains(pattern.as_str()));
                 if !is_allowed {
                     diags.push(
                         Diagnostic::new(
@@ -153,12 +151,24 @@ mod tests {
     }
 
     #[test]
-    fn case_insensitive_value_match() {
+    fn case_sensitive_value_match() {
         let opts = json!({"display": ["FLEX"]});
         let d = DeclarationPropertyValueAllowedList.check(
             &style_with_decl("display", "flex"),
             &ctx_with_options(&opts),
         );
+        // "FLEX" does not match "flex" -- strict matching
+        assert_eq!(d.len(), 1);
+    }
+
+    #[test]
+    fn vendor_prefixed_property_not_matched() {
+        let opts = json!({"display": ["block"]});
+        let d = DeclarationPropertyValueAllowedList.check(
+            &style_with_decl("-webkit-display", "flex"),
+            &ctx_with_options(&opts),
+        );
+        // "-webkit-display" is not "display", so the rule does not apply
         assert!(d.is_empty());
     }
 

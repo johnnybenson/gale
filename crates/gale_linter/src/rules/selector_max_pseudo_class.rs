@@ -57,6 +57,9 @@ impl Rule for SelectorMaxPseudoClass {
 }
 
 /// Count pseudo-classes in a selector (:name patterns, excluding ::pseudo-elements).
+/// Counts pseudo-classes inside functional pseudo-class arguments (`:not()`,
+/// `:is()`, `:where()`, `:has()`, etc.) — matching Stylelint v17 behavior
+/// where selectors are evaluated as-written.
 fn count_pseudo_classes(selector: &str) -> usize {
     let mut count = 0usize;
     let chars: Vec<char> = selector.chars().collect();
@@ -94,18 +97,8 @@ fn count_pseudo_classes(selector: &str) -> usize {
             while i < len && (chars[i].is_ascii_alphanumeric() || chars[i] == '-') {
                 i += 1;
             }
-            continue;
-        }
-        if chars[i] == ':' {
-            i += 1;
-            let start = i;
-            while i < len && (chars[i].is_ascii_alphanumeric() || chars[i] == '-') {
-                i += 1;
-            }
-            if i > start {
-                count += 1;
-            }
-            // Skip parenthesized argument
+            // Skip parenthesized argument of pseudo-element (e.g. ::slotted(...))
+            // but do NOT recurse into it for pseudo-class counting
             if i < len && chars[i] == '(' {
                 let mut depth = 1;
                 i += 1;
@@ -118,6 +111,19 @@ fn count_pseudo_classes(selector: &str) -> usize {
                     i += 1;
                 }
             }
+            continue;
+        }
+        if chars[i] == ':' {
+            i += 1;
+            let start = i;
+            while i < len && (chars[i].is_ascii_alphanumeric() || chars[i] == '-') {
+                i += 1;
+            }
+            if i > start {
+                count += 1;
+            }
+            // Do NOT skip parenthesized arguments — continue scanning so that
+            // pseudo-classes inside (e.g. `:not(:hover)`) are also counted.
         } else {
             i += 1;
         }
@@ -193,5 +199,31 @@ mod tests {
     #[test]
     fn rule_name_is_correct() {
         assert_eq!(SelectorMaxPseudoClass.name(), "selector-max-pseudo-class");
+    }
+
+    #[test]
+    fn counts_pseudo_classes_inside_not() {
+        // Stylelint v17: `:not(:hover)` counts as 2 pseudo-classes (`:not` and `:hover`).
+        let d =
+            SelectorMaxPseudoClass.check(&style_with_selector("a:not(:hover)"), &ctx());
+        assert_eq!(d.len(), 1, "expected 1 diagnostic for 2 pseudo-classes with max 1");
+        assert!(d[0].message.contains("found 2"));
+    }
+
+    #[test]
+    fn counts_pseudo_classes_inside_is() {
+        // Stylelint v17: `a:is(:hover)` counts as 2 pseudo-classes (`:is` and `:hover`).
+        let d =
+            SelectorMaxPseudoClass.check(&style_with_selector("a:is(:hover)"), &ctx());
+        assert_eq!(d.len(), 1, "expected 1 diagnostic for 2 pseudo-classes with max 1");
+        assert!(d[0].message.contains("found 2"));
+    }
+
+    #[test]
+    fn allows_pseudo_classes_inside_functional_within_limit() {
+        // `:not(:hover)` = 2 pseudo-classes, max 2 should be OK
+        let ctx = ctx_with_options(serde_json::json!(2));
+        let d = SelectorMaxPseudoClass.check(&style_with_selector("a:not(:hover)"), &ctx);
+        assert!(d.is_empty());
     }
 }

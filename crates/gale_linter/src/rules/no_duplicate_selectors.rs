@@ -29,6 +29,18 @@ impl Rule for NoDuplicateSelectors {
         let mut diagnostics = Vec::new();
         let is_scss = matches!(context.syntax, Syntax::Scss | Syntax::Sass | Syntax::Less);
 
+        // Parse ignoreSelectors option (v17): array of string/regex patterns
+        let ignore_selectors: Vec<String> = context
+            .secondary_options()
+            .and_then(|v| v.get("ignoreSelectors"))
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
         collect_selectors(
             nodes,
             &[],
@@ -38,6 +50,7 @@ impl Rule for NoDuplicateSelectors {
             &line_index,
             context.source,
             is_scss,
+            &ignore_selectors,
         );
 
         diagnostics
@@ -138,6 +151,7 @@ fn collect_selectors(
     line_index: &SourceLineIndex,
     source: &str,
     is_scss: bool,
+    ignore_selectors: &[String],
 ) {
     for node in nodes {
         match node {
@@ -164,7 +178,22 @@ fn collect_selectors(
                 let expanded_is_standard = !expanded
                     .iter()
                     .any(|s| s.contains("#{") || s.contains("@{"));
-                if is_standard && expanded_is_standard && !expanded.is_empty() {
+                // Check ignoreSelectors: skip if any selector part matches an ignore pattern
+                let should_ignore = !ignore_selectors.is_empty()
+                    && expanded.iter().any(|sel| {
+                        ignore_selectors.iter().any(|pattern| {
+                            if pattern.starts_with('/') && pattern.ends_with('/') {
+                                // Regex pattern
+                                let re_str = &pattern[1..pattern.len() - 1];
+                                regex::Regex::new(re_str)
+                                    .map(|re| re.is_match(sel))
+                                    .unwrap_or(false)
+                            } else {
+                                sel == pattern
+                            }
+                        })
+                    });
+                if is_standard && expanded_is_standard && !expanded.is_empty() && !should_ignore {
                     let normalized_key = normalize_expanded(&expanded);
                     let (line, _) = line_index.offset_to_location(style_rule.span.offset);
 
@@ -213,6 +242,7 @@ fn collect_selectors(
                     line_index,
                     source,
                     is_scss,
+                    ignore_selectors,
                 );
 
                 // Recurse into nested at-rules (e.g. `@media` inside a rule).
@@ -225,6 +255,7 @@ fn collect_selectors(
                     line_index,
                     source,
                     is_scss,
+                    ignore_selectors,
                 );
             }
             CssNode::AtRule(at_rule) => {
@@ -242,6 +273,7 @@ fn collect_selectors(
                     line_index,
                     source,
                     is_scss,
+                    ignore_selectors,
                 );
             }
             _ => {}
@@ -399,6 +431,76 @@ mod tests {
             diags.len(),
             2,
             "each nested & should be flagged as duplicate of parent"
+        );
+    }
+
+    #[test]
+    fn ignore_selectors_string_match() {
+        let rule = NoDuplicateSelectors;
+        let source = ".foo { color: red; }\n.bar { color: blue; }\n.foo { display: block; }";
+        let opts = serde_json::json!([true, {"ignoreSelectors": [".foo"]}]);
+        let nodes = vec![
+            CssNode::Style(StyleRule {
+                selector: ".foo".to_string(),
+                declarations: vec![],
+                span: ParserSpan::new(0, 20),
+                ..Default::default()
+            }),
+            CssNode::Style(StyleRule {
+                selector: ".bar".to_string(),
+                declarations: vec![],
+                span: ParserSpan::new(21, 21),
+                ..Default::default()
+            }),
+            CssNode::Style(StyleRule {
+                selector: ".foo".to_string(),
+                declarations: vec![],
+                span: ParserSpan::new(43, 24),
+                ..Default::default()
+            }),
+        ];
+        let ctx = RuleContext {
+            file_path: "test.css",
+            source,
+            syntax: Syntax::Css,
+            options: Some(&opts),
+        };
+        let diags = rule.check_root(&nodes, &ctx);
+        assert!(
+            diags.is_empty(),
+            "ignoreSelectors should suppress duplicate .foo"
+        );
+    }
+
+    #[test]
+    fn ignore_selectors_regex_match() {
+        let rule = NoDuplicateSelectors;
+        let source = ".foo { color: red; }\n.foo { display: block; }";
+        let opts = serde_json::json!([true, {"ignoreSelectors": ["/^\\.foo$/"]}]);
+        let nodes = vec![
+            CssNode::Style(StyleRule {
+                selector: ".foo".to_string(),
+                declarations: vec![],
+                span: ParserSpan::new(0, 20),
+                ..Default::default()
+            }),
+            CssNode::Style(StyleRule {
+                selector: ".foo".to_string(),
+                declarations: vec![],
+                span: ParserSpan::new(21, 24),
+                ..Default::default()
+            }),
+        ];
+        let ctx = RuleContext {
+            file_path: "test.css",
+            source,
+            syntax: Syntax::Css,
+            options: Some(&opts),
+        };
+        let diags = rule.check_root(&nodes, &ctx);
+        assert!(
+            diags.is_empty(),
+            "ignoreSelectors with regex should suppress duplicate .foo"
         );
     }
 }

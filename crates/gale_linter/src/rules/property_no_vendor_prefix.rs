@@ -326,4 +326,40 @@ mod tests {
         assert_eq!(fix.edits.len(), 1);
         assert_eq!(fix.edits[0].new_text, "transform");
     }
+
+    #[test]
+    fn ignore_properties_checks_as_is_not_unprefixed() {
+        // v17: ignoreProperties: ["transform"] should NOT match -webkit-transform
+        let opts = serde_json::json!(["true", {"ignoreProperties": ["transform"]}]);
+        let ctx = RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: Some(&opts),
+        };
+        let d = PropertyNoVendorPrefix.check(&style_decl("-webkit-transform"), &ctx);
+        assert_eq!(
+            d.len(),
+            1,
+            "ignoreProperties: [\"transform\"] should NOT ignore -webkit-transform"
+        );
+    }
+
+    #[test]
+    fn ignore_properties_matches_full_prefixed_name() {
+        // v17: ignoreProperties: ["-webkit-transform"] SHOULD match -webkit-transform
+        let opts =
+            serde_json::json!(["true", {"ignoreProperties": ["-webkit-transform"]}]);
+        let ctx = RuleContext {
+            file_path: "t.css",
+            source: "",
+            syntax: Syntax::Css,
+            options: Some(&opts),
+        };
+        let d = PropertyNoVendorPrefix.check(&style_decl("-webkit-transform"), &ctx);
+        assert!(
+            d.is_empty(),
+            "ignoreProperties: [\"-webkit-transform\"] SHOULD ignore -webkit-transform"
+        );
+    }
 }
