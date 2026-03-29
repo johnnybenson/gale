@@ -242,6 +242,7 @@ pub mod scss_at_if_no_null;
 pub mod scss_at_import_partial_extension;
 pub mod scss_at_import_partial_extension_disallowed_list;
 pub mod scss_at_mixin_argumentless_call_parentheses;
+pub mod scss_at_mixin_disallowed_list;
 pub mod scss_at_mixin_parentheses_space_before;
 pub mod scss_at_mixin_pattern;
 pub mod scss_at_rule_conditional_no_parentheses;
@@ -792,6 +793,9 @@ pub fn register_all(registry: &mut RuleRegistry) {
     ));
     registry.register(Box::new(
         scss_at_mixin_argumentless_call_parentheses::ScssAtMixinArgumentlessCallParentheses,
+    ));
+    registry.register(Box::new(
+        scss_at_mixin_disallowed_list::ScssAtMixinDisallowedList,
     ));
     registry.register(Box::new(scss_at_mixin_pattern::ScssAtMixinPattern));
     registry.register(Box::new(scss_at_rule_no_unknown::ScssAtRuleNoUnknown));

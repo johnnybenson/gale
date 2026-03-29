@@ -486,6 +486,9 @@ pub struct LintRunner {
     /// When `true`, report `stylelint-disable` comments that don't suppress
     /// any warnings (Stylelint's `reportNeedlessDisables`).
     report_needless_disables: bool,
+    /// When `true`, ignore all `/* stylelint-disable */` comments — diagnostics
+    /// are reported regardless of disable directives (Stylelint's `ignoreDisables`).
+    ignore_disables: bool,
     /// Rule names from the config (including plugin rules Gale doesn't
     /// implement).  Used to suppress false needless-disable reports for
     /// rules that are configured but not in Gale's registry.
@@ -504,6 +507,7 @@ impl LintRunner {
             rule_options: HashMap::new(),
             rule_severities: HashMap::new(),
             report_needless_disables: false,
+            ignore_disables: false,
             configured_rules: Vec::new(),
             default_severity: None,
         }
@@ -521,6 +525,7 @@ impl LintRunner {
             rule_options,
             rule_severities: HashMap::new(),
             report_needless_disables: false,
+            ignore_disables: false,
             configured_rules: Vec::new(),
             default_severity: None,
         }
@@ -539,6 +544,7 @@ impl LintRunner {
             rule_options,
             rule_severities,
             report_needless_disables: false,
+            ignore_disables: false,
             configured_rules: Vec::new(),
             default_severity: None,
         }
@@ -547,6 +553,12 @@ impl LintRunner {
     /// Enable or disable `reportNeedlessDisables` checking.
     pub fn set_report_needless_disables(&mut self, enabled: bool) {
         self.report_needless_disables = enabled;
+    }
+
+    /// Enable or disable `ignoreDisables` — when `true`, inline disable
+    /// comments are ignored and all diagnostics are reported.
+    pub fn set_ignore_disables(&mut self, enabled: bool) {
+        self.ignore_disables = enabled;
     }
 
     /// Set the list of rule names from the config (including plugin rules
@@ -663,20 +675,23 @@ impl LintRunner {
         }
 
         // Filter diagnostics based on inline disable comments and optionally
-        // report needless disable comments.
+        // report needless disable comments.  When `ignore_disables` is true,
+        // skip filtering entirely so all diagnostics are reported.
         let t4 = Instant::now();
-        let line_index = SourceLineIndex::build(source);
-        let disabled_ranges = collect_disabled_ranges(source, &line_index);
-        let report_needless = self.report_needless_disables;
-        let enabled = &self.enabled_rules;
-        filter_disabled_and_report_needless(
-            &mut diagnostics,
-            &disabled_ranges,
-            report_needless,
-            &|rule_name| enabled.iter().any(|r| r == rule_name),
-            source,
-            file_path,
-        );
+        if !self.ignore_disables {
+            let line_index = SourceLineIndex::build(source);
+            let disabled_ranges = collect_disabled_ranges(source, &line_index);
+            let report_needless = self.report_needless_disables;
+            let enabled = &self.enabled_rules;
+            filter_disabled_and_report_needless(
+                &mut diagnostics,
+                &disabled_ranges,
+                report_needless,
+                &|rule_name| enabled.iter().any(|r| r == rule_name),
+                source,
+                file_path,
+            );
+        }
         if debug {
             eprintln!("[perf] disable-filter: {:.3}s", t4.elapsed().as_secs_f64());
         }
@@ -812,21 +827,23 @@ impl LintRunner {
             }
         }
 
-        let line_index = SourceLineIndex::build(source);
-        let disabled_ranges = collect_disabled_ranges(source, &line_index);
-        let report_needless = self.report_needless_disables;
-        let base_enabled = &self.enabled_rules;
-        filter_disabled_and_report_needless(
-            &mut diagnostics,
-            &disabled_ranges,
-            report_needless,
-            &|rule_name| {
-                base_enabled.iter().any(|r| r == rule_name)
-                    || enabled_rules.iter().any(|r| r == rule_name)
-            },
-            source,
-            file_path,
-        );
+        if !self.ignore_disables {
+            let line_index = SourceLineIndex::build(source);
+            let disabled_ranges = collect_disabled_ranges(source, &line_index);
+            let report_needless = self.report_needless_disables;
+            let base_enabled = &self.enabled_rules;
+            filter_disabled_and_report_needless(
+                &mut diagnostics,
+                &disabled_ranges,
+                report_needless,
+                &|rule_name| {
+                    base_enabled.iter().any(|r| r == rule_name)
+                        || enabled_rules.iter().any(|r| r == rule_name)
+                },
+                source,
+                file_path,
+            );
+        }
 
         diagnostics.sort_by_key(|d| d.span.offset);
 

@@ -71,15 +71,20 @@ pub struct ResolvedOverride {
     matchers: Vec<GlobMatcher>,
     exclude_matchers: Vec<GlobMatcher>,
     pub rules: HashMap<String, RuleConfig>,
+    /// The `customSyntax` value from this override, if any.
+    /// `None` means no custom syntax was specified (use default detection).
+    /// `Some(name)` is the raw string value (e.g. `"postcss-markdown"`).
+    pub custom_syntax: Option<String>,
 }
 
 impl ResolvedOverride {
     /// Create a new resolved override from glob pattern strings, exclusion
-    /// patterns, and rules.
+    /// patterns, rules, and an optional custom syntax name.
     pub fn new(
         file_patterns: Vec<String>,
         ignore_patterns: Vec<String>,
         rules: HashMap<String, RuleConfig>,
+        custom_syntax: Option<String>,
     ) -> Self {
         let matchers = file_patterns
             .iter()
@@ -94,6 +99,7 @@ impl ResolvedOverride {
             matchers,
             exclude_matchers,
             rules,
+            custom_syntax,
         }
     }
 
@@ -123,6 +129,24 @@ impl ResolvedOverride {
     }
 }
 
+/// Returns `true` when the given `customSyntax` value is one of the syntaxes
+/// that Gale can handle natively.
+///
+/// Supported values (case-insensitive):
+/// - `postcss-scss` / `postcss-sass` → SCSS
+/// - `postcss-less` → Less
+/// - `postcss` → CSS (default PostCSS parser)
+///
+/// Any other value (e.g. `postcss-markdown`, `postcss-html`, `sugarss`)
+/// indicates a syntax that Gale cannot parse and the file should be skipped.
+pub fn is_supported_custom_syntax(syntax_name: &str) -> bool {
+    let lower = syntax_name.to_lowercase();
+    matches!(
+        lower.as_str(),
+        "postcss-scss" | "postcss-sass" | "postcss-less" | "postcss"
+    )
+}
+
 /// The fully-resolved configuration used by the linter at runtime.
 #[derive(Debug, Clone)]
 pub struct GaleConfig {
@@ -142,6 +166,9 @@ pub struct GaleConfig {
     /// Corresponds to Stylelint's `defaultSeverity` option.  When `None`, rules
     /// use their built-in default severity.
     pub default_severity: Option<Severity>,
+    /// Top-level `customSyntax` value from the config file.
+    /// When set to an unsupported syntax, all files should be skipped.
+    pub custom_syntax: Option<String>,
 }
 
 impl GaleConfig {
@@ -230,6 +257,61 @@ impl GaleConfig {
         }
         false
     }
+
+    /// Returns `Some(syntax_name)` when the file should be skipped because it
+    /// matches an override (or top-level config) that specifies an unsupported
+    /// `customSyntax`.  Returns `None` when the file should be linted normally.
+    ///
+    /// The check considers:
+    /// 1. The top-level `customSyntax` (applies to all files).
+    /// 2. Each override's `customSyntax` — when a file matches that override's
+    ///    glob patterns, the override's syntax takes precedence.
+    ///
+    /// A matching override with a **supported** syntax (e.g. `postcss-scss`)
+    /// does NOT cause a skip — the file is linted with the appropriate parser.
+    pub fn unsupported_custom_syntax_for_file(&self, file_path: &str) -> Option<String> {
+        // Check overrides first — they take precedence over top-level.
+        if !self.overrides.is_empty() {
+            let relative_path: std::borrow::Cow<'_, str> =
+                if let Some(ref config_dir) = self.config_dir {
+                    let abs_file = if Path::new(file_path).is_absolute() {
+                        PathBuf::from(file_path)
+                    } else {
+                        std::env::current_dir().unwrap_or_default().join(file_path)
+                    };
+                    match abs_file.strip_prefix(config_dir) {
+                        Ok(rel) => rel.to_string_lossy().into_owned().into(),
+                        Err(_) => file_path.into(),
+                    }
+                } else {
+                    file_path.into()
+                };
+
+            for ov in &self.overrides {
+                let matches =
+                    ov.matches(&relative_path) || ov.matches(file_path);
+                if matches
+                    && let Some(ref syntax_name) = ov.custom_syntax
+                {
+                    if !is_supported_custom_syntax(syntax_name) {
+                        return Some(syntax_name.clone());
+                    }
+                    // Supported custom syntax — don't skip, and this
+                    // override takes precedence over the top-level value.
+                    return None;
+                }
+            }
+        }
+
+        // Fall back to top-level customSyntax.
+        if let Some(ref syntax_name) = self.custom_syntax
+            && !is_supported_custom_syntax(syntax_name)
+        {
+            return Some(syntax_name.clone());
+        }
+
+        None
+    }
 }
 
 impl Default for GaleConfig {
@@ -243,6 +325,7 @@ impl Default for GaleConfig {
             plugins: Vec::new(),
             report_needless_disables: false,
             default_severity: None,
+            custom_syntax: None,
         }
     }
 }
@@ -301,6 +384,10 @@ pub struct ConfigFile {
     /// built-in default.
     #[serde(default)]
     pub default_severity: Option<String>,
+    /// Stylelint's top-level `customSyntax` field.  When set to an
+    /// unsupported value, all files are skipped gracefully.
+    #[serde(default)]
+    pub custom_syntax: Option<serde_json::Value>,
 }
 
 /// A single override entry as it appears in the config file.
@@ -320,6 +407,13 @@ pub struct ConfigOverride {
     /// Shared configs to extend for matching files.
     #[serde(default, deserialize_with = "string_or_vec")]
     pub extends: Option<Vec<String>>,
+    /// Stylelint's `customSyntax` field — specifies a PostCSS syntax plugin
+    /// for non-standard file types (e.g. `postcss-markdown`, `postcss-html`).
+    /// Gale only supports `postcss-scss`, `postcss-less`, and `postcss` (CSS).
+    /// Files matching an override with an unsupported `customSyntax` are
+    /// skipped gracefully.
+    #[serde(default)]
+    pub custom_syntax: Option<serde_json::Value>,
 }
 
 /// A serde-friendly enum matching Stylelint's flexible rule value format.
@@ -628,6 +722,7 @@ const ALL_RULE_NAMES: &[&str] = &[
     // SCSS-specific rules
     "scss/at-extend-no-missing-placeholder",
     "scss/at-if-no-null",
+    "scss/at-mixin-disallowed-list",
     "scss/at-rule-no-unknown",
     "scss/comment-no-empty",
     "scss/declaration-nested-properties-no-divided-groups",
@@ -3716,10 +3811,18 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
         }
 
         let ignore_patterns = ov.ignore_files.unwrap_or_default();
+
+        // Extract customSyntax as a string (if present).
+        let custom_syntax = ov
+            .custom_syntax
+            .as_ref()
+            .and_then(|v| v.as_str().map(String::from));
+
         Some(ResolvedOverride::new(
             file_patterns,
             ignore_patterns,
             ov_rules,
+            custom_syntax,
         ))
     };
 
@@ -3761,6 +3864,12 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
         _ => None,
     });
 
+    // 7. Extract top-level customSyntax as a string (if present).
+    let custom_syntax = raw
+        .custom_syntax
+        .as_ref()
+        .and_then(|v| v.as_str().map(String::from));
+
     GaleConfig {
         rules,
         ignore_patterns,
@@ -3770,6 +3879,7 @@ fn resolve_raw(raw: ConfigFile, base_dir: &Path) -> GaleConfig {
         plugins,
         report_needless_disables,
         default_severity,
+        custom_syntax,
     }
 }
 
@@ -4976,7 +5086,8 @@ module.exports = {
 
     #[test]
     fn resolved_override_matches_glob() {
-        let ov = ResolvedOverride::new(vec!["**/*.scss".to_string()], vec![], HashMap::new());
+        let ov =
+            ResolvedOverride::new(vec!["**/*.scss".to_string()], vec![], HashMap::new(), None);
         assert!(ov.matches("src/styles/main.scss"));
         assert!(ov.matches("main.scss"));
         assert!(!ov.matches("main.css"));
@@ -4989,6 +5100,7 @@ module.exports = {
             vec!["**/*.scss".to_string(), "**/*.less".to_string()],
             vec![],
             HashMap::new(),
+            None,
         );
         assert!(ov.matches("main.scss"));
         assert!(ov.matches("main.less"));
@@ -5462,6 +5574,137 @@ overrides:
         assert!(
             root_resolved.rules.contains_key("max-nesting-depth"),
             "max-nesting-depth should be enabled in the root config"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // customSyntax skip tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn is_supported_custom_syntax_known_values() {
+        assert!(is_supported_custom_syntax("postcss-scss"));
+        assert!(is_supported_custom_syntax("postcss-sass"));
+        assert!(is_supported_custom_syntax("postcss-less"));
+        assert!(is_supported_custom_syntax("postcss"));
+        // Case-insensitive.
+        assert!(is_supported_custom_syntax("PostCSS-SCSS"));
+    }
+
+    #[test]
+    fn is_supported_custom_syntax_unknown_values() {
+        assert!(!is_supported_custom_syntax("postcss-markdown"));
+        assert!(!is_supported_custom_syntax("postcss-html"));
+        assert!(!is_supported_custom_syntax("sugarss"));
+        assert!(!is_supported_custom_syntax("postcss-jsx"));
+    }
+
+    #[test]
+    fn skip_file_with_unsupported_override_custom_syntax() {
+        let config = GaleConfig {
+            overrides: vec![ResolvedOverride::new(
+                vec!["**/*.md".to_string()],
+                vec![],
+                HashMap::new(),
+                Some("postcss-markdown".to_string()),
+            )],
+            ..Default::default()
+        };
+        // A .md file matching the override should be skipped.
+        let result = config.unsupported_custom_syntax_for_file("docs/readme.md");
+        assert_eq!(result, Some("postcss-markdown".to_string()));
+    }
+
+    #[test]
+    fn no_skip_for_supported_override_custom_syntax() {
+        let config = GaleConfig {
+            overrides: vec![ResolvedOverride::new(
+                vec!["**/*.scss".to_string()],
+                vec![],
+                HashMap::new(),
+                Some("postcss-scss".to_string()),
+            )],
+            ..Default::default()
+        };
+        // A .scss file matching an override with supported syntax should NOT be skipped.
+        let result = config.unsupported_custom_syntax_for_file("src/main.scss");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn no_skip_for_file_without_custom_syntax() {
+        let config = GaleConfig {
+            rules: HashMap::new(),
+            ..Default::default()
+        };
+        // Normal files without any customSyntax should not be skipped.
+        let result = config.unsupported_custom_syntax_for_file("src/styles.css");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn skip_file_with_unsupported_top_level_custom_syntax() {
+        let config = GaleConfig {
+            custom_syntax: Some("postcss-html".to_string()),
+            ..Default::default()
+        };
+        // All files should be skipped when top-level customSyntax is unsupported.
+        let result = config.unsupported_custom_syntax_for_file("src/styles.css");
+        assert_eq!(result, Some("postcss-html".to_string()));
+    }
+
+    #[test]
+    fn override_custom_syntax_takes_precedence_over_top_level() {
+        let config = GaleConfig {
+            custom_syntax: Some("postcss-markdown".to_string()),
+            overrides: vec![ResolvedOverride::new(
+                vec!["**/*.scss".to_string()],
+                vec![],
+                HashMap::new(),
+                Some("postcss-scss".to_string()),
+            )],
+            ..Default::default()
+        };
+        // The override's supported syntax takes precedence — file is NOT skipped.
+        assert_eq!(
+            config.unsupported_custom_syntax_for_file("src/main.scss"),
+            None
+        );
+        // A CSS file doesn't match the override, so the unsupported top-level
+        // syntax applies — file IS skipped.
+        assert_eq!(
+            config.unsupported_custom_syntax_for_file("src/main.css"),
+            Some("postcss-markdown".to_string())
+        );
+    }
+
+    #[test]
+    fn custom_syntax_parsed_from_json_override() {
+        let json = r#"{
+            "overrides": [{
+                "files": "**/*.md",
+                "customSyntax": "postcss-markdown",
+                "rules": { "block-no-empty": true }
+            }]
+        }"#;
+        let raw: ConfigFile = serde_json::from_str(json).unwrap();
+        let overrides = raw.overrides.unwrap();
+        assert_eq!(
+            overrides[0].custom_syntax,
+            Some(serde_json::Value::String("postcss-markdown".to_string()))
+        );
+    }
+
+    #[test]
+    fn custom_syntax_parsed_from_json_top_level() {
+        let json = r#"{
+            "customSyntax": "postcss-scss",
+            "rules": { "block-no-empty": true }
+        }"#;
+        let raw: ConfigFile = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            raw.custom_syntax,
+            Some(serde_json::Value::String("postcss-scss".to_string()))
         );
     }
 }

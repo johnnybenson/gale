@@ -151,7 +151,14 @@ function parseJsonOutput(jsonString) {
  * @param {string|Function} [options.formatter]    - Formatter name or function
  * @param {boolean}         [options.quiet]        - Only report errors
  * @param {boolean}         [options.cache]        - Enable caching
+ * @param {string}          [options.cacheLocation] - Override cache file location
  * @param {number}          [options.maxWarnings]  - Max warnings before erroring
+ * @param {boolean}         [options.allowEmptyInput] - Don't error when no files match
+ * @param {string}          [options.ignorePath]   - Path to a custom ignore file
+ * @param {boolean}         [options.ignoreDisables] - Ignore all stylelint-disable comments
+ * @param {boolean}         [options.reportNeedlessDisables] - Report needless disable comments
+ * @param {boolean}         [options.reportInvalidScopeDisables] - Report invalid-scope disable comments
+ * @param {boolean}         [options.reportDescriptionlessDisables] - Report descriptionless disable comments
  * @param {string}          [options.cwd]          - Working directory
  * @returns {Promise<LinterResult>}
  */
@@ -196,6 +203,41 @@ export async function lint(options = {}) {
       args.push("--max-warnings", String(options.maxWarnings));
     }
 
+    // -- Cache location --
+    if (options.cacheLocation) {
+      args.push("--cache-location", resolve(cwd, options.cacheLocation));
+    }
+
+    // -- Allow empty input --
+    if (options.allowEmptyInput) {
+      args.push("--allow-empty-input");
+    }
+
+    // -- Ignore path --
+    if (options.ignorePath) {
+      args.push("--ignore-path", resolve(cwd, options.ignorePath));
+    }
+
+    // -- Ignore disables --
+    if (options.ignoreDisables) {
+      args.push("--ignore-disables");
+    }
+
+    // -- Report needless disables --
+    if (options.reportNeedlessDisables) {
+      args.push("--report-needless-disables");
+    }
+
+    // -- Report invalid scope disables --
+    if (options.reportInvalidScopeDisables) {
+      args.push("--report-invalid-scope-disables");
+    }
+
+    // -- Report descriptionless disables --
+    if (options.reportDescriptionlessDisables) {
+      args.push("--report-descriptionless-disables");
+    }
+
     // -- Input source --
     let stdinData = null;
 
@@ -218,6 +260,20 @@ export async function lint(options = {}) {
       stdinData,
       cwd,
     });
+
+    // When allowEmptyInput is true and no files were found, return an
+    // empty successful result instead of propagating any error.
+    if (options.allowEmptyInput && !stdout.trim()) {
+      return {
+        cwd,
+        results: [],
+        errored: false,
+        report: "",
+        code: undefined,
+        maxWarningsExceeded: undefined,
+        ruleMetadata: {},
+      };
+    }
 
     // Parse the JSON results
     const results = parseJsonOutput(stdout);

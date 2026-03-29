@@ -89,6 +89,26 @@ pub struct Cli {
     /// Override the cache file location (default: .gale_cache in the current directory)
     #[arg(long, value_name = "PATH")]
     cache_location: Option<PathBuf>,
+
+    /// Don't error when no files match the glob pattern
+    #[arg(long)]
+    allow_empty_input: bool,
+
+    /// Ignore all `/* stylelint-disable */` comments
+    #[arg(long)]
+    ignore_disables: bool,
+
+    /// Report `/* stylelint-disable */` comments that don't suppress any warnings
+    #[arg(long)]
+    report_needless_disables: bool,
+
+    /// Report `/* stylelint-disable */` comments that reference rules not being linted
+    #[arg(long)]
+    report_invalid_scope_disables: bool,
+
+    /// Report `/* stylelint-disable */` comments without a description
+    #[arg(long)]
+    report_descriptionless_disables: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -900,7 +920,8 @@ pub fn run() -> Result<()> {
         rule_options,
         rule_severities,
     );
-    runner.set_report_needless_disables(config.report_needless_disables);
+    runner.set_report_needless_disables(config.report_needless_disables || cli.report_needless_disables);
+    runner.set_ignore_disables(cli.ignore_disables);
     runner.set_default_severity(config.default_severity.map(|s| match s {
         gale_config::Severity::Error => gale_diagnostics::Severity::Error,
         gale_config::Severity::Warning => gale_diagnostics::Severity::Warning,
@@ -999,6 +1020,17 @@ pub fn run() -> Result<()> {
             rule_severities,
             has_overrides,
         })
+    }
+
+    /// Check whether a file should be skipped due to an unsupported
+    /// `customSyntax` in the config (top-level or override).  Returns `true`
+    /// (and emits a debug log) when the file should be excluded from output.
+    fn should_skip_custom_syntax(config: &GaleConfig, file_path: &str) -> bool {
+        if let Some(syntax_name) = config.unsupported_custom_syntax_for_file(file_path) {
+            debug!("Skipping {file_path}: unsupported customSyntax '{syntax_name}'");
+            return true;
+        }
+        false
     }
 
     /// Lint a single file using a fully resolved config (with overrides).
@@ -1113,9 +1145,13 @@ pub fn run() -> Result<()> {
         std::io::stdin().read_to_string(&mut source)?;
 
         let file_path = &cli.stdin_filename;
-        let syntax = detect_syntax(file_path);
-        let result = lint_file(&runner, &source, file_path, syntax, &config, has_overrides);
-        vec![result]
+        if should_skip_custom_syntax(&config, file_path) {
+            vec![]
+        } else {
+            let syntax = detect_syntax(file_path);
+            let result = lint_file(&runner, &source, file_path, syntax, &config, has_overrides);
+            vec![result]
+        }
     } else {
         // Discover files.
         let discover_opts = DiscoverOptions {
@@ -1127,7 +1163,9 @@ pub fn run() -> Result<()> {
         debug!("Discovered {} CSS file(s)", files.len());
 
         if files.is_empty() {
-            eprintln!("No CSS files found.");
+            if !cli.allow_empty_input {
+                eprintln!("No CSS files found.");
+            }
             return Ok(());
         }
 
@@ -1191,6 +1229,25 @@ pub fn run() -> Result<()> {
                 .filter_map(|file| {
                     let source = std::fs::read_to_string(file).ok()?;
                     let file_path = file.display().to_string();
+
+                    // Skip files with unsupported customSyntax (from overrides
+                    // or top-level config).
+                    let effective_config = if let Some(ref dp) = dir_params {
+                        let abs = if file.is_absolute() {
+                            file.clone()
+                        } else {
+                            cwd.join(file)
+                        };
+                        let dir = abs.parent().unwrap_or(Path::new("."));
+                        dp.get(dir).map(|p| p.config.as_ref())
+                    } else {
+                        None
+                    };
+                    let cfg_for_check = effective_config.unwrap_or(&config);
+                    if should_skip_custom_syntax(cfg_for_check, &file_path) {
+                        return None;
+                    }
+
                     let content_hash = compute_hash(&source, config_hash);
 
                     // Check cache: skip only files that were clean (0 diagnostics).
@@ -1236,6 +1293,24 @@ pub fn run() -> Result<()> {
                 .filter_map(|file| {
                     let source = std::fs::read_to_string(file).ok()?;
                     let file_path = file.display().to_string();
+
+                    // Skip files with unsupported customSyntax.
+                    let effective_config = if let Some(ref dp) = dir_params {
+                        let abs = if file.is_absolute() {
+                            file.clone()
+                        } else {
+                            cwd.join(file)
+                        };
+                        let dir = abs.parent().unwrap_or(Path::new("."));
+                        dp.get(dir).map(|p| p.config.as_ref())
+                    } else {
+                        None
+                    };
+                    let cfg_for_check = effective_config.unwrap_or(&config);
+                    if should_skip_custom_syntax(cfg_for_check, &file_path) {
+                        return None;
+                    }
+
                     let syntax = detect_syntax(&file_path);
                     if let Some(ref dp) = dir_params {
                         let abs = if file.is_absolute() {
