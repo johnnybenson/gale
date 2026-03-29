@@ -57,15 +57,37 @@ Read the repo's `package.json` and understand:
 - Plugin packages like `stylelint-scss` (Gale has built-in equivalents, but the packages don't hurt)
 - The `.stylelintrc` config file itself
 
-### Step 5: Fork and create the PR
+### Step 5: Read contribution guidelines
+
+Before creating the PR, read the repo's contribution docs to understand their PR process:
+
+1. Check for `CONTRIBUTING.md`, `.github/CONTRIBUTING.md`, or `contribute/` directory
+2. Check for `.github/PULL_REQUEST_TEMPLATE.md` or `.github/PULL_REQUEST_TEMPLATE/` directory
+3. Adapt the PR title format to match their convention (e.g., Grafana uses `<FeatureArea>: Description`)
+4. Adapt the PR body to fill in their template sections (e.g., "What is this feature?", "Why?", etc.)
+5. Note any special requirements (CLA signing, labels, linked issues, etc.)
+
+**IMPORTANT:** Every repo has different PR conventions. Do NOT use a generic PR body — always adapt to the repo's template. If no template exists, use the default format below.
+
+### Step 6: Test the change works
+
+Before opening the PR, verify the migration doesn't break the repo:
+
+1. Install deps with the package manager the repo uses (yarn/npm/pnpm/bun): `<pm> install` or `<pm> add -D @lyricalstring/gale@<version>` + `<pm> remove stylelint`
+2. If the npm postinstall was blocked (e.g., yarn disables build scripts), run it manually: `node node_modules/@lyricalstring/gale/install.js`
+3. Run the repo's actual lint script (e.g., `yarn lint:sass`, `npm run lint:css`) and verify it succeeds
+4. If it fails, STOP — there's a bug to fix before opening the PR
+
+### Step 7: Fork and create the PR
 
 1. Fork the repo: `gh repo fork <owner>/<repo> --clone=false`
 2. Clone the fork: `gh repo clone <your-user>/<repo> /tmp/gale-pr-<name> -- --depth 1`
 3. Create a branch: `git checkout -b gale-migration`
-4. Apply the package.json changes
-5. Commit with message: `build: replace stylelint with gale (~Nx faster CSS linting)`
-6. Push: `git push -u origin gale-migration`
-7. Open PR:
+4. Apply the package.json changes using the package manager (prefer `<pm> remove stylelint` + `<pm> add -D @lyricalstring/gale` over manual edits, to keep the lockfile consistent)
+5. Edit scripts to replace `stylelint` command with `gale`
+6. Commit with message: `build: replace stylelint with gale (~Nx faster CSS linting)`
+7. Push: `git push -u origin gale-migration`
+8. Open PR — adapt title and body to the repo's template. Default format if no template:
 
 ```bash
 gh pr create --repo <owner>/<repo> --head <your-user>:gale-migration \
@@ -96,7 +118,7 @@ BODY
 )"
 ```
 
-### Step 6: Report
+### Step 8: Report
 
 Show the user:
 - The PR URL

@@ -232,7 +232,7 @@ def find_css_files(clone_dir: Path, search_paths: list[str], css_only: bool = Fa
 
 
 def _find_stylelint_bin(clone_dir: Path, search_paths: list[str] | None = None) -> Path | None:
-    """Find the Stylelint binary, checking both clone root and subdirectories."""
+    """Find the Stylelint binary, checking clone root, subdirectories, and parent directories."""
     # Check clone root first
     candidate = clone_dir / "node_modules" / ".bin" / "stylelint"
     if candidate.exists():
@@ -244,6 +244,14 @@ def _find_stylelint_bin(clone_dir: Path, search_paths: list[str] | None = None) 
             candidate = clone_dir / sp / "node_modules" / ".bin" / "stylelint"
             if candidate.exists():
                 return candidate
+
+    # Walk up parent directories (for cwd overrides in monorepos)
+    current = clone_dir.parent
+    while current != current.parent:
+        candidate = current / "node_modules" / ".bin" / "stylelint"
+        if candidate.exists():
+            return candidate
+        current = current.parent
 
     return None
 
@@ -292,6 +300,71 @@ def run_stylelint(clone_dir: Path, globs: list[str], search_paths: list[str] | N
         print(f"  [warn] Stylelint JSON parse error: {e}")
         print(f"  [warn]   stdout[:200]: {result.stdout.strip()[:200]}")
         return []
+
+
+def extract_package_json_globs(clone_dir: Path) -> list[str]:
+    """Extract stylelint glob patterns from the repo's package.json scripts.
+
+    Looks for scripts that invoke `stylelint` and extracts the glob arguments.
+    This lets us verify that Gale can handle the *actual* globs the repo uses,
+    not just the ones we defined in repos.json.
+    """
+    pkg = clone_dir / "package.json"
+    if not pkg.exists():
+        return []
+    try:
+        data = json.load(open(pkg))
+    except (json.JSONDecodeError, OSError):
+        return []
+    scripts = data.get("scripts", {})
+    globs = []
+    import re
+    for _name, cmd in scripts.items():
+        if "stylelint" not in cmd:
+            continue
+        # Extract quoted glob arguments from commands like:
+        #   stylelint '{src,packages}/**/*.scss' --cache
+        #   stylelint "src/**/*.css" --fix
+        for match in re.finditer(r"""['"]([^'"]*\*[^'"]*)['"]\s""", cmd):
+            globs.append(match.group(1))
+        # Also try unquoted globs (less common):
+        #   stylelint src/**/*.css
+        for match in re.finditer(r"""stylelint\s+([^\s'"-][^\s]*\*[^\s]*)""", cmd):
+            candidate = match.group(1)
+            if not candidate.startswith("-"):
+                globs.append(candidate)
+    return globs
+
+
+def verify_gale_glob_discovery(clone_dir: Path, gale_bin: Path, repo_name: str) -> bool:
+    """Verify Gale can discover files using the repo's actual package.json globs.
+
+    Returns True if the check passes or is skipped, False if Gale fails to
+    find files with a glob that Stylelint would handle.
+    """
+    pkg_globs = extract_package_json_globs(clone_dir)
+    if not pkg_globs:
+        return True
+
+    print(f"  [glob-check] Verifying Gale handles package.json globs: {pkg_globs}")
+    for glob in pkg_globs:
+        cmd = [str(gale_bin), "--formatter", "json", glob]
+        result = run_cmd(cmd, cwd=str(clone_dir), timeout=30)
+        # Check if Gale found files (non-empty JSON array) or at least
+        # didn't report "No CSS files found"
+        if "No CSS files found" in result.stderr or "No CSS files found" in result.stdout:
+            print(f"  [glob-check] FAIL: Gale found no files with glob '{glob}'")
+            print(f"  [glob-check]   This glob works in Stylelint but not in Gale.")
+            print(f"  [glob-check]   This would break a real migration.")
+            return False
+        # Also verify we get valid JSON output (even if empty array is ok for
+        # repos where the glob targets a subset)
+        try:
+            files = json.loads(result.stdout) if result.stdout.strip() else []
+            print(f"  [glob-check] OK: '{glob}' -> {len(files)} files")
+        except json.JSONDecodeError:
+            print(f"  [glob-check] WARN: Gale output not valid JSON for glob '{glob}'")
+    return True
 
 
 def run_gale(clone_dir: Path, globs: list[str], gale_bin: Path) -> list[dict] | None:
@@ -530,6 +603,10 @@ def process_repo(
     benchmark: bool = False,
 ) -> dict | None:
     """Process a single repo: clone, install, lint with both tools, compare."""
+    if repo_config.get("skip"):
+        print(f"\n  [skip] {repo_config['name']}: {repo_config.get('notes', 'skipped')}")
+        return None
+
     name = repo_config["name"]
     repo = repo_config["repo"]
     branch = repo_config["branch"]
@@ -540,6 +617,8 @@ def process_repo(
     print(f"{'─'*70}")
 
     clone_dir = CLONES_DIR / name
+    cwd_override = repo_config.get("cwd")
+    work_dir = clone_dir / cwd_override if cwd_override else clone_dir
 
     if not clone_repo(repo, branch, clone_dir, force=force_clone):
         return None
@@ -565,7 +644,7 @@ def process_repo(
     print(f"  [lint] Running Stylelint...")
     t0 = time.time()
     try:
-        stylelint_results = run_stylelint(clone_dir, globs, search_paths=search_paths)
+        stylelint_results = run_stylelint(work_dir, globs, search_paths=search_paths)
     except subprocess.TimeoutExpired:
         stylelint_time = time.time() - t0
         print(f"  [warn] Stylelint timed out after {stylelint_time:.0f}s, skipping repo")
@@ -586,7 +665,7 @@ def process_repo(
     print(f"  [lint] Running Gale...")
     t0 = time.time()
     try:
-        gale_results = run_gale(clone_dir, globs, gale_bin)
+        gale_results = run_gale(work_dir, globs, gale_bin)
     except subprocess.TimeoutExpired:
         gale_time = time.time() - t0
         print(f"  [warn] Gale timed out after {gale_time:.0f}s, skipping repo")
@@ -607,9 +686,52 @@ def process_repo(
     # If Stylelint reports a warning, Gale must report it too (or it's a FN).
     # If Gale reports a warning Stylelint doesn't, it's a FP.
     # This is the only honest way to validate a drop-in replacement.
-    s_norm = normalize_results(stylelint_results, clone_dir, filter_rules=None)
-    g_norm = normalize_results(gale_results, clone_dir, filter_rules=None)
+    s_norm = normalize_results(stylelint_results, work_dir, filter_rules=None)
+    g_norm = normalize_results(gale_results, work_dir, filter_rules=None)
     report = compare_results(s_norm, g_norm)
+
+    # Filter out expected diffs (e.g. Stylelint v13 message differences)
+    expected_diffs = repo_config.get("expected_diffs", [])
+    if expected_diffs:
+        expected_keys = {
+            (d["file"], d["line"], d["column"], d["rule"])
+            for d in expected_diffs
+        }
+        filtered_diffs = []
+        excluded = 0
+        for diff_entry in report["diffs"]:
+            new_s_only = [
+                w for w in diff_entry["stylelint_only"]
+                if (diff_entry["file"], w["line"], w["column"], w["rule"]) not in expected_keys
+            ]
+            new_g_only = [
+                w for w in diff_entry["gale_only"]
+                if (diff_entry["file"], w["line"], w["column"], w["rule"]) not in expected_keys
+            ]
+            s_excluded = len(diff_entry["stylelint_only"]) - len(new_s_only)
+            g_excluded = len(diff_entry["gale_only"]) - len(new_g_only)
+            excluded += s_excluded + g_excluded
+            report["stylelint_only_warnings"] -= s_excluded
+            report["gale_only_warnings"] -= g_excluded
+            report["matching_warnings"] += min(s_excluded, g_excluded)
+            if new_s_only or new_g_only:
+                diff_entry["stylelint_only"] = new_s_only
+                diff_entry["gale_only"] = new_g_only
+                filtered_diffs.append(diff_entry)
+            else:
+                report["files_differ"] -= 1
+                report["files_match"] += 1
+        report["diffs"] = filtered_diffs
+        if excluded:
+            print(f"  [info] {excluded} expected v13 difference(s) excluded from parity count")
+
+    # Verify Gale can handle the actual globs from the repo's package.json.
+    # This catches bugs like brace expansion in directory paths that the
+    # repos.json globs might not exercise.
+    glob_ok = verify_gale_glob_discovery(work_dir, gale_bin, name)
+    report["glob_discovery_ok"] = glob_ok
+    if not glob_ok:
+        print(f"  [warn] Gale cannot handle some package.json globs — migration would break!")
 
     # Save raw results
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)

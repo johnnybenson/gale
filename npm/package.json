@@ -20,6 +20,7 @@
     "lint",
     "gale"
   ],
+  "main": "index.js",
   "bin": {
     "gale": "bin/gale"
   },
@@ -28,6 +29,7 @@
   },
   "files": [
     "bin/",
+    "index.js",
     "install.js",
     "README.md"
   ],

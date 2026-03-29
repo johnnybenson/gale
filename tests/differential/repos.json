@@ -107,9 +107,10 @@
     "name": "elastic-eui",
     "repo": "elastic/eui",
     "branch": "main",
-    "paths": ["packages/eui"],
-    "globs": ["packages/eui/**/*.{css,scss}"],
-    "notes": "Elastic UI framework. Yarn workspace monorepo."
+    "paths": ["packages/eui-theme-borealis", "packages/eui-theme-common"],
+    "globs": ["packages/eui-theme-borealis/**/*.scss", "packages/eui-theme-common/**/*.scss"],
+    "skip": true,
+    "notes": "Elastic UI framework. Main package migrated to CSS-in-JS. Theme packages have complex JS configs with npm extends that don't resolve in isolation. Not a realistic migration target."
   },
   {
     "name": "wp-calypso",
@@ -123,9 +124,10 @@
     "name": "mattermost",
     "repo": "mattermost/mattermost",
     "branch": "master",
-    "paths": ["webapp"],
-    "globs": ["webapp/**/*.{css,scss}"],
-    "notes": "Monorepo — CSS files and package.json in webapp/."
+    "paths": ["webapp/channels"],
+    "globs": ["**/*.{css,scss}"],
+    "cwd": "webapp/channels",
+    "notes": "Monorepo — .stylelintrc.json and CSS files live in webapp/channels/."
   },
   {
     "name": "mastodon",
@@ -157,7 +159,16 @@
     "branch": "main",
     "paths": ["ui"],
     "globs": ["ui/**/*.scss"],
-    "notes": "Salesforce Lightning design system (2k stars). SCSS-heavy."
+    "expected_diffs": [
+      {
+        "file": "ui/components/summary-detail/base/_index.scss",
+        "line": 28,
+        "column": 7,
+        "rule": "property-no-vendor-prefix",
+        "reason": "Stylelint v13 uses different message format ('vendor-prefix' vs v16 'vendor-prefixed property')"
+      }
+    ],
+    "notes": "Salesforce Lightning design system (2k stars). SCSS-heavy. Uses Stylelint v13."
   },
   {
     "name": "rsuite",

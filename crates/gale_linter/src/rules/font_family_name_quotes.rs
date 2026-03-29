@@ -241,6 +241,11 @@ fn parse_font_families_from_source(
                     abs_offset: start_offset + start + trim_start,
                     src_length: raw.len(),
                 });
+            } else if i == start {
+                // No progress was made (e.g. we immediately hit `!important`
+                // or another break condition at the very start of the token).
+                // Advance past the current byte to avoid an infinite loop.
+                i += 1;
             }
         }
     }

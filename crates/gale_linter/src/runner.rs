@@ -573,6 +573,9 @@ impl LintRunner {
     /// Parse and lint a CSS source string, returning all diagnostics.
     pub fn lint_source(&self, source: &str, file_path: &str, syntax: Syntax) -> LintResult {
         let debug = perf_enabled();
+        if debug {
+            eprintln!("[perf] start file: {}", file_path);
+        }
 
         let t0 = Instant::now();
         let parse_result = match parse(source, syntax) {
@@ -702,6 +705,9 @@ impl LintRunner {
         rule_severities: &HashMap<String, Severity>,
     ) -> LintResult {
         let debug = perf_enabled();
+        if debug {
+            eprintln!("[perf] start file: {}", file_path);
+        }
 
         let t0 = Instant::now();
         let parse_result = match parse(source, syntax) {
