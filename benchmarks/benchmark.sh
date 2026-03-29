@@ -54,6 +54,12 @@ REPOS=(
   "discourse|discourse/discourse|main|app/assets/stylesheets/**/*.scss|app/assets/stylesheets"
   "wp-calypso|Automattic/wp-calypso|trunk|client/**/*.scss|client"
   "mattermost|mattermost/mattermost|master|webapp/**/*.scss|webapp"
+  "mastodon|mastodon/mastodon|main|app/javascript/styles/**/*.scss|app/javascript/styles"
+  "jupyterlab|jupyterlab/jupyterlab|main|packages/**/*.css|packages"
+  "joomla|joomla-framework/joomla-cms|5.2-dev|media/**/*.css|media"
+  "slds|salesforce-ux/design-system|main|ui/**/*.scss|ui"
+  "rsuite|rsuite/rsuite|main|src/**/*.scss|src"
+  "fundamental-styles|SAP/fundamental-styles|main|src/**/*.scss packages/**/*.scss|src"
 )
 
 # ---------------------------------------------------------------------------

@@ -6,30 +6,28 @@
 [![CI](https://github.com/LyricalString/gale/actions/workflows/ci.yml/badge.svg)](https://github.com/LyricalString/gale/actions)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Gale reads your existing `.stylelintrc`, runs the same rules, and produces the same output. Just **100x-400x faster**.
+Gale reads your existing `.stylelintrc`, runs the same rules, and produces the same output. Just **10x-100x faster**.
 
 One line change in your `package.json`. No config migration.
 
 ## Benchmarks
 
-Real-world benchmarks using [hyperfine](https://github.com/sharkdp/hyperfine) (10 runs, 3 warmup). Each repo uses its own Stylelint config.
+Real-world benchmarks using [hyperfine](https://github.com/sharkdp/hyperfine) (10 runs, 3 warmup) on an Apple M4 Max. Each repo uses its own Stylelint config. Results vary by machine -- run `./benchmarks/benchmark.sh` to reproduce on yours.
 
 | Repository | Files | Stylelint | Gale | Speedup |
 |------------|------:|----------:|-----:|--------:|
-| [Bootstrap](https://github.com/twbs/bootstrap) | 99 | 1.569s | 0.011s | **143x** |
-| [Carbon](https://github.com/carbon-design-system/carbon) | 1,116 | 8.767s | 0.022s | **399x** |
-| [PatternFly](https://github.com/patternfly/patternfly) | 204 | 5.298s | 0.015s | **353x** |
-| [Spectrum CSS](https://github.com/adobe/spectrum-css) | 241 | 2.952s | 0.011s | **268x** |
-| [GOV.UK Frontend](https://github.com/alphagov/govuk-frontend) | 163 | 1.614s | 0.011s | **147x** |
-| [Primer CSS](https://github.com/primer/css) | 113 | 1.285s | 0.010s | **129x** |
-| [Gutenberg](https://github.com/wordpress/gutenberg) | 775 | 4.715s | 0.042s | **112x** |
-| [wp-calypso](https://github.com/Automattic/wp-calypso) | 2,238 | 13.223s | 0.131s | **101x** |
-| [Angular Components](https://github.com/angular/components) | 620 | 1.843s | 0.021s | **88x** |
-| [Discourse](https://github.com/discourse/discourse) | 355 | 1.438s | 0.021s | **69x** |
+| [Angular Components](https://github.com/angular/components) | 621 | 0.743s | 0.008s | **96x** |
+| [Fundamental Styles](https://github.com/SAP/fundamental-styles) | 392 | 3.628s | 0.060s | **61x** |
+| [GOV.UK Frontend](https://github.com/alphagov/govuk-frontend) | 149 | 2.352s | 0.044s | **54x** |
+| [Discourse](https://github.com/discourse/discourse) | 356 | 0.529s | 0.010s | **51x** |
+| [Joomla](https://github.com/joomla/joomla-cms) | 169 | 1.033s | 0.025s | **41x** |
+| [Carbon](https://github.com/carbon-design-system/carbon) | 1,116 | 0.385s | 0.010s | **38x** |
+| [Bootstrap](https://github.com/twbs/bootstrap) | 99 | 0.737s | 0.021s | **35x** |
+| [Gutenberg](https://github.com/wordpress/gutenberg) | 778 | 0.447s | 0.013s | **34x** |
+| [PatternFly](https://github.com/patternfly/patternfly) | 204 | 0.377s | 0.013s | **29x** |
+| [SLDS](https://github.com/salesforce-ux/design-system) | 446 | 0.323s | 0.014s | **24x** |
 
 **Parity: 0 false positives and 0 false negatives across all 22 tested repositories (5,790 files).**
-
-Reproduce these results: `./benchmarks/benchmark.sh`
 
 ## Quick start
 
