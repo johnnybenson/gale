@@ -109,6 +109,15 @@ jobs:
           done
           ls -la release-assets/
 
+      - name: Stage binaries for npm package
+        run: |
+          install -Dm755 release-assets/gale-aarch64-apple-darwin npm/bin/aarch64-apple-darwin/gale
+          install -Dm755 release-assets/gale-x86_64-apple-darwin npm/bin/x86_64-apple-darwin/gale
+          install -Dm755 release-assets/gale-aarch64-unknown-linux-gnu npm/bin/aarch64-unknown-linux-gnu/gale
+          install -Dm755 release-assets/gale-x86_64-unknown-linux-gnu npm/bin/x86_64-unknown-linux-gnu/gale
+          chmod +x npm/bin/gale
+          find npm/bin -maxdepth 3 -type f -print
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:

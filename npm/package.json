@@ -31,14 +31,10 @@
   "bin": {
     "gale": "bin/gale"
   },
-  "scripts": {
-    "postinstall": "node install.cjs"
-  },
   "files": [
     "bin/",
     "index.cjs",
     "index.mjs",
-    "install.cjs",
     "README.md"
   ],
   "engines": {

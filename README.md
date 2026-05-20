@@ -67,7 +67,9 @@ Your `.stylelintrc` stays exactly the same. Gale reads the same config files, fo
 npm install -D @lyricalstring/gale
 ```
 
-The npm package automatically downloads the correct platform binary on install. Supported platforms: macOS (arm64, x64), Linux (x64, arm64).
+The npm package includes prebuilt binaries for supported platforms, so install
+does not run a postinstall script or download executables. Supported platforms:
+macOS (arm64, x64), Linux (x64, arm64).
 
 ### Cargo
 
@@ -327,15 +329,16 @@ The [release workflow](.github/workflows/release.yml) will:
 
 1. Build binaries for Linux (x64, arm64) and macOS (x64, arm64)
 2. Create a GitHub Release with the binaries
-3. Publish the npm package (`@lyricalstring/gale`) with the matching version
+3. Stage those binaries inside the npm package
+4. Publish the npm package (`@lyricalstring/gale`) with the matching version
 
 ### Manual npm build
 
 ```bash
-# Build for current platform
+# Build and stage the current platform binary in npm/bin/<target>/gale
 ./scripts/build-npm.sh
 
-# Build for all platforms (requires cross + Docker)
+# Build and stage all supported binaries (requires cross + Docker)
 ./scripts/build-npm.sh --all
 
 # Set npm package version before building
