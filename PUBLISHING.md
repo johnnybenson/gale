@@ -1,28 +1,29 @@
 # Publishing Gale to npm
 
-Gale is distributed on npm as `@lyricalstring/gale`. The package uses a postinstall
-script that downloads the correct precompiled binary from GitHub Releases.
+Gale is distributed on npm as `@lyricalstring/gale`. The package includes
+precompiled binaries for supported platforms in the npm tarball, so install does
+not run a lifecycle script or download executables from GitHub Releases.
 
 ## Package layout
 
 ```
 npm/
   package.json    @lyricalstring/gale — main package
-  install.js      Postinstall script (downloads platform binary from GitHub Releases)
-  bin/gale        Placeholder script (replaced by real binary on install)
+  bin/gale        POSIX launcher that selects the current platform binary
+  bin/<target>/   Precompiled platform binaries
   README.md       npm page README
 ```
 
-When a user runs `npm install @lyricalstring/gale`, the postinstall script
-(`install.js`) detects the platform and downloads the matching binary from the
-GitHub Release matching the package version.
+When a user runs `npm install @lyricalstring/gale`, package managers unpack the
+launcher and the platform binaries directly from the npm tarball. Running
+`gale` executes `bin/gale`, which selects the matching native binary.
 
 Supported platforms: `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`.
 
 ## Prerequisites
 
 - npm account with publish access to the `@lyricalstring` scope
-- GitHub Release with precompiled binaries for the target version
+- Precompiled binaries for every supported platform
 
 ## Release process
 
@@ -39,14 +40,16 @@ git push && git push --tags
 
 The workflow will:
 1. Build Linux binaries (x64 + arm64)
-2. Create a GitHub Release with the binaries
-3. Set the npm package version to match
-4. Publish `@lyricalstring/gale` to npm
+2. Build macOS binaries (x64 + arm64)
+3. Create a GitHub Release with the binaries
+4. Stage the binaries into `npm/bin/<target>/gale`
+5. Set the npm package version to match
+6. Publish `@lyricalstring/gale` to npm
 
 ### Option B: Manual
 
 ```bash
-# 1. Build the binary for your platform
+# 1. Build and stage the binary for your platform
 ./scripts/build-npm.sh
 
 # 2. Set the version
@@ -56,9 +59,8 @@ The workflow will:
 cd npm && npm publish --access public
 ```
 
-Note: For users to install successfully, the GitHub Release for the matching
-version must contain binaries for all supported platforms. Use the CI release
-workflow for production releases.
+Note: Production npm releases must include binaries for all supported platforms.
+Use the CI release workflow for production releases.
 
 ## Rust targets reference
 
@@ -81,7 +83,7 @@ cargo install gale-lint
 ## Testing locally
 
 ```bash
-# 1. Build for your current platform
+# 1. Build and stage for your current platform
 ./scripts/build-npm.sh
 
 # 2. Pack (dry run) to see what would be published
@@ -96,9 +98,9 @@ npx gale --version
 
 ## Troubleshooting
 
-**"Gale binary not found"**: The postinstall download may have failed. Run
-`npm rebuild @lyricalstring/gale` to retry, or check network access to
-`github.com`.
+**"Gale binary missing"**: The npm tarball did not include the expected
+`bin/<target>/gale` file. Reinstall `@lyricalstring/gale`; if the error
+persists, report a packaging bug.
 
-**Unsupported platform**: The postinstall script only supports darwin and linux
-on arm64/x64. Windows is not yet supported via npm. Build from source instead.
+**Unsupported platform**: The npm launcher supports darwin and linux on
+arm64/x64. Windows is not yet supported via npm. Build from source instead.

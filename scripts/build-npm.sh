@@ -47,13 +47,13 @@ if [[ -n "$VERSION" ]]; then
 fi
 
 # --------------------------------------------------------------------------
-# Target definitions: rust_target -> artifact_name
+# Supported Rust targets
 # --------------------------------------------------------------------------
-declare -A TARGETS=(
-  ["aarch64-apple-darwin"]="gale-aarch64-apple-darwin"
-  ["x86_64-apple-darwin"]="gale-x86_64-apple-darwin"
-  ["x86_64-unknown-linux-gnu"]="gale-x86_64-unknown-linux-gnu"
-  ["aarch64-unknown-linux-gnu"]="gale-aarch64-unknown-linux-gnu"
+TARGETS=(
+  "aarch64-apple-darwin"
+  "x86_64-apple-darwin"
+  "x86_64-unknown-linux-gnu"
+  "aarch64-unknown-linux-gnu"
 )
 
 # --------------------------------------------------------------------------
@@ -93,9 +93,9 @@ build_target() {
     local src="$ROOT/target/release/gale"
   fi
 
-  local dest="$NPM_DIR/bin/gale"
+  local dest="$NPM_DIR/bin/$rust_target/gale"
   echo "    Copying $src -> $dest"
-  mkdir -p "$NPM_DIR/bin"
+  mkdir -p "$(dirname "$dest")"
   cp "$src" "$dest"
   chmod +x "$dest"
   echo "    Done: $rust_target"
@@ -119,7 +119,7 @@ if [[ "$BUILD_ALL" == "true" ]]; then
 
   CURRENT_TARGET="$(detect_current_target)"
 
-  for rust_target in "${!TARGETS[@]}"; do
+  for rust_target in "${TARGETS[@]}"; do
     if [[ "$rust_target" == "$CURRENT_TARGET" ]]; then
       build_target "$rust_target" "false"
     else
@@ -137,7 +137,7 @@ echo "=========================================="
 echo " Build complete!"
 echo "=========================================="
 echo ""
-echo "Binary ready in: $NPM_DIR/bin/gale"
+echo "Binaries ready in: $NPM_DIR/bin/"
 echo ""
 echo "To publish:"
 echo ""
