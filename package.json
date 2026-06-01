@@ -1,0 +1,42 @@
+{
+  "name": "@johnnybenson/gale",
+  "version": "0.1.5",
+  "description": "An extremely fast CSS linter, written in Rust. Drop-in replacement for Stylelint.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/johnnybenson/gale"
+  },
+  "homepage": "https://github.com/johnnybenson/gale",
+  "bugs": "https://github.com/johnnybenson/gale/issues",
+  "keywords": [
+    "css",
+    "linter",
+    "stylelint",
+    "scss",
+    "less",
+    "rust",
+    "fast",
+    "lint",
+    "gale"
+  ],
+  "type": "module",
+  "main": "npm/index.mjs",
+  "exports": {
+    ".": {
+      "import": "./npm/index.mjs",
+      "require": "./npm/index.cjs"
+    }
+  },
+  "bin": {
+    "gale": "npm/bin/gale"
+  },
+  "files": [
+    "npm/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

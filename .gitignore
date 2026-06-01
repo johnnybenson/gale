@@ -1,4 +1,5 @@
 /target
+/target-docker-linux-x64
 node_modules/
 .gale_cache
 
